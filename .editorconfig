@@ -1,0 +1,43 @@
+# TechZone EditorConfig — consistent formatting across editors and contributors
+# https://editorconfig.org
+
+root = true
+
+# Global defaults
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Python — 4 spaces (PEP 8)
+[*.py]
+indent_style = space
+indent_size = 4
+
+# HTML, JavaScript, CSS — 2 spaces
+[*.{html,js,css}]
+indent_style = space
+indent_size = 2
+
+# JSON & YAML — 2 spaces
+[*.{json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# Markdown — preserve trailing whitespace for line breaks
+[*.md]
+trim_trailing_whitespace = false
+
+# Batch scripts — CRLF required by Windows cmd
+[*.bat]
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+
+# SQLite DB and binary files — no text transforms
+[*.{db,ico,png,jpg,webp,woff2,pdf}]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

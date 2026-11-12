@@ -1,190 +1,159 @@
-# تك زون للإلكترونيات — مصدر الحقيقة للذكاء الاصطناعي (AGENTS.md)
+# TechZone POS & Shop OS — AI Agent Source of Truth (AGENTS.md)
 
-> **قاعدة التحديث الإلزامية:** أي تعديل أو إضافة أو حذف في المشروع (فكرة أو ملفات) يجب تضمينه في `AGENTS.md` في نفس الـ commit — حدّث القسم المتأثر وأضف سطراً في `## سجل التغييرات` (الأحدث أولاً).
+> **Mandatory Update Rule:** Any change, addition, or deletion in the project (logic, DB schema, API, or frontend) MUST be documented in `AGENTS.md` in the same commit — update the affected section and append an entry to `## Changelog` (newest first). Historical changelog entries prior to today are archived in [`CHANGELOG_ARCHIVE.md`](CHANGELOG_ARCHIVE.md).
 
-## 1. الفكرة
+---
 
-نظام متكامل لنقاط البيع وإدارة المبيعات وعروض الأسعار والصيانة عربي (RTL) يعمل **offline بالكامل** بواجهة **نظام تشغيل هجينة (TechZone OS — مزيج Windows 11 + macOS)**:
-- يشمل: سطح مكتب متعدد النوافذ قابل للتخصيص لكل مستخدم (متجاوب بالكامل مع الوضع النهاري والليلي)، شاشة دخول ذكية تعرض اسم وشعار المحل من الإعدادات وتدعم التعرف التلقائي على المستخدم ودوره (مدير أو موظف كاشير) من الرمز السري فقط، صفحة إعدادات شاملة للمشروع مقسمة بنظام التبويبات (`settings.html`)، صفحة مستقلة لإدارة الموظفين وتخصيص الصلاحيات (`staff.html`)، صفحة الملف الشخصي وإعدادات الموظف الخاصة (`profile.html` تفتح عند الضغط على اسم/صورة المستخدم)، نقاط بيع فورية (POS)، قسم مبيعات وعروض أسعار وفواتير رسمية (A4)، استوديو موحد لتصميم جميع فواتير وإيصالات البرنامج، مخزون (مع صور المنتجات)، عملاء وحسابات آجلة وسندات قبض، شراء أجهزة مستعملة، صيانة، ورديات بتقارير جرد تفصيلية، وتقارير مالية مستقلة (`reports.html`).
-- يعمل داخل نافذة `pywebview` واحدة `maximized`، بواجهة ليلية/نهارية متزامنة عبر سطح المكتب وجميع النوافذ، ومهيأ للسوق المصري (`ج.م` / `LE`، وضريبة 14% قابلة للتفعيل أو الإيقاف الكامل).
+## 1. Project Overview & Rules
 
-## 2. التقنية
+**TechZone POS** is an offline-first retail, sales, inventory, and repair management operating system tailored specifically for Egyptian technology shops and service centers.
+- **Language & Direction:** Native Arabic UI (`dir="rtl"`), supporting both Light and Dark modes synchronized across desktop and floating windows.
+- **Market Fit:** Egyptian Pound (`LE` / `ج.م`), optional 14% VAT toggle, localized payment methods (Cash, InstaPay, Vodafone Cash, Bank Transfer), and installment customer debt ledgers.
+- **Form Factor:** Single maximized `pywebview` desktop window hosting a hybrid desktop environment (**TechZone OS — Windows 11 + macOS blend**) with multi-window floating iframes, widgets, Start menu, and dock.
+- **Zero Cloud / Zero Runtime Network:** 100% offline. All fonts, icons, and assets are local (`web/fonts/`). No external runtime JS frameworks or cloud dependencies.
 
-- Python 3.13 + `sqlite3` قياسي + `pywebview` 6.2.1 (WebView2) + `ctypes` (واجهة Win32 API الأصلية لويندوز لنسخ ولصق ملفات الـ PDF في واتساب) + HTML/CSS مُجمَّع Tailwind + JS vanilla.
-- ممنوعات: لا React/Electron/Rust/.NET، لا bundler، لا مكتبات runtime خارجية جديدة، لا شبكة عند التشغيل (كل الخطوط والأيقونات محلية في `web/fonts/`).
+---
 
-## 3. البنية
+## 2. Documentation Map (Read Before You Code)
 
-- `app/main.py` — نقطة التشغيل: عنوان النافذة من `settings.store_name` + أيقونة البرنامج من `icon.ico` / `web/favicon.ico` + نافذة `maximized=True` (`1360×860`, حد أدنى `360×500`). يقرأ `web/index.html` كـ `file://` وينتقل بعد تسجيل الدخول إلى الصفحة المفضلة للمستخدم أو الافتراضية للأدمن داخل `web/desktop.html`. عند التجميد (`sys.frozen`): `web/` من `sys._MEIPASS` و`data/` بجانب الـ exe.
-- `build-exe.bat` — دبل كليك يعيد بناء `dist/TechZone.exe` (`--windowed --onefile --icon "icon.ico" --add-data "web;web" --add-data "icon.ico;."`). `push-github.bat` — دبل كليك يرفع التعديلات إلى GitHub. `TechZone.spec` محفوظ في git؛ `build/` و`dist/` مستثناة.
-- `app/db.py` — المخطط (19 جدولاً) + الاتصال + الـ seed المهيأ لمصر + القوالب الافتراضية (`DEFAULT_A4_TEMPLATE` و`DEFAULT_POS_TEMPLATE` الشامل لكل الفواتير و`DEFAULT_PAYMENT_METHODS`) + ترحيل العملاء وترقية الأعمدة تلقائياً دون فقدان البيانات.
-- `app/api.py` — كل دوال النظام (69 دالة للواجهة شاملة `login_config` و`profile_save` والدخول الذكي بالرمز السري فقط) + نظام الصلاحيات المخصصة `_perm(key)` + توليد ملفات PDF 1.4 قياسية (حراري 80mm وقياسي A4) + النسخ المباشر لحافظة ويندوز (`CF_HDROP`) واللصق الفوري في تطبيق واتساب عبر `ctypes.windll.user32` + `call(name, payload)` dispatcher للواجهة (`window.pywebview.api.call`).
-- `app/selfcheck.py` — فحص assert آلي شامل قابل للتشغيل (**87 فحصاً**).
-- `web/app.js` — الجسر `api(name, payload)` (يدعم النوافذ الفرعية داخل `iframe`) + `hasPerm` + `pageInit` + `applyThemeEverywhere` (متزامن مع سطح المكتب وجميع النوافذ) + `applyAccentColorEverywhere` + محرك بناء ومعاينة وتصدير قوالب الفواتير الموحد (`buildA4InvoiceHtml`, `buildPosThermalReceiptHtml`, `renderA4DocumentToJpeg`, `renderInvoiceToJpeg`, `sendInvoicePdfToWhatsapp`, `sendQuoteOrA4PdfToWhatsapp`).
-- `web/tailwind.css` — مصدر Tailwind + كل `@font-face` المحلية. `web/app.css` — المُجمَّع **محفوظ في git عمداً**. `web/fonts/` — 23 ملف `.woff2` محلي.
+Detailed technical specifications are modularized in the `docs/` directory:
 
-## 4. قاعدة البيانات
+| Document | Purpose | Language |
+|---|---|---|
+| [`docs/README.md`](docs/README.md) | Documentation index and overview | Arabic |
+| [`docs/PRD.md`](docs/PRD.md) | Product requirements, personas, scope, and page functional specs | Arabic |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phased roadmap, quality gates, and milestone checklists | Arabic |
+| [`docs/IMPLEMENTATION-PLAN.md`](docs/IMPLEMENTATION-PLAN.md) | Step-by-step technical plan for security, shop features & refactoring | Arabic |
+| [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md) | Pending architectural questions and design decisions | Arabic |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System architecture, IPC bridge, sequence flows, and directory tree | English |
+| [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 19 tables schema, minor-unit money rules, and 16-permission matrix | English |
+| [`docs/STACK.md`](docs/STACK.md) | Pinned runtime stack, versions, and upgrade policies | English |
+| [`docs/CODING-STANDARDS.md`](docs/CODING-STANDARDS.md) | Coding style, SQL guidelines, money formatting, and RTL conventions | English |
+| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (104 checks), test gates, and manual QA | English |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, PBKDF2 hashing, lockout rules, and Egyptian PDPL | English |
+| [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | TechZone OS color tokens, Arabic typography, layout, and invoice specs | English |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Standalone .exe compilation (PyInstaller), backup routines, and setup | English |
+| [`docs/adr/`](docs/adr/) | Architectural Decision Records (ADRs) | English |
 
-- المسار: `data/shop.db` بجانب جذر المشروع (وعند التجميد: `data/` بجانب الـ exe). المبالغ `INTEGER` وحدات صغرى (1 عملة = 100 قرش). تُحفظ ملفات الفواتير المصدرة بصيغة PDF في `data/receipts/`.
-- الجداول (19 جدولاً):
-  1. `users(id, username, name, role, pin_salt, pin_hash, permissions, card_size, wallpaper, custom_bg, accent_color, desktop_layout, start_page, start_mode, theme_mode, avatar, created_at)`
-  2. `categories(id, name)`
-  3. `products(id, sku, name, category_id, price, cost, qty, min_qty, tracked, image, notes, active, created_at)`
-  4. `serials(id, product_id, serial, status[in_stock|sold|in_repair], created_at)`
-  5. `shifts(id, user_id, opened_at, closed_at, opening_cash, counted_cash, expected_cash, diff)`
-  6. `customers(id, name, phone, created_at)`
-  7. `sales(...)`
-  8. `sale_items(...)`
-  9. `payments(...)`
-  10. `customer_payments(...)`
-  11. `sale_returns(...)`
-  12. `sale_return_items(...)`
-  13. `quotations(...)`
-  14. `quotation_items(...)`
-  15. `used_device_purchases(...)`
-  16. `repairs(...)`
-  17. `repair_parts(...)`
-  18. `stock_movements(...)`
-  19. `settings(key, value)`
+---
 
-## 5. الصلاحيات المخصصة لكل مستخدم (16 صلاحية)
+## 3. Technology Stack
 
-المدير (`role='admin'`) يملك كل الصلاحيات تلقائياً. أي موظف آخر يمكن للمدير تخصيص صلاحياته الفردية عبر 16 مفتاحاً في `users.permissions`:
-`pos_sell`، `pos_price`، `pos_item_discount`، `sales_return`، `sales_all`، `inventory_view`، `inventory_edit`، `cost_view`، `customers_view`، `customers_edit`، `customers_delete`، `repair_view`، `repair_edit`، `used_manage`، `reports_view`، `settings_manage`.
+- **Runtime:** Python 3.13.5 (64-bit)
+- **Database:** Standard library `sqlite3` (schema in `app/db.py`, DB file in `data/shop.db`)
+- **Desktop Window:** `pywebview` 6.2.1 powered by Microsoft Edge WebView2 Evergreen
+- **System Integration:** Windows `ctypes.windll` for clipboard `CF_HDROP` binary file copies (direct WhatsApp desktop PDF pasting)
+- **Frontend:** Semantic HTML5, Vanilla ES6+ JavaScript, pre-compiled Tailwind CSS (`web/app.css` committed to Git)
+- **Fonts & Icons:** Local 23 `.woff2` files in `web/fonts/` (Cairo, IBM Plex Sans Arabic, Material Icons)
+- **Packaging:** PyInstaller single-file windowed binary (`build-exe.bat` → `dist/TechZone.exe`)
 
-## 6. الواجهة (15 صفحة)
+---
 
-| الصفحة | الوصف |
+## 4. Key Commands
+
+| Task | Command |
 |---|---|
-| `index.html` | **شاشة تسجيل الدخول الذكية**: تعرض اسم المحل والشعار المضاف في الإعدادات ديناميكياً، بدون زر «دخول المدير» أو كشف الدور، وتتعرف تلقائياً على المستخدم وصلاحياته (مدير أو كاشير) من الرمز السري مع دعم 3 أوضاع دخول يحددها الأدمن (`pin_only` افتراضياً، أو `select_user_pin`، أو `username_password`) |
-| `desktop.html` | **نظام تشغيل تك زون الهجين (Windows 11 + macOS)**: شريط علوي، قائمة ابدأ، شريط مهام وDock سفلي، نوافذ عائمة متعددة، أيقونات سطح مكتب قابلة للسحب، ودعم كامل للوضع النهاري الفاتح والوضع الليلي الداكن على سطح المكتب وجميع عناصره، مع فتح صفحة الملف الشخصي (`profile.html`) عند الضغط على اسم/صورة المستخدم |
-| `settings.html` | **صفحة إعدادات النظام الشاملة المقسمة بالتبويبات (3 تبويبات مركزية)**: (1) إعدادات المتجر والضريبة وتخصيص الإيصال وطرق الدفع، (2) طريقة تسجيل الدخول والفتح الافتراضي، (3) تصميم جميع الفواتير والإيصالات في البرنامج (A4 + كاشير حراري 80mm/58mm + الصيانة وسندات القبض والمستعمل) |
-| `staff.html` | **صفحة إدارة الموظفين وتخصيص الصلاحيات (منفصلة بالكامل)**: إضافة وتعديل الموظفين، رفع صورة الموظف، تعيين الرمز السري الفريد، تحديد الدور وصفحة البداية لكل موظف، وتخصيص الـ 16 صلاحية |
-| `profile.html` | **صفحة الملف الشخصي وإعدادات الموظف الخاصة**: تفتح عند الضغط على اسم/صورة المستخدم في الشريط العلوي أو قائمة ابدأ أو القائمة الجانبية؛ يغير منها الموظف اسمه، صورته الشخصية، رمزه السري/كلمة المرور، والصفحة التي تفتح بعد تسجيل الدخول، ومظهر سطح المكتب الخاص به |
-| `reports.html` | **صفحة التقارير والتحليلات المالية فقط**: مخصصة بالكامل للتقارير اليومية والشهرية، الأرباح الصافية، الأكثر مبيعاً، النواقص، وسجل الورديات (بعد فصل إدارة الموظفين في `staff.html`) |
-| `receipt.html` | **صفحة معاينة وطباعة الإيصال فقط**: مخصصة لمعاينة وطباعة الإيصال الحراري (80mm/58mm) أو فاتورة A4 وإرسال PDF عبر واتساب (بعد نقل إعدادات المتجر والضريبة وتخصيص الإيصال إلى `settings.html`) |
-| `pos.html` | **نقاط البيع السريعة (الكاشير)** |
-| `sales_quotes.html` | **قسم المبيعات وعروض الأسعار ومصمم قوالب الفواتير** |
-| `customers.html` | **إدارة العملاء والمديونيات (ملء الشاشة)** |
-| `customer_details.html` | **كشف حساب العميل التفصيلي (ملء الشاشة)** |
-| `history.html` | **سجل المبيعات والمرتجعات** |
-| `repair.html` | **تذاكر الصيانة** |
-| `inventory.html` | **المخزون والمنتجات** |
-| `buy_used.html` | **شراء أجهزة مستعملة** |
+| Launch Dev Application | `python app/main.py` |
+| Execute Automated Selfcheck (104 tests) | `python app/selfcheck.py` |
+| Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
+| Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
+| Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
 
-## سجل التغييرات
+---
 
-### 2026-10-19 — دمج الأيقونة الرسمية للنظام (icon.ico) في حزمة EXE وكافة صفحات وتطبيقات الويب
-- **الطلب والهدف**: استخدام أيقونة البرنامج الرسمية `icon.ico` لتكون الأيقونة المعتمدة لملف الـ EXE التنفيذي، وأيقونة نافذة التطبيق الرئيسية، وأيقونة الويب (Favicon و Apple Touch Icon) وشعار النظام في شاشتي الدخول وسطح المكتب.
-- **التنفيذ**:
-  1. **ملف الـ EXE وحزمة PyInstaller**: تحديث `build-exe.bat` بإضافة `--icon "icon.ico" --add-data "icon.ico;."` وتحديث ملف المواصفات `TechZone.spec` لتعيين `icon=['icon.ico']` وتضمين ملف الأيقونة في الحزمة.
-  2. **نافذة البرنامج (pywebview)**: تحديث `app/main.py` لتمرير مسار الأيقونة تلقائياً عبر `webview.start(icon=...)` لتعيين أيقونة نافذة النظام وشريط المهام في بيئة ويندوز سواء في وضع التطوير أو وضع الـ EXE المجمد.
-  3. **أيقونات الويب والشاشات (Favicon & Branding)**: نسخ `icon.ico` إلى `web/favicon.ico` و `web/icon.ico` وتوليد نسخة PNG شفافة عالية الجودة `web/icon.png`، وإدراج وسوم `<link rel="icon">` في كافة ملفات HTML الـ 15 للنظام.
-  4. **شاشات الدخول وسطح المكتب**: اعتماد الأيقونة الرسمية كشعار افتراضي في بطاقة تسجيل الدخول (`web/index.html`)، وفي شريط القوائم العلوي وقائمة ابدأ وزر ابدأ على سطح المكتب (`web/desktop.html`) مع الحفاظ على إمكانية استبدالها بشعار المتجر المخصص عند رفعه في الإعدادات.
-- 104/104 فحوصات ناجحة (selfcheck).
+## 5. System Architecture & Directory Tree
 
-### 2026-10-17 — تطوير شريط فئات نقاط البيع: تمرير أفقي سلس، تبديل العرض المتراص (Wrap)، وتخصيص وترتيب الفئات
-- **السبب والطلب**: لم تكن جميع الفئات الـ 12 تظهر دفعة واحدة في شاشة نقاط البيع (POS) لأنها كانت موضوعة في سطر واحد دون شريط تمرير ظاهر أو أسهم، كما طُلبت إمكانية ترتيب الفئات حسب استخدام المستخدم وإخفاء/إظهار فئات محددة.
-- **الحل والتنفيذ**:
-  1. **التحكم والتمرير السلس في شريط الفئات**: إضافة أزرار تمرير سهمية (`chevron_right` و `chevron_left`)، مع دعم التمرير الأفقي المباشر بعجلة الفأرة (Mouse Wheel) فوق شريط الفئات.
-  2. **زر التبديل بين الشريط الأفقي والمصفوفة المتراصة (Wrap Toggle)**: إضافة زر تبديل يعرض كافة الفئات مصفوفة في عدة أسطر بضغطة واحدة، مع حفظ التفضيل محلياً.
-  3. **نافذة تخصيص وترتيب الفئات (Reorder & Visibility Modal)**: إضافة زر «تخصيص الفئات» (`tune`) يفتح نافذة تتيح ترتيب الفئات لأعلى/لأسفل حسب أولوية الاستخدام، مع إمكانية إخفاء أو إظهار أي فئة في الكاشير، واستعادة الترتيب الأبجدي الافتراضي.
-  4. **الحفظ في الإعدادات**: إضافة مفتاح `pos_categories_config` ودالة `pos_categories_config_save` في `app/api.py` لحفظ الترتيب والتخصيص في قاعدة البيانات وتطبيقه فوراً.
-  5. **توسيع استعراض الأصناف**: رفع الحد الأقصى للأصناف في `products_search` في الكاشير من 60 إلى 250 صنفاً لضمان ظهور كافة الـ 160 منتجاً في شاشة «الكل».
-- 104/104 فحوصات ناجحة (selfcheck).
+```
+project001/
+├── app/
+│   ├── main.py          # Entry point: pywebview window setup & branding
+│   ├── api.py           # Backend Api class (69+ methods dispatched via bridge)
+│   ├── db.py            # SQLite schema (19 tables), connection wrapper, seed, migration
+│   └── selfcheck.py     # Comprehensive automated regression suite (104 checks)
+├── web/
+│   ├── index.html       # Smart login screen (auto role/user detection by PIN)
+│   ├── desktop.html     # TechZone OS hybrid desktop shell (dock, start menu, iframes)
+│   ├── pos.html         # High-speed retail POS cashier
+│   ├── sales_quotes.html# Official B2B A4 sales invoices & price quotations
+│   ├── inventory.html   # Product catalog, stock tracking, and serial numbers
+│   ├── customers.html   # Customer database, debt totals, and ledger shortcuts
+│   ├── customer_details.html # Customer debt statements & payment vouchers
+│   ├── repair.html      # Maintenance lifecycle ticketing & spare parts
+│   ├── buy_used.html    # Used device purchasing, trade-ins, and anti-theft IDs
+│   ├── history.html     # Operations history, returns, and multi-filter ledger
+│   ├── reports.html     # Daily/monthly financials, shift logs, and net profits
+│   ├── staff.html       # Employee administration & 16-permission matrix
+│   ├── profile.html     # Employee personal profile, PIN, and desktop theme setup
+│   ├── settings.html    # Store info, tax toggle, login mode, and invoice studio
+│   ├── receipt.html     # Thermal 80mm & A4 preview and WhatsApp sharing
+│   ├── app.js           # Bridge api() caller, permissions, and invoice builder
+│   ├── app.css          # Pre-compiled Tailwind CSS bundle
+│   └── fonts/           # 23 local WOFF2 font files
+├── data/
+│   ├── shop.db          # Operating SQLite database (git-ignored)
+│   └── receipts/        # Generated PDF invoices and vouchers
+├── docs/                # Comprehensive engineering and requirements documentation
+├── tools/               # Data import and screenshot automation utilities
+├── icon.ico             # Official application executable and window icon
+├── TechZone.spec        # PyInstaller packaging configuration
+├── build-exe.bat        # Automated single-click EXE builder
+└── push-github.bat      # Automated single-click Git/GitHub synchronization
+```
 
-### 2026-10-17 — إلغاء التتبع بالسيريال (tracked=0) للمنتجات للبيع المباشر السريع بالكمية في نقاط البيع
-- **السبب والطلب**: كان حقل `tracked` في جدول `products` معيناً بالقيمة `1` لجميع المنتجات المستوردة، مما ألزم شاشة نقاط البيع (POS) بطلب رقم تسلسلي مسجل في جدول `serials` لكل وحدة مباعة؛ وبما أن المنتجات المستوردة من الإكسيل (كابلات، كروت، فلاشات، إكسسوارات) لا تحوي أرقاماً تسلسلية مسبقة، كان النظام يُظهر رسالة «لا توجد وحدات متاحة بهذا المنتج (سيريال)» ويمنع البيع.
-- **الحل والتنفيذ**:
-  1. تحديث كافة المنتجات الـ 160 في قاعدة البيانات إلى `tracked = 0` (نظام البيع السريع بالكميات المباشرة).
-  2. تعديل سكريبت الاستيراد [`tools/import_products.py`](file:///c:/Users/hany_/Documents/workfor%20ai%20agents/project001/tools/import_products.py) ليكون الوضع الافتراضي لجميع المنتجات هو `tracked = 0`.
-  3. أصبحت شاشة نقاط البيع (POS) تضيف المنتجات فوراً للسلة بضغطة واحدة وتدعم زيادة الكميات والبيع المباشر وسحب المخزون دون طلب سيريال.
-  4. يمكن للمدير في أي وقت تفعيل خيار «متتبّع بالسيريال» يدوياً لأي منتج أو جهاز فردي (كلابتوبات محددة) من صفحة المخزون [`web/inventory.html`](file:///c:/Users/hany_/Documents/workfor%20ai%20agents/project001/web/inventory.html) وإدخال سيريلاته الحقيقية.
-- 104/104 فحوصات ناجحة (selfcheck).
+---
 
-### 2026-10-17 — تصفير العمليات واستيراد المنتجات الحقيقية (160 منتجاً) مع الحفاظ على المستخدمين والعملاء والإعدادات
-- **الهدف والطلب**: تصفير كافة العمليات والمبيعات التجريبية السابقة في النظام واستيراد البيانات الحقيقية من ملف الإكسيل `المنتج (product.template) (1).xlsx` مع الحفاظ التام على المستخدمين (`users`) والعملاء (`customers`) وإعدادات النظام وقوالب الفواتير (`settings`).
-- **الإجراءات المنفذة**:
-  1. أخذ نسخة احتياطية كاملة وتلقائية من قاعدة البيانات `data/shop.db` باسم `data/shop_backup_YYYYMMDD_HHMMSS.db`.
-  2. تصفير جداول العمليات والحركات التجريبية: المبيعات (`sales`, `sale_items`, `payments`)، المرتجعات (`sale_returns`, `sale_return_items`)، عروض الأسعار (`quotations`, `quotation_items`)، الصيانة (`repairs`, `repair_parts`)، شراء الأجهزة المستعملة (`used_device_purchases`)، سندات قبض العملاء (`customer_payments`)، الورديات (`shifts`)، وحركات وسيريالات المخزون (`stock_movements`, `serials`) مع تصفير التسلسلات التلقائية `sqlite_sequence`.
-  3. استيراد 160 منتجاً حقيقياً بكامل تفاصيلها: الاسم، الباركود (مع توليد باركود فريد للبنود التي لا تحمل باركود في الإكسيل لمنع التعارض)، سعر البيع، التكلفة، كميات المخزون الأولية، و152 صورة حقيقية مدمجة بصيغة WebP عالية الجودة.
-  4. إنشاء 12 قسماً/فئة حقيقية في جدول `categories` بناءً على فئات المنتجات في ملف الإكسيل (اكسسورات كمبيوتر منوعة، كاميرات مراقبة، فارة ولوحة مفاتيح، هاردديسك مكتبي، الابتوب، دفي ار، جهاز مكتبي، فلاشات، كارت مموري SDC، RAM DESKTOP، شاشات، وغيرها).
-  5. الحفاظ الكامل على المستخدمين (حسابات المدير والموظف والرموز السرية والصلاحيات وتفضيلات سطح المكتب)، العملاء (سجلات العملاء الـ 9 وأرقام هواتفهم)، وإعدادات المتجر وقوالب الفواتير والبادئات التسلسلية.
-- 104/104 فحوصات ناجحة (selfcheck).
+## 6. Permissions Matrix (16 Granular Keys)
 
-### 2026-10-17 — إصلاح وضبط هوامش الطباعة (Margins: None / 0) لفواتير A4 وكافة إيصالات النظام
-- **المشكلة**: عند فتح نافذة الطباعة لفواتير A4 أو الإيصالات عبر سطح المكتب أو الصفحات الفرعية، كان المتصفح / محرك WebView2 يطبق هوامش افتراضية (Margins: Default) بمقدار ~10-15 مم ويطبع ترويسة وتذييل المتصفح، مما يؤدي إلى اقتطاع عمود المبالغ في الجانب الأيسر وانقسام الفاتورة على صفحتين (2 sheets of paper) بدلاً من صفحة واحدة.
-- **الحل**:
-  1. إضافة قواعد `@page { size: A4 portrait; margin: 0; }` و `@page { margin: 0; }` في `web/desktop.html`، `web/sales_quotes.html`، `web/history.html`، `web/receipt.html`، `web/pos.html`، و `web/repair.html` لمنع أي هوامش افتراضية للمتصفح وضمان ظهور كامل محتوى الصفحة على ورقة واحدة تلقائياً.
-  2. حقن وسيط `@page` ديناميكياً داخل دالة `TZOS.printHtml()` بحسب نوع الطباعة (`a4`، `80mm`، أو `58mm`) قبل استدعاء `window.print()`.
-  3. تضمين وسيط `@page` و `@media print` داخل كود `buildA4InvoiceHtml` في `web/app.js` مع إزالة `box-shadow` وتعيين `page-break-inside: avoid` وضبط حواف الجدول والملخص المالي ليناسب أبعاد ورقة A4 بدقة متناهية ودون أي اقتطاع.
-- 104/104 فحوصات ناجحة (selfcheck).
+The administrator (`role='admin'`) possesses unrestricted system access. All other staff members (`role='cashier'`) have individual booleans stored in `users.permissions`:
+1. `pos_sell`: Process POS transactions and checkout.
+2. `pos_price`: Modify item sale prices on the fly in the cart.
+3. `pos_item_discount`: Apply per-item discounts in the cart.
+4. `sales_return`: Process returns on existing invoices.
+5. `sales_all`: View all employee sales in the operations ledger.
+6. `inventory_view`: Open and inspect inventory catalog.
+7. `inventory_edit`: Create, edit, and delete products and categories.
+8. `cost_view`: View wholesale purchase costs and profit margins.
+9. `customers_view`: Access customer list and account summaries.
+10. `customers_edit`: Add/edit customers and create payment vouchers.
+11. `customers_delete`: Delete customer records and payment vouchers.
+12. `repair_view`: Access maintenance workshop tickets.
+13. `repair_edit`: Receive devices, update repair status, and deliver.
+14. `used_manage`: Purchase and evaluate used customer devices.
+15. `reports_view`: Access financial summaries, profits, and shift audits.
+16. `settings_manage`: Edit store profile, tax rules, and employee accounts.
 
-### 2026-10-17 — إصلاح خطأ «تعذر الاتصال بالبرنامج» في صفحة سطح المكتب بعد تسجيل الدخول
-- **السبب الأساسي**: عند الانتقال بعد تسجيل الدخول إلى `desktop.html`، كان كود الجسر `_resolvePywebview()` في `web/app.js` يعتبر أن أي بروتوكول `http:` هو خادم خارجي للمعاينات ويستبدل كائن `window.pywebview` بطلب وهمي `fetch('/api/call')`؛ ولأن تطبيق `pywebview` في ويندوز يعتمد على خادم داخلي `http://127.0.0.1` لملفات WebView2 الثابتة بدون دعم `/api/call` (يرجع `405 Method Not Allowed`)، كان استدعاء `api('session')` يفشل فوراً ويُظهر إشعار «تعذر الاتصال بالبرنامج».
-- **الحل**: تحديث `_resolvePywebview()` و `_hasValidBridge()` للتحقق من وجود الدالة الفعلية `pywebview.api.call` ومنع تفعيل الـ mock نهائياً إذا كانت بيئة WebView2 الأصلية (`window.chrome.webview`) موجودة، مع التأكد من جاهزية كائن الجسر في النوافذ الفرعية `iframe` والانتظار حتى اكتمال حقن الجسر الأصلي.
-- تم الفحص الشامل واجتياز 104/104 فحصاً في `selfcheck.py`.
+---
 
-### 2026-10-17 — تحديث شامل لملف README.md وتوليد لقطات شاشة كاملة للنظام (`screenshots/`)
-- إضافة 16 لقطة شاشة عالية الدقة لكافة شاشات وأقسام النظام داخل مجلد `screenshots/` تم التقاطها آلياً عبر سكريبت `tools/take_screenshots.py` ومحرك Chromium Headless.
-- تحديث جسر `web/app.js` ليدعم تلقائياً بروتوكول HTTP عند التطوير أو المعاينة من المتصفح عبر جسر `/api/call` مع الحفاظ الكامل على دعم `file://` الأصلي لتطبيق `pywebview`.
-- إعادة صياغة وتحديث شامل وتفصيلي لملف `README.md` باللغة العربية يشمل دليل استخدام مصور لكل صفحة، شرح الـ 16 صلاحية، الفلسفة المعمارية، وخطوات التشغيل وبناء الـ EXE وحسابات الدخول.
-- 104/104 فحوصات ناجحة (selfcheck).
+## 7. Non-Negotiable Engineering Rules
 
-### 2026-10-17 — إعدادات قفل تسجيل الدخول (محاولات/مدة)
-- إضافة مفاتيح `login_max_attempts` (افتراضي 5) و `login_lockout_minutes` (افتراضي 10) + حقول إدخال في `web/settings.html` (تبويب تسجيل الدخول).
-- `login()` يقرأ الإعدادات، ويقفل بعد N محاولات فاشلة لمدة M دقيقة، مع حفظ حالة الإقفال في `settings` (login_fail_state) لمنع إعادة فتح البرنامج.
-- شاشة الدخول تعرض الوقت المتبقي (countdown) ويتم تعطيل الإدخال حتى انتهاء الإقفال.
-- selfcheck 104/104.
+1. **All Money in Minor Units:** Always store and compute currency as `INTEGER` minor units (`1 LE = 100 qirsh`). Never use floating-point types for financial transactions.
+2. **100% Parameterized SQL:** Never concatenate or interpolate raw user strings into SQL queries. Always use `?` placeholders.
+3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
+4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
+5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
+6. **Selfcheck Verification:** Every change must maintain 104/104 passing tests in `python app/selfcheck.py`.
+7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
-### 2026-10-17 — خيار مدير للتحكم في ظهور إرسال WhatsApp
-- إضافة مفتاح `whatsapp_send_enabled` (افتراضي 1) في إعدادات المتجر + checkbox في `web/settings.html`.
-- إصلاح persistence: إضافة المفتاح إلى `allowed`/`show` في `settings_save`.
-- إخفاء/إظهار أزرار WhatsApp في `receipt.html`, `pos.html`, `sales_quotes.html`, `history.html` عبر `data-wa-toggle` + `applyWhatsappVisibility()` (CSS class + broadcast).
-- حماية backend: `whatsapp_send_invoice`/`whatsapp_send_quote` يرفضان عندما الإعداد 0.
-- 104/104 فحوصات ناجحة (selfcheck).
+---
 
-### 2026-10-17 — إصلاحات جودة الكود (بدون تغيير واجهة المستخدم)
-- إصلاح تسرب اتصالات قاعدة البيانات عبر غلاف `_ClosingConnection` في `app/db.py` (إغلاق تلقائي).
-- إصلاح ثغرة path traversal في `whatsapp_send_invoice` (`app/api.py`) عبر `safe_name`.
-- تشديد الصلاحيات: `repair_create/set_status/update/delete` تتطلب `repair_edit`، و`settings()` تتطلب `settings_manage`، و`sale/quotation/repair/customer/used/shift_summary` تتطلب صلاحيات مناسبة (مع `_perm_any`).
-- حماية brute-force على `login` (قفل 5 دقائق بعد 5 محاولات فاشلة).
-- التحقق من magic bytes للصور المرفوعة (`_validate_image_data_url`) في all image save paths.
-- حدود طول للنصوص (اسم/هاتف العميل).
-- تحسين أداء: إزالة N+1 في `_customer_debt_summary`, `shift_summary`, `sale()`؛ إضافة فهارس FK في `app/db.py`؛ كاش للإعدادات/القوالب/طرق الدفع.
-- إزالة dead code? `payment_methods_get` remains (unused) — left for compatibility.
-- تحديث `app/selfcheck.py` لاستخدام صورة PNG صالحة.
-- 104/104 فحوصات ناجحة.
+## 8. Changelog
 
-### 2026-10-17 — تقرير تدقيق جودة الكود (`CODE_AUDIT_REPORT.md`)
-- إضافة ملف تقرير تدقيق شامل (markdown) يغطي 5 أبعاد: القابلية للصيانة (4/10)، Clean Architecture (3/10)، جودة الكود (5.5/10)، الأمان (6.5/10)، الأداء (5/10)، with overall weighted score 4.8/10، plus top 5 critical issues and recommended fixes. No code changes.
-
-### 2026-10-15 — إصلاح خطأ JavaScript في `web/app.js` وتحسين استجابة شاشة الدخول (`web/index.html`)
-- **`web/app.js`**: إصلاح تكرار تعريف المتغير `const st` داخل `buildA4InvoiceHtml` الذي كان يسبب `SyntaxError: Identifier 'st' has already been declared` ويمنع تحميل دوال `api()` و `guard()` و `toast()` في صفحة تسجيل الدخول.
-- **`web/index.html`**: إضافة حقل إدخال مباشر للرمز السري/كلمة المرور (`#pin-input`) يدعم الكتابة المباشرة من لوحة المفاتيح أو لوحة الأرقام على الشاشة لأي طول رمز سري، مع زر إظهار/إخفاء الرمز، ورسالة خطأ واضحة داخل البطاقة (`#login-error-box`) مع تأثير اهتزاز تنبيهي عند إدخال رمز خاطئ.
-
-
-### 2026-10-15 — حصر مصمم القوالب في الإعدادات، إخفاء الضرائب تلقائياً عند إيقافها، حماية الدورة المالية، بادئات تسلسل كافة الإيصالات، تطوير السجل والصيانة والمستعمل والتقارير، وإصلاح تخطيط صفحة الموظفين
-- **`web/sales_quotes.html` و `web/app.js` و `app/api.py`**:
-  - إزالة تبويب وقسم مصمم قوالب الفواتير (`#pane-templates`) من صفحة المبيعات وعروض الأسعار ليكون تصميم القوالب حصرياً في صفحة الإعدادات (`web/settings.html?tab=invoices`).
-  - ربط ظهور عمود الضرائب وسطر الضرائب في جدول الأصناف وفي المعاينة الحية والطباعة (`buildA4InvoiceHtml` و `renderA4DocumentToJpeg`) وفي `quotation_save` بإعداد تفعيل الضريبة (`SETTINGS.tax_enabled`)؛ فعند إيقاف الضريبة يختفي عمود الضرائب من جدول البنود ومن المعاينة الحية وتُصفّر الضريبة تلقائياً، وعند تفعيلها يظهر فوراً.
-  - إضافة دالة `quotation_cancel(id)` لإلغاء عروض الأسعار (`status="cancelled"`) بجانب إمكانية حذفها (`quotation_delete`) أو تعديلها، مع منع إلغاء أو حذف فواتير المبيعات المعتمدة حفاظاً على الدورة المالية وإتاحة نافذة استرجاع (مرتجع كلي أو جزئي) للفاتورة عبر `sale_return`.
-- **`web/settings.html` و `app/db.py` و `app/api.py` (بادئات تسلسل كافة الفواتير والإيصالات)**:
-  - إضافة مفاتيح البادئات التسلسلية في `DEFAULT_POS_TEMPLATE`: `pos_invoice_prefix` (`INV-`) لفواتير الكاشير الحرارية، `repair_prefix` (`RPR-`) لتذاكر الصيانة، `voucher_prefix` (`RCV-`) لسندات قبض العملاء، و `used_prefix` (`TRX-`) لإيصالات شراء المستعمل، وربطها بدوال `sale_create` و `repair_create` و `customer_payment_create` و `used_create` مع حقول تحكم ومعاينة حية في استوديو الفواتير بصفحة الإعدادات.
-- **`web/history.html` و `app/api.py` (سجل المبيعات والفواتير وعروض الأسعار والمرتجعات والصيانة)**:
-  - تحديث `sales` و `sales_stats` لعرض جميع العمليات: مبيعات نقاط البيع (`pos`)، فواتير المبيعات الرسمية (`b2b`)، عروض الأسعار (`quote`)، المرتجعات (`returned`)، وتذاكر الصيانة (`repair`).
-  - إضافة فلترة من تاريخ (`date_from`) إلى تاريخ (`date_to`) مع الافتراضي على اليوم، وزر «عرض الكل» (`all_dates=True`)، وتعدد صفحات متكامل بأرقام الصفحات، وبحث أتوكمبليت فوري (`history_suggestions`).
-- **`web/repair.html` و `app/api.py` (تنظيم مركز الصيانة + التعديل والحذف الآمن + طباعة التذكرة في أي حالة)**:
-  - إعادة تنظيم صفحة الصيانة وإضافة `repair_update` لتعديل بيانات التذكرة و `repair_delete` لحذف التذكرة إذا لم تؤثر على الوضع المالي (منع حذف التذاكر المسلمة ذات التكلفة المالية، مع إرجاع قطع الغيار للمخزون تلقائياً عند حذف تذكرة غير مسلمة).
-  - إضافة `buildRepairTicketPrintHtml` ونافذة معاينة وطباعة تذكرة الصيانة في أي حالة (`received`, `in_review`, `pending_approval`, `repaired`, `delivered`, `rejected`).
-- **`web/buy_used.html` و `app/api.py` (ربط البائع بسجل العملاء — عميل جديد / مسجل)**:
-  - تحديث `used_create` لتسجيل/ربط البائع تلقائياً في جدول `customers` عبر `_upsert_customer`، وإضافة بحث أتوكمبليت بالاسم أو رقم الهاتف في `web/buy_used.html`.
-- **`web/reports.html` و `app/api.py` (التقارير المالية من تاريخ إلى تاريخ)**:
-  - تحديث `report_daily` و `_range` لدعم `date_from` و `date_to` وإضافة حقلي «من تاريخ» و«إلى تاريخ» في `web/reports.html` مع الافتراضي على اليوم.
-- **`web/profile.html` و `web/staff.html` و `web/app.css`**:
-  - إضافة إمكانية رفع صورة خلفية سطح المكتب الخاصة بكل مستخدم في `web/profile.html` وحفظها لحسابه فقط عبر `user_pref_save`.
-  - إصلاح تداخل حقول إضافة وتعديل الموظف في `web/staff.html` عبر استخدام شبكة `.staff-fields-grid` واضحة من 3 أعمدة وإضافة قواعد الأعمدة المتجاوبة في `web/app.css`.
-
-
-- `2026-10-15`: فصل إدارة الموظفين وتخصيص الصلاحيات في صفحة مستقلة (`web/staff.html`) وإلغاؤها من صفحة التقارير (`web/reports.html`) لتصبح للتقارير فقط، وإنشاء صفحة الملف الشخصي وإعدادات الموظف (`web/profile.html` + `api.profile_save` + عمود `users.avatar`) لتفتح عند الضغط على اسم/صورة المستخدم وتتيح تعديل الاسم وكلمة السر والصورة الشخصية وصفحة الدخول المفضلة، ونقل إعدادات المتجر والضريبة وتخصيص الإيصال بالكامل من `web/receipt.html` إلى صفحة الإعدادات الشاملة (`web/settings.html`) (87/87 فحصاً).
-- `2026-10-15`: إنشاء صفحة الإعدادات الشاملة للمشروع بنظام التبويبات (`web/settings.html`)، وتحديث صفحة تسجيل الدخول (`web/index.html`) لتعرض اسم المحل وشعاره من الإعدادات وتكتفي بالرمز السري للتعرف تلقائياً على المستخدم ودوره (مدير أو كاشير) مع إلغاء زر دخول المدير ودعم 3 طرق دخول قابلة للتخصيص (`pin_only`، `select_user_pin`، `username_password`)، وتوحيد تصميم جميع فواتير وإيصالات البرنامج في مكان واحد، وإضافة تفضيلات صفحة البداية الخاصة بكل مستخدم (`start_page` / `start_mode`) مع افتراضي الأدمن، وتفعيل الوضع الليلي والنهاري بالكامل على صفحة سطح المكتب (`web/desktop.html`).
+### 2026-11-12 — Complete Project-Kickstart Documentation Suite & Architecture Alignment
+- **Goal & Request**: Conduct comprehensive project analysis using `/project-kickstart` skill, formalize missing engineering documentation, establish quality baselines from the code audit, archive historical logs, and provide actionable development recommendations.
+- **Executed Work**:
+  1. **Documentation Suite Creation (`docs/`)**: Authored 12 structured project documents adhering to project-kickstart standards:
+     - `docs/PRD.md` — Product requirements document (Arabic).
+     - `docs/ROADMAP.md` — Multi-phase development roadmap with test gates (Arabic).
+     - `docs/OPEN-QUESTIONS.md` — Open architectural and business decisions log (Arabic).
+     - `docs/ARCHITECTURE.md` — System architecture, sequence flows, IPC bridge, and module layouts.
+     - `docs/DATA-MODEL.md` — Schema specifications for all 19 tables and access control matrix.
+     - `docs/STACK.md` — Verified technical stack versions and upgrade constraints.
+     - `docs/CODING-STANDARDS.md` — Coding guidelines, money math, SQL, and RTL styling rules.
+     - `docs/TESTING.md` — Testing strategy, regression checks, and future test harness plans.
+     - `docs/SECURITY.md` — Threat modeling, PBKDF2 hashing, brute-force lockout, and Egyptian PDPL compliance.
+     - `docs/DESIGN-SYSTEM.md` — TechZone OS design language, color tokens, and invoice specifications.
+     - `docs/DEPLOYMENT.md` — Packaging, distribution, Windows Edge WebView2 runtime, and backup guide.
+     - `docs/README.md` — Complete bilingual documentation index.
+  2. **Architectural Decision Records (`docs/adr/`)**: Established ADR framework (`0000-template.md`, `0001-offline-sqlite-architecture.md`, `0002-arabic-rtl-tailwind.md`).
+  3. **AI Agent Guides & Standards**: Added `CLAUDE.md` session guide, `.editorconfig`, and archived older changelogs into `CHANGELOG_ARCHIVE.md` to keep `AGENTS.md` lean.
+- 104/104 selfcheck tests passing (`app/selfcheck.py`).

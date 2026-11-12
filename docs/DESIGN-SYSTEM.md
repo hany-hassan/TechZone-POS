@@ -1,0 +1,98 @@
+# Design System & UI Specifications — TechZone OS
+
+## 1. Design Concept & Philosophy
+
+**TechZone OS** represents a hybrid desktop operating system environment blending the productivity of **Windows 11** (Start Menu, taskbar, system notifications, snapping, clean window borders) with the fluidity of **macOS** (floating dock, subtle translucent glassmorphism, rounded corners, responsive micro-animations).
+
+The user interface is designed natively for **Arabic (Right-to-Left - RTL)** desktop environments, optimized for point-of-sale efficiency, touch terminals, and conventional mouse/keyboard setups in retail shops.
+
+---
+
+## 2. Color Tokens & Theme Architecture
+
+The system supports synchronized dual-theme modes (Light / Dark) across the parent desktop shell and all child window `iframes`.
+
+### 2.1 Base Neutrals & Surfaces
+
+| Token | Light Theme | Dark Theme | Purpose |
+|---|---|---|---|
+| `bg-main` | `#f8fafc` (Slate 50) | `#0f172a` (Slate 900) | Application wallpaper / base desktop canvas |
+| `surface-primary` | `#ffffff` (Pure White) | `#1e293b` (Slate 800) | Window interiors, modals, cards, sidebars |
+| `surface-secondary` | `#f1f5f9` (Slate 100) | `#334155` (Slate 700) | Form fields, active list rows, nested panels |
+| `border-subtle` | `#e2e8f0` (Slate 200) | `#334155` (Slate 700) | Dividers, window frame edges, card borders |
+| `text-primary` | `#0f172a` (Slate 900) | `#f8fafc` (Slate 50) | Primary titles, price numbers, table headers |
+| `text-muted` | `#64748b` (Slate 500) | `#94a3b8` (Slate 400) | Captions, secondary labels, helper descriptions |
+
+### 2.2 Semantic Colors
+
+| State | Color Code | Tailwind Class | Application |
+|---|---|---|---|
+| **Success** | `#16a34a` (Green 600) | `text-emerald-600` / `bg-emerald-500` | Completed sales, paid invoices, in-stock badges |
+| **Warning** | `#d97706` (Amber 600) | `text-amber-600` / `bg-amber-500` | Low inventory warnings, pending repair approvals |
+| **Danger / Alert** | `#dc2626` (Red 600) | `text-rose-600` / `bg-rose-500` | Out of stock, canceled quotes, returns, overdue debt |
+| **Information** | `#0284c7` (Sky 600) | `text-sky-600` / `bg-sky-500` | Info callouts, customer search, repair review |
+
+### 2.3 User-Configurable Accent Palette (8 Tones)
+
+Users can customize their personal operating system accent color in `profile.html`. The selected accent propagates to active tab indicators, primary action buttons, window focus rings, and widget highlights:
+1. **Blue (Default):** `#2563eb`
+2. **Emerald Green:** `#059669`
+3. **Indigo:** `#4f46e5`
+4. **Violet Purple:** `#7c3aed`
+5. **Rose Pink:** `#e11d48`
+6. **Orange Amber:** `#ea580c`
+7. **Teal:** `#0d9488`
+8. **Slate Dark:** `#475569`
+
+---
+
+## 3. Typography Scale & Fonts
+
+The application relies strictly on **100% locally hosted web fonts** stored in `web/fonts/` (23 `.woff2` files) to guarantee zero network latency and complete offline reliability.
+
+### 3.1 Font Families
+- **Primary Interface Font:** `Cairo` (Weights: 400, 600, 700, 800) — highly legible modern Arabic typography for all headings, POS tables, button labels, and system navigation.
+- **Secondary / Body Font:** `IBM Plex Sans Arabic` (Weights: 400, 500, 600) — clean monospace-leaning clarity for financial reports, numbers, receipts, and invoices.
+- **Iconography Font:** `Material Icons` local ligature set for all icons across toolbars, docks, and buttons.
+
+### 3.2 Typographic Hierarchy
+- **Desktop Widgets & Huge Totals:** `2.25rem (36px)` / `font-bold` / `tracking-tight`
+- **Page Titles (H1):** `1.5rem (24px)` / `font-extrabold`
+- **Card Titles & Modal Headers (H2):** `1.125rem (18px)` / `font-bold`
+- **Body & Table Cells:** `0.875rem (14px)` / `font-normal`
+- **Badges, Timestamps, Mini Details:** `0.75rem (12px)` / `font-medium`
+
+---
+
+## 4. Layout & Spacing Rules
+
+- **Base Unit:** 4px grid (`p-1` = 4px, `p-2` = 8px, `p-4` = 16px, `p-6` = 24px).
+- **Directionality:** Explicit `dir="rtl"` is applied globally to `<html>` and mirrored across all components.
+- **Icon Mirroring:** Directional navigation arrows, chevron forward/back, and progress bars are mirrored appropriately for right-to-left scanning.
+- **Border Radius:**
+  - Badges & Pills: `rounded-full` (9999px)
+  - Buttons & Inputs: `rounded-xl` (12px)
+  - Cards & Modal Panels: `rounded-2xl` (16px)
+  - Application Windows: `rounded-3xl` (24px) for window frames with top control handle bars
+
+---
+
+## 5. Desktop OS Components
+
+1. **Top System Bar:** Pinned status bar featuring Store Name, Active Shift duration counter, Quick Theme toggle, Accent Selector, and Employee Profile shortcut.
+2. **Desktop Dashboard Canvas:** Host for draggable desktop icons, live statistical widgets (Today Sales, Open Repairs, Low Stock count), and floating windows.
+3. **Floating Window Manager (`iframe`):**
+   - Draggable header bar with Arabic title and app icon.
+   - Standard window controls: Minimize (`_`), Maximize / Restore (`□`), Close (`✕`).
+   - Active window elevation using dynamic z-index stacking.
+4. **Dock & Taskbar:** Dock situated at the screen bottom showing running application badges, launcher shortcuts, and Start Menu launcher button.
+5. **Start Menu:** Sliding popup menu categorized by operations (Sales, Customers, Inventory, Maintenance, Management, System Settings).
+
+---
+
+## 6. Invoice Studio & Document Print Formatting
+
+Documents generated by the system (A4 Invoices, Thermal 80mm Cashier Receipts, Maintenance Tickets, Payment Vouchers) adhere to standard printing rules:
+- **Zero Margins in Print Mode:** `@page { size: auto; margin: 0; }` ensures print engines (WebView2 / Win32 Spooler) do not clip numeric columns or force unnecessary second sheets.
+- **Thermal Widths:** Supported for 80mm standard retail printers and 58mm portable printers.
+- **Color Accuracy:** High-contrast monochrome and two-tone palettes ensure optimal clarity on thermal heads and laser printers alike.
