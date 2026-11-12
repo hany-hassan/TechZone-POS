@@ -536,6 +536,46 @@ def daily_startup_backup() -> pathlib.Path | None:
     return backup_database("startup")
 
 
+def restore_database(backup_name: str) -> dict:
+    """استرجاع قاعدة البيانات من نسخة احتياطية محددة مع أخذ نسخة أمان فورية مسبقة."""
+    src_path = pathlib.Path(db_path())
+    backups_dir = src_path.parent / "backups"
+
+    clean_name = pathlib.Path(backup_name).name
+    backup_file = backups_dir / clean_name
+
+    if not backup_file.exists() or not backup_file.is_file():
+        raise ValueError("ملف النسخة الاحتياطية غير موجود")
+
+    # 1. فحص سلامة وتماسك النسخة الاحتياطية
+    try:
+        chk_conn = sqlite3.connect(str(backup_file), timeout=5)
+        res = chk_conn.execute("PRAGMA quick_check").fetchone()
+        chk_conn.close()
+        if not res or res[0] != "ok":
+            raise ValueError("ملف النسخة الاحتياطية تالف أو غير متماسك")
+    except Exception as e:
+        raise ValueError(f"فشل فحص سلامة النسخة الاحتياطية: {e}")
+
+    # 2. أخذ نسخة أمان تلقائية فورية من الحالة الحالية قبل الاسترجاع
+    safety_snap = backup_database(reason="before_restore")
+
+    # 3. استخدام sqlite3 online backup API لنسخ الصفحات إلى الملف الحي
+    bck_conn = sqlite3.connect(str(backup_file), timeout=10)
+    dest_conn = sqlite3.connect(str(src_path), timeout=15)
+    try:
+        bck_conn.backup(dest_conn)
+        dest_conn.commit()
+    finally:
+        dest_conn.close()
+        bck_conn.close()
+
+    return {
+        "restored_from": clean_name,
+        "safety_backup": safety_snap.name if safety_snap else None,
+    }
+
+
 def _ensure_schema_columns(conn: sqlite3.Connection):
     """ترقية الجداول القديمة بإضافة الأعمدة الجديدة دون فقدان البيانات."""
     try:

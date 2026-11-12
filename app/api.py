@@ -1027,6 +1027,20 @@ class Api:
         self._perm("settings_manage")
         return db.list_backups()
 
+    def db_restore(self, backup_name):
+        """استرجاع قاعدة البيانات من نسخة احتياطية محددة مع أخذ نسخة أمان مسبقة (للمدير)."""
+        self._perm("settings_manage")
+        if not backup_name:
+            raise ApiError("اسم ملف النسخة الاحتياطية مطلوب")
+        try:
+            res = db.restore_database(str(backup_name))
+            self._settings_cache = None
+            return res
+        except ValueError as ve:
+            raise ApiError(str(ve))
+        except Exception as e:
+            raise ApiError(f"تعذر استرجاع النسخة الاحتياطية: {e}")
+
     def _load_payment_methods(self, conn):
         cache = getattr(self, "_pm_cache", None)
         if cache is not None:

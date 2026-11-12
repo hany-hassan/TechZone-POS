@@ -645,7 +645,7 @@
                 <th class="p-3">نوع / سبب النسخ</th>
                 <th class="p-3">تاريخ ووقت النسخة</th>
                 <th class="p-3">الحجم</th>
-                <th class="p-3 text-center">الحالة</th>
+                <th class="p-3 text-center">الإجراءات والتحكم</th>
               </tr>
             </thead>
             <tbody id="backups-tbody" class="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1254,14 +1254,42 @@ async function loadBackupsList() {
           ${formatBytes(b.size_bytes)}
         </td>
         <td class="p-3 text-center">
-          <span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">
-            <span class="material-icons-round text-sm">check_circle</span>
-            <span>جاهزة ومحفوظة</span>
-          </span>
+          <div class="flex items-center justify-center gap-2">
+            <span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]" title="النسخة سليمة وجاهزة">
+              <span class="material-icons-round text-sm">check_circle</span>
+            </span>
+            <button type="button" class="btn-restore-backup px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500 text-amber-700 dark:text-amber-300 hover:text-white font-bold text-[11px] border border-amber-500/30 flex items-center gap-1 transition-all" data-name="${esc(b.name)}">
+              <span class="material-icons-round text-sm">settings_backup_restore</span>
+              <span>استرجاع هذه النسخة</span>
+            </button>
+          </div>
         </td>
       </tr>
     `;
   }).join('');
+
+  tbody.querySelectorAll('.btn-restore-backup').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const bName = btn.dataset.name;
+      if (!confirm(`تأكيد أمني لاسترجاع قاعدة البيانات:\n\nهل أنت متأكد من استرجاع النسخة:\n(${bName})؟\n\nتنبيه: سيقوم النظام تلقائياً بأخذ نسخة أمان فورية من الوضع الحالي قبل تطبيق الاسترجاع.`)) {
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'جاري الاسترجاع...';
+      try {
+        const res = await api('db_restore', { backup_name: bName });
+        toast(`تم استرجاع النسخة الاحتياطية بنجاح! تم حفظ نسخة أمان مسبقة (${res.safety_backup})`, 'success');
+        await loadBackupsList();
+        SETTINGS = await guard(() => api('settings')) || SETTINGS;
+        fillStoreTab();
+        fillLoginTab();
+      } catch (e) {
+        toast(e.message || 'فشل استرجاع النسخة الاحتياطية', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 $('btn-create-backup-now').addEventListener('click', async () => {

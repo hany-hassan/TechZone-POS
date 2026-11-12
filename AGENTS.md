@@ -131,12 +131,20 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain 112/112 passing tests in `python app/selfcheck.py`.
+6. **Selfcheck Verification:** Every change must maintain 114/114 passing tests in `python app/selfcheck.py`.
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-12 — Safe In-App Database Restore (`db_restore`) with Pre-Restore Safety Snapshots
+- **Goal & Request**: Implement and explain database restore functionality: provide safe in-app snapshot restoration for the manager with automatic pre-restore safety backups, integrity checks, and explain emergency manual file recovery.
+- **Executed Work**:
+  1. **Safe Database Restoration Engine (`app/db.py`)**: Added `restore_database(backup_name)` using SQLite Online Backup API in reverse (`bck_conn.backup(dest_conn)`), prefixed by an automated pre-restore safety snapshot (`shop_YYYYMMDD_HHMMSS_before_restore.db`) to ensure zero data loss, along with `PRAGMA quick_check` verification.
+  2. **Backend API Endpoint (`app/api.py`)**: Added `db_restore` gated by `settings_manage` (manager only, denied for cashiers).
+  3. **Manager UI Control (`web/settings.html`)**: Added "استرجاع هذه النسخة" action button for each snapshot with confirmation modal, live feedback, and state reloading.
+  4. **Regression Verification (`app/selfcheck.py`)**: Added automated checks 105 and 108 verifying cashier denial and successful safe restoration cycle. All 114 checks pass.
 
 ### 2026-11-12 — Manager Backups UI Hub in Settings & Cashier Permission Gates
 - **Goal & Request**: Provide a dedicated manager visual interface for database backups (`db_backup` & `backups_list`) in `web/settings.html`, and ensure strict access control where this feature is accessible only to the manager (`settings_manage`) and completely blocked for cashiers.
