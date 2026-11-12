@@ -431,13 +431,15 @@
       }
     }
 
-    document.getElementById('btn-save-force-pin').addEventListener('click', async () => {
+    const saveForcePin = async () => {
       const p1 = document.getElementById('inp-new-force-pin').value.trim();
       const p2 = document.getElementById('inp-confirm-force-pin').value.trim();
       const errBox = document.getElementById('force-pin-err');
+      const btn = document.getElementById('btn-save-force-pin');
       const showErr = (msg) => {
         if (errBox) { errBox.textContent = msg; errBox.classList.remove('hidden'); }
       };
+      if (errBox) errBox.classList.add('hidden');
       if (!p1 || p1.length < 4) {
         showErr('الرمز السري يجب أن يتكون من 4 أرقام على الأقل');
         return;
@@ -450,14 +452,43 @@
         showErr('الرمزان غير متطابقين، يرجى إعادة التأكيد بدقة');
         return;
       }
+      btn.disabled = true;
+      btn.classList.add('opacity-75', 'cursor-not-allowed');
       try {
-        const updated = await api('profile_save', { pin: p1, current_pin: '1234' });
+        const updated = await api('profile_save', {
+          new_pin: p1,
+          pin: p1,
+          current_pin: '1234'
+        });
         toast('تم تحديث الرمز السري وتأمين الحساب بنجاح', 'success');
-        document.getElementById('modal-force-pin').classList.add('hidden');
-        document.getElementById('modal-force-pin').classList.remove('flex');
+        const modal = document.getElementById('modal-force-pin');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+        }
+        if (PENDING_LOGGED_USER) {
+          PENDING_LOGGED_USER.force_change_pin = false;
+        }
         redirectAfterLogin(updated || PENDING_LOGGED_USER, true);
       } catch (e) {
         showErr(e.message || 'فشل تحديث الرمز السري');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-75', 'cursor-not-allowed');
+      }
+    };
+
+    document.getElementById('btn-save-force-pin').addEventListener('click', saveForcePin);
+    document.getElementById('inp-new-force-pin').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('inp-confirm-force-pin').focus();
+      }
+    });
+    document.getElementById('inp-confirm-force-pin').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveForcePin();
       }
     });
 

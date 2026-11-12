@@ -131,12 +131,19 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain 108/108 passing tests in `python app/selfcheck.py`.
+6. **Selfcheck Verification:** Every change must maintain 109/109 passing tests in `python app/selfcheck.py`.
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-12 — Fix: Resolve Parameter Mismatch & Unresponsiveness in Default PIN Change Modal
+- **Issue**: Attempting to change default admin PIN from modal dialog `#modal-force-pin` failed with error `"معاملات غير صالحة للطلب"` due to keyword argument mismatch (`pin` passed instead of `new_pin`), leaving the dialog unclosed and appearing frozen.
+- **Executed Fix**:
+  1. **Backend Signature (`app/api.py`)**: Added `pin=None` keyword parameter alias to `profile_save()`, automatically routing to `new_pin`. Synchronized `_STATE["user"]["force_change_pin"]` after profile update.
+  2. **Frontend UI UX (`web/index.html`)**: Sent both `new_pin` and `pin` in payload, added Enter key navigation between new/confirm PIN fields, disabled button with visual state during save, and smoothly cleared `force_change_pin` upon redirect.
+  3. **Automated Regression (`app/selfcheck.py`)**: Added Check 106 verifying `profile_save` with `pin` keyword updates the PIN and clears `force_change_pin`. All 109 checks pass.
 
 ### 2026-11-12 — Automated DB Backups, Mandatory Default PIN Change, & POS Global Barcode Scanner
 - **Goal & Request**: Execute the highest-priority security and operational improvements from the implementation roadmap: automated snapshot backups, default credential protection, and cashier high-speed hardware scanning.

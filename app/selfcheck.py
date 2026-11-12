@@ -569,6 +569,13 @@ adm_log = call(a, "login", {"username": "admin", "pin": "1234"})
 check("admin login with default PIN flags force_change_pin=True",
       adm_log["ok"] and adm_log["data"].get("force_change_pin") is True)
 
+# (م) فحص تحديث الرمز السري الإداري عبر profile_save بمعامل pin الجديد
+save_pin_res = call(a, "profile_save", {"pin": "5566", "current_pin": "1234"})
+check("profile_save with pin alias updates PIN and clears force_change_pin",
+      save_pin_res["ok"] and save_pin_res["data"].get("force_change_pin") is False)
+# استعادة الرمز إلى 1234 للحفاظ على حالة الاختبار
+call(a, "profile_save", {"new_pin": "1234", "current_pin": "5566"})
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:

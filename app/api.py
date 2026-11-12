@@ -655,10 +655,13 @@ class Api:
         accent_color=None,
         wallpaper=None,
         custom_bg=None,
+        pin=None,
     ):
         """تحديث الملف الشخصي للموظف الحالي (الاسم، معرف الدخول، الصورة الشخصية، كلمة السر/الرمز السري، وإعدادات الفتح والمظهر)."""
         u = self._user()
         uid = u["id"]
+        if new_pin is None and pin is not None:
+            new_pin = pin
         with db.connect() as conn:
             row = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
             if not row:
@@ -721,6 +724,9 @@ class Api:
             _STATE["user"] = self._row_to_user_dict(updated)
             _STATE["user"]["effective_start_page"] = _STATE["user"].get("start_page") or st.get("default_start_page") or "pos"
             _STATE["user"]["effective_start_mode"] = _STATE["user"].get("start_mode") or st.get("default_start_mode") or "window"
+            _STATE["user"]["force_change_pin"] = bool(
+                updated["role"] == "admin" and hmac.compare_digest(db.hash_pin("1234", updated["pin_salt"]), updated["pin_hash"])
+            )
         return dict(_STATE["user"])
 
     def user_save(self, username, name, role="cashier", pin=None, permissions=None, id=None, start_page=None, start_mode=None, avatar=None):
