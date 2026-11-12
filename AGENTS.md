@@ -131,12 +131,22 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain 109/109 passing tests in `python app/selfcheck.py`.
+6. **Selfcheck Verification:** Every change must maintain 112/112 passing tests in `python app/selfcheck.py`.
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-12 — Manager Backups UI Hub in Settings & Cashier Permission Gates
+- **Goal & Request**: Provide a dedicated manager visual interface for database backups (`db_backup` & `backups_list`) in `web/settings.html`, and ensure strict access control where this feature is accessible only to the manager (`settings_manage`) and completely blocked for cashiers.
+- **Executed Work**:
+  1. **Manager Backups UI Tab (`web/settings.html`)**: Added a 4th tab "النسخ الاحتياطي وقاعدة البيانات" featuring:
+     - Real-time status cards: Automated backup health badge, total snapshots count, total size formatted in KB/MB, and local storage directory path (`data/backups/`).
+     - Action buttons: "أخذ نسخة احتياطية فورية الآن" with loading state and toast feedback, and "تحديث القائمة".
+     - Backups audit table: Lists all snapshots with file names, reasons (daily startup, shift close, manual admin), formatted timestamps, file sizes, and integrity status.
+  2. **Access Control Enforcement**: Confirmed `settings.html` and endpoints `db_backup` / `backups_list` are gated exclusively by `settings_manage` / `admin`. Cashiers cannot see the settings app or invoke the endpoints.
+  3. **Regression Tests (`app/selfcheck.py`)**: Added checks 103, 104, 107 verifying cashier denial for `db_backup` and `backups_list`, and DOM verification for `settings.html` backup components. All 112 checks pass.
 
 ### 2026-11-12 — Fix: Resolve Parameter Mismatch & Unresponsiveness in Default PIN Change Modal
 - **Issue**: Attempting to change default admin PIN from modal dialog `#modal-force-pin` failed with error `"معاملات غير صالحة للطلب"` due to keyword argument mismatch (`pin` passed instead of `new_pin`), leaving the dialog unclosed and appearing frozen.

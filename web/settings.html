@@ -66,6 +66,10 @@
         <span class="material-icons-round text-base">design_services</span>
         <span>تصميم القوالب وجميع الفواتير</span>
       </button>
+      <button type="button" data-stab="backups" class="settings-tab-btn px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 transition-all">
+        <span class="material-icons-round text-base">backup</span>
+        <span>النسخ الاحتياطي وقاعدة البيانات</span>
+      </button>
     </div>
   </div>
 
@@ -552,6 +556,108 @@
       <div id="si-preview-stage" class="overflow-x-auto flex justify-center p-2"></div>
     </div>
   </section>
+
+  <!-- ==================== التبويب 4: النسخ الاحتياطي وإدارة قاعدة البيانات (المدير فقط) ==================== -->
+  <section id="spane-backups" class="hidden flex flex-col gap-5">
+    <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 md:p-6 shadow-sm flex flex-col gap-5">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <span class="material-icons-round text-2xl">backup</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base md:text-lg font-bold text-slate-900 dark:text-white">النسخ الاحتياطي وأمان قاعدة البيانات</h2>
+              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 flex items-center gap-1">
+                <span class="material-icons-round text-xs">admin_panel_settings</span>
+                <span>خاص بالمدير فقط</span>
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">حماية متقدمة لبيانات المتجر — إنشاء نسخ احتياطية متزامنة بدون قفل النظام، وتتبع النسخ المحفوظة على جهازك</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btn-refresh-backups" type="button" class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary text-xs font-bold flex items-center gap-1.5 transition-all">
+            <span class="material-icons-round text-base">refresh</span>
+            <span>تحديث القائمة</span>
+          </button>
+          <button id="btn-create-backup-now" type="button" class="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs shadow-lg shadow-primary/20 flex items-center gap-2 transition-all">
+            <span class="material-icons-round text-base">save_as</span>
+            <span>أخذ نسخة احتياطية فورية الآن</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- شبكة المؤشرات السريعة -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+            <span class="material-icons-round text-xl">verified</span>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-emerald-800 dark:text-emerald-300">النسخ التلقائي نشط</div>
+            <div class="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5 leading-relaxed">
+              • نسخة يومية عند بدء تشغيل البرنامج<br/>
+              • نسخة فورية عند إغلاق كل وردية كاشير<br/>
+              • الاحتفاظ بآخر 30 نسخة تلقائياً
+            </div>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center shrink-0">
+            <span class="material-icons-round text-xl">storage</span>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">إجمالي النسخ المتوفرة</div>
+            <div id="stat-backups-count" class="text-lg font-bold text-slate-900 dark:text-white font-num mt-0.5">0 نسخة</div>
+            <div id="stat-backups-size" class="text-[11px] text-slate-500 font-num">الحجم الإجمالي: 0 م.ب</div>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+            <span class="material-icons-round text-xl">folder_zip</span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-xs text-slate-500 dark:text-slate-400">مجلد حفظ النسخ المحلي</div>
+            <div class="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5" dir="ltr" title="data/backups/">data/backups/</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">تقنية SQLite Online Backup (بدون إيقاف البيع)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- جدول استعراض النسخ المتوفرة -->
+      <div class="mt-2 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs md:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+            <span class="material-icons-round text-primary text-base">history</span>
+            <span>سجل النسخ الاحتياطية المتوفرة على الجهاز</span>
+          </h3>
+          <span class="text-[11px] text-slate-400">مرتبة من الأحدث إلى الأقدم</span>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+              <tr>
+                <th class="p-3">اسم الملف</th>
+                <th class="p-3">نوع / سبب النسخ</th>
+                <th class="p-3">تاريخ ووقت النسخة</th>
+                <th class="p-3">الحجم</th>
+                <th class="p-3 text-center">الحالة</th>
+              </tr>
+            </thead>
+            <tbody id="backups-tbody" class="divide-y divide-slate-100 dark:divide-slate-800">
+              <tr>
+                <td colspan="5" class="p-8 text-center text-slate-400">جاري تحميل النسخ الاحتياطية...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <script src="app.js"></script>
@@ -567,7 +673,7 @@ let PENDING_LOGO = null;
 
 function switchSettingsTab(tabId) {
   ACTIVE_STAB = tabId;
-  ['store', 'login', 'invoices'].forEach((id) => {
+  ['store', 'login', 'invoices', 'backups'].forEach((id) => {
     const pane = $('spane-' + id);
     if (pane) pane.classList.toggle('hidden', id !== tabId);
   });
@@ -575,6 +681,7 @@ function switchSettingsTab(tabId) {
     b.classList.toggle('active', b.dataset.stab === tabId);
   });
   if (tabId === 'invoices') renderInvoiceStudioPreview();
+  if (tabId === 'backups') loadBackupsList();
 }
 
 document.querySelectorAll('[data-stab]').forEach((btn) => {
@@ -1082,6 +1189,104 @@ $('btn-reset-all-invoices').addEventListener('click', async () => {
   }
 });
 
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return '0 بايت';
+  if (bytes < 1024) return bytes + ' بايت';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' ك.ب';
+  return (bytes / (1024 * 1024)).toFixed(2) + ' م.ب';
+}
+
+function parseReason(reason) {
+  const map = {
+    'startup': { label: 'تشغيل يومي تلقائي', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
+    'shift_close': { label: 'إغلاق وردية كاشير', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
+    'manual': { label: 'يدوي بواسطة المدير', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' },
+  };
+  return map[reason] || { label: reason || 'نسخة احتياطية', color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' };
+}
+
+async function loadBackupsList() {
+  const tbody = $('backups-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-slate-400">جاري قراءة سجل النسخ الاحتياطية...</td></tr>';
+  const list = await guard(() => api('backups_list'));
+  if (!list || !Array.isArray(list)) {
+    tbody.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-red-500 font-bold">تعذر تحميل قائمة النسخ الاحتياطية</td></tr>';
+    return;
+  }
+  let totalBytes = 0;
+  list.forEach(b => totalBytes += (b.size_bytes || 0));
+  $('stat-backups-count').textContent = `${list.length} نسخة`;
+  $('stat-backups-size').textContent = `الحجم الإجمالي: ${formatBytes(totalBytes)}`;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="p-10 text-center">
+          <div class="flex flex-col items-center justify-center gap-2">
+            <span class="material-icons-round text-3xl text-slate-300 dark:text-slate-600">inventory_2</span>
+            <p class="text-xs font-bold text-slate-600 dark:text-slate-400">لا توجد نسخ احتياطية مسجلة بعد</p>
+            <p class="text-[11px] text-slate-400">اضغط على زر "أخذ نسخة احتياطية فورية الآن" لإنشاء أول نسخة فوراً</p>
+          </div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = list.map(b => {
+    const rInfo = parseReason(b.reason);
+    return `
+      <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+        <td class="p-3 font-mono text-[11px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2" dir="ltr">
+          <span class="material-icons-round text-base text-primary">description</span>
+          <span>${esc(b.name)}</span>
+        </td>
+        <td class="p-3">
+          <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${rInfo.color}">
+            ${esc(rInfo.label)}
+          </span>
+        </td>
+        <td class="p-3 text-slate-600 dark:text-slate-400 font-num">
+          ${esc(b.created_at || '—')}
+        </td>
+        <td class="p-3 font-num font-bold text-slate-700 dark:text-slate-300">
+          ${formatBytes(b.size_bytes)}
+        </td>
+        <td class="p-3 text-center">
+          <span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">
+            <span class="material-icons-round text-sm">check_circle</span>
+            <span>جاهزة ومحفوظة</span>
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+$('btn-create-backup-now').addEventListener('click', async () => {
+  const btn = $('btn-create-backup-now');
+  btn.disabled = true;
+  btn.classList.add('opacity-75', 'cursor-not-allowed');
+  try {
+    const res = await api('db_backup');
+    if (res && res.backup_path) {
+      toast(`تم إنشاء نسخة احتياطية فورية بنجاح (${res.backup_name})`, 'success');
+      await loadBackupsList();
+    }
+  } catch (e) {
+    toast(e.message || 'فشل إنشاء النسخة الاحتياطية', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('opacity-75', 'cursor-not-allowed');
+  }
+});
+
+$('btn-refresh-backups').addEventListener('click', async () => {
+  await loadBackupsList();
+  toast('تم تحديث قائمة النسخ الاحتياطية');
+});
+
 (async () => {
   const user = await pageInit('settings', { perm: 'settings_manage' });
   if (!user) return;
@@ -1098,7 +1303,7 @@ $('btn-reset-all-invoices').addEventListener('click', async () => {
   fillInvoicesTab();
 
   const reqTab = new URLSearchParams(location.search).get('tab');
-  if (reqTab && ['store', 'login', 'invoices'].includes(reqTab)) {
+  if (reqTab && ['store', 'login', 'invoices', 'backups'].includes(reqTab)) {
     switchSettingsTab(reqTab);
   } else {
     switchSettingsTab('store');

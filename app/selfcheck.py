@@ -556,6 +556,10 @@ check("pos.html has global barcode listener & fast scanner handler",
       and "lastBarcodeInputTime" in pos_html_text)
 
 # (ك) فحص النسخ الاحتياطي التلقائي لقاعدة البيانات واستعراض النسخ
+call(a, "login", {"username": "cashier", "pin": "1111"})
+check("cashier db_backup denied", not call(a, "db_backup")["ok"])
+check("cashier backups_list denied", not call(a, "backups_list")["ok"])
+
 call(a, "login", {"username": "admin", "pin": "1234"})
 b_res = call(a, "db_backup", {"reason": "test_selfcheck"})
 check("db_backup creates valid backup file and records size",
@@ -563,6 +567,10 @@ check("db_backup creates valid backup file and records size",
 b_list = call(a, "backups_list", {})
 check("backups_list returns available backup snapshots",
       b_list["ok"] and len(b_list["data"]) >= 1 and any("test_selfcheck" in x["name"] for x in b_list["data"]))
+
+st_html_text = (ROOT / "web" / "settings.html").read_text(encoding="utf-8")
+check("settings.html has manager backups UI tab and table",
+      "spane-backups" in st_html_text and "btn-create-backup-now" in st_html_text and "backups-tbody" in st_html_text)
 
 # (ل) فحص كشف الرمز السري الافتراضي للأدمن وإلزام تغييره
 adm_log = call(a, "login", {"username": "admin", "pin": "1234"})
