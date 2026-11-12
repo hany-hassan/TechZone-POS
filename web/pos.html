@@ -1651,6 +1651,67 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
   bindCustomerAutocomplete('cust', 'phone', 'cust-sug');
   bindCustomerAutocomplete('pay-cust-name', 'pay-cust-phone', 'pay-cust-sug');
 
+  /* ===== التقاط مدخلات قارئ الباركود العام السريع (Barcode Scanner) ===== */
+  let barcodeBuffer = '';
+  let lastBarcodeInputTime = 0;
+
+  async function handleBarcodeScan(code) {
+    if (!code) return;
+    let matched = PRODUCTS.find((p) => (p.sku && p.sku.trim() === code) || (p.name && p.name.trim() === code));
+    if (!matched) {
+      const res = await guard(() => api('products_search', { q: code, limit: 5 }));
+      if (res && res.length) {
+        matched = res.find((p) => (p.sku && p.sku.trim() === code)) || res[0];
+      }
+    }
+    if (matched) {
+      await addToCart(matched.id);
+      toast(`تم مسح وإضافة «${matched.name}» للسلة بنجاح`, 'success');
+      const qInput = document.getElementById('q');
+      if (qInput && qInput.value === code) {
+        qInput.value = '';
+        await search();
+      }
+    } else {
+      const qInput = document.getElementById('q');
+      if (qInput) {
+        qInput.value = code;
+        await search();
+      }
+      toast(`لم يُعثر على منتج بالباركود: ${code}`, 'warn');
+    }
+  }
+
+  window.addEventListener('keydown', async (e) => {
+    const active = document.activeElement;
+    const isTextInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+    const isSearchBox = active && active.id === 'q';
+
+    const now = Date.now();
+    const diff = now - lastBarcodeInputTime;
+    lastBarcodeInputTime = now;
+
+    if (diff > 85) {
+      barcodeBuffer = '';
+    }
+
+    if (e.key === 'Enter') {
+      if (barcodeBuffer.length >= 3) {
+        const scanned = barcodeBuffer.trim();
+        barcodeBuffer = '';
+        if (!isTextInput || isSearchBox) {
+          e.preventDefault();
+          await handleBarcodeScan(scanned);
+        }
+      }
+      return;
+    }
+
+    if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      barcodeBuffer += e.key;
+    }
+  });
+
   (async () => {
   user = await pageInit('pos');
   if (!user) return;

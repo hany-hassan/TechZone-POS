@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import sqlite3
 import sys
@@ -458,6 +459,81 @@ def connect() -> "_ClosingConnection":
         conn.commit()
         _INITIALIZED_DBS.add(path)
     return _ClosingConnection(conn)
+
+
+def backup_database(reason: str = "manual") -> pathlib.Path | None:
+    """نسخ احتياطي فوري لقاعدة البيانات عبر sqlite3 online backup API مع تدوير النسخ القديمة."""
+    src_path = pathlib.Path(db_path())
+    if not src_path.exists():
+        return None
+    backups_dir = src_path.parent / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_reason = re.sub(r"[^a-zA-Z0-9_\-]", "", reason) or "auto"
+    dest_path = backups_dir / f"shop_{ts}_{safe_reason}.db"
+
+    try:
+        src_conn = sqlite3.connect(str(src_path), timeout=10)
+        dest_conn = sqlite3.connect(str(dest_path))
+        try:
+            src_conn.backup(dest_conn)
+        finally:
+            dest_conn.close()
+            src_conn.close()
+        _rotate_backups(backups_dir, max_keep=30)
+        return dest_path
+    except Exception as e:
+        print(f"Database backup error: {e}", file=sys.stderr)
+        return None
+
+
+def _rotate_backups(backups_dir: pathlib.Path, max_keep: int = 30) -> None:
+    """الاحتفاظ بآخر max_keep نسخة احتياطية وحذف النسخ الأقدم."""
+    try:
+        backups = sorted(
+            backups_dir.glob("shop_*.db"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for old in backups[max_keep:]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+
+def list_backups() -> list[dict]:
+    """استعراض قائمة النسخ الاحتياطية المتوفرة."""
+    src_path = pathlib.Path(db_path())
+    backups_dir = src_path.parent / "backups"
+    if not backups_dir.exists():
+        return []
+    items = []
+    for p in sorted(backups_dir.glob("shop_*.db"), key=lambda x: x.stat().st_mtime, reverse=True):
+        stat = p.stat()
+        items.append({
+            "name": p.name,
+            "path": str(p),
+            "size_bytes": stat.st_size,
+            "size_kb": round(stat.st_size / 1024, 1),
+            "created_at": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        })
+    return items
+
+
+def daily_startup_backup() -> pathlib.Path | None:
+    """نسخ احتياطي تلقائي عند أول تشغيل يومياً."""
+    src_path = pathlib.Path(db_path())
+    if not src_path.exists():
+        return None
+    backups_dir = src_path.parent / "backups"
+    today_prefix = f"shop_{datetime.datetime.now().strftime('%Y%m%d')}"
+    if backups_dir.exists():
+        for b in backups_dir.glob(f"{today_prefix}_*.db"):
+            return b  # تم أخذ نسخة اليوم بالفعل
+    return backup_database("startup")
 
 
 def _ensure_schema_columns(conn: sqlite3.Connection):

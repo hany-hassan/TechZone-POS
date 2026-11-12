@@ -543,10 +543,31 @@ call(a, "templates_save", {"reset_pos": True})
 # (ط) فحص سلامة صياغة JavaScript في web/app.js و web/index.html لمنع أي خطأ SyntaxError يوقف شاشة الدخول
 app_js_text = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 idx_html_text = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+pos_html_text = (ROOT / "web" / "pos.html").read_text(encoding="utf-8")
 check("web/app.js has no duplicate const st declaration & index.html has pin-input + login-error-box",
       app_js_text.count("const globalTaxEnabled = st.tax_enabled") == 2
       and "id=\"pin-input\"" in idx_html_text
-      and "id=\"login-error-box\"" in idx_html_text)
+      and "id=\"login-error-box\"" in idx_html_text
+      and "id=\"modal-force-pin\"" in idx_html_text)
+
+# (ي) فحص مستمع الباركود السريع في شاشة الكاشير pos.html
+check("pos.html has global barcode listener & fast scanner handler",
+      "handleBarcodeScan" in pos_html_text
+      and "lastBarcodeInputTime" in pos_html_text)
+
+# (ك) فحص النسخ الاحتياطي التلقائي لقاعدة البيانات واستعراض النسخ
+call(a, "login", {"username": "admin", "pin": "1234"})
+b_res = call(a, "db_backup", {"reason": "test_selfcheck"})
+check("db_backup creates valid backup file and records size",
+      b_res["ok"] and b_res["data"]["name"].startswith("shop_") and b_res["data"]["size_bytes"] > 0)
+b_list = call(a, "backups_list", {})
+check("backups_list returns available backup snapshots",
+      b_list["ok"] and len(b_list["data"]) >= 1 and any("test_selfcheck" in x["name"] for x in b_list["data"]))
+
+# (ل) فحص كشف الرمز السري الافتراضي للأدمن وإلزام تغييره
+adm_log = call(a, "login", {"username": "admin", "pin": "1234"})
+check("admin login with default PIN flags force_change_pin=True",
+      adm_log["ok"] and adm_log["data"].get("force_change_pin") is True)
 
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()

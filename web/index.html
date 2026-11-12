@@ -224,6 +224,39 @@
     <span class="material-icons-round block dark:hidden">dark_mode</span>
     <span class="material-icons-round hidden dark:block">light_mode</span>
   </button>
+
+  <!-- Force Change Default PIN Modal -->
+  <div id="modal-force-pin" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-md w-full border border-slate-200 dark:border-slate-700 overflow-hidden text-right">
+      <div class="p-6 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+          <span class="material-icons-round text-2xl">shield</span>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg text-slate-900 dark:text-white">تأمين الحساب الإداري</h3>
+          <p class="text-xs text-amber-700 dark:text-amber-400 font-medium">أنت تستخدم الرمز الافتراضي (1234). يرجى تغييره الآن.</p>
+        </div>
+      </div>
+      <div class="p-6 space-y-4">
+        <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+          لحماية بيانات متجرك وأرباحك وحسابات العملاء، يجب تعيين رمز سري جديد وخاص بك قبل متابعة الدخول.
+        </p>
+        <div id="force-pin-err" class="hidden p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold"></div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">الرمز السري الجديد (4 إلى 8 أرقام):</label>
+          <input id="inp-new-force-pin" type="password" maxlength="8" class="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-center text-lg font-numeric tracking-widest focus:ring-2 focus:ring-primary focus:outline-none" placeholder="••••"/>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">تأكيد الرمز السري الجديد:</label>
+          <input id="inp-confirm-force-pin" type="password" maxlength="8" class="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-center text-lg font-numeric tracking-widest focus:ring-2 focus:ring-primary focus:outline-none" placeholder="••••"/>
+        </div>
+        <button id="btn-save-force-pin" type="button" class="w-full py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20">
+          <span class="material-icons-round text-lg">check_circle</span>
+          <span>حفظ الرمز السري والدخول للنظام</span>
+        </button>
+      </div>
+    </div>
+  </div>
   <script src="app.js"></script>
   <script>
     let PIN = '', USERNAME = '', USERS = [], LOGIN_MODE = 'pin_only', LOGIN_CFG = {};
@@ -382,8 +415,58 @@
       }
     }
 
-    function redirectAfterLogin(u) {
+    let PENDING_LOGGED_USER = null;
+
+    function showForceChangePinModal(u) {
+      PENDING_LOGGED_USER = u;
+      const modal = document.getElementById('modal-force-pin');
+      const errBox = document.getElementById('force-pin-err');
+      if (errBox) errBox.classList.add('hidden');
+      document.getElementById('inp-new-force-pin').value = '';
+      document.getElementById('inp-confirm-force-pin').value = '';
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        setTimeout(() => document.getElementById('inp-new-force-pin').focus(), 100);
+      }
+    }
+
+    document.getElementById('btn-save-force-pin').addEventListener('click', async () => {
+      const p1 = document.getElementById('inp-new-force-pin').value.trim();
+      const p2 = document.getElementById('inp-confirm-force-pin').value.trim();
+      const errBox = document.getElementById('force-pin-err');
+      const showErr = (msg) => {
+        if (errBox) { errBox.textContent = msg; errBox.classList.remove('hidden'); }
+      };
+      if (!p1 || p1.length < 4) {
+        showErr('الرمز السري يجب أن يتكون من 4 أرقام على الأقل');
+        return;
+      }
+      if (p1 === '1234' || p1 === '0000' || p1 === '1111') {
+        showErr('يرجى اختيار رمز سري قوي غير بسيط أو افتراضي');
+        return;
+      }
+      if (p1 !== p2) {
+        showErr('الرمزان غير متطابقين، يرجى إعادة التأكيد بدقة');
+        return;
+      }
+      try {
+        const updated = await api('profile_save', { pin: p1, current_pin: '1234' });
+        toast('تم تحديث الرمز السري وتأمين الحساب بنجاح', 'success');
+        document.getElementById('modal-force-pin').classList.add('hidden');
+        document.getElementById('modal-force-pin').classList.remove('flex');
+        redirectAfterLogin(updated || PENDING_LOGGED_USER, true);
+      } catch (e) {
+        showErr(e.message || 'فشل تحديث الرمز السري');
+      }
+    });
+
+    function redirectAfterLogin(u, bypass = false) {
       if (!u) return;
+      if (!bypass && u.force_change_pin) {
+        showForceChangePinModal(u);
+        return;
+      }
       if (u.theme_mode === 'dark' || u.theme_mode === 'light') {
         localStorage.setItem('tz-theme', u.theme_mode);
         applyThemeEverywhere(u.theme_mode === 'dark');

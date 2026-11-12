@@ -33,6 +33,11 @@ def store_title():
 
 
 def main():
+    try:
+        db.daily_startup_backup()
+    except Exception:
+        pass
+
     icon_candidates = [
         ROOT / "icon.ico",
         _BASE / "icon.ico" if getattr(sys, "frozen", False) else None,

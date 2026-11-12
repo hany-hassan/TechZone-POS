@@ -54,7 +54,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (104 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (108 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -131,12 +131,29 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain 104/104 passing tests in `python app/selfcheck.py`.
+6. **Selfcheck Verification:** Every change must maintain 108/108 passing tests in `python app/selfcheck.py`.
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-12 — Automated DB Backups, Mandatory Default PIN Change, & POS Global Barcode Scanner
+- **Goal & Request**: Execute the highest-priority security and operational improvements from the implementation roadmap: automated snapshot backups, default credential protection, and cashier high-speed hardware scanning.
+- **Executed Work**:
+  1. **Automated SQLite Online Backups (`app/db.py`, `app/api.py`, `app/main.py`)**:
+     - Added `backup_database(reason)` using SQLite's native online backup API (`src_conn.backup(dest_conn)`) to ensure zero-lock ACID consistent copies in `data/backups/shop_YYYYMMDD_HHMMSS_{reason}.db`.
+     - Automated backup trigger on every cashier shift closure (`shift_close()`) and daily on app startup (`daily_startup_backup()`).
+     - Added `_rotate_backups` retention policy maintaining the latest 30 snapshots and pruning older files.
+     - Added admin API endpoints `db_backup` and `backups_list` with `settings_manage` authorization.
+  2. **Mandatory First-Run Default PIN Protection (`app/api.py`, `web/index.html`)**:
+     - Added server-side detection in `login()`: if admin account uses the seeded default PIN (`1234`), sets `force_change_pin: True`.
+     - Added clean modal dialog (`#modal-force-pin`) in `web/index.html` blocking access until the admin sets a strong, non-default PIN (4-8 digits) with confirmation.
+  3. **Global Barcode Scanner Listener in POS (`web/pos.html`)**:
+     - Added global high-speed keydown listener (< 85ms burst detection) that captures USB/Bluetooth barcode scanner inputs without requiring focus in the search box.
+     - Automatically resolves exact SKU/barcode match and adds product directly to cart via `addToCart()`.
+  4. **Regression Verification (`app/selfcheck.py`)**:
+     - Expanded test suite from 104 to 108 checks covering backup creation, backup listing, forced PIN change flags, and barcode listener DOM verification. All 108 checks pass.
 
 ### 2026-11-12 — Complete Project-Kickstart Documentation Suite & Architecture Alignment
 - **Goal & Request**: Conduct comprehensive project analysis using `/project-kickstart` skill, formalize missing engineering documentation, establish quality baselines from the code audit, archive historical logs, and provide actionable development recommendations.

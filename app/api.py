@@ -910,6 +910,12 @@ class Api:
             out = dict(_STATE["user"])
             out["effective_start_page"] = out.get("start_page") or st.get("default_start_page") or "pos"
             out["effective_start_mode"] = out.get("start_mode") or st.get("default_start_mode") or "window"
+            # فحص أمني: هل الحساب الإداري ما زال يستخدم الرمز السري الافتراضي 1234؟
+            if row["role"] == "admin" and hmac.compare_digest(db.hash_pin("1234", row["pin_salt"]), row["pin_hash"]):
+                out["force_change_pin"] = True
+                out["default_pin_warning"] = "تنبيه أمني: الحساب الإداري يستخدم الرمز الافتراضي (1234). يرجى تعيين رمز جديد لحماية متجرك."
+            else:
+                out["force_change_pin"] = False
             return out
 
     def session(self):
@@ -921,6 +927,7 @@ class Api:
                     _STATE["user"] = self._row_to_user_dict(row)
                     _STATE["user"]["effective_start_page"] = _STATE["user"].get("start_page") or st.get("default_start_page") or "pos"
                     _STATE["user"]["effective_start_mode"] = _STATE["user"].get("start_mode") or st.get("default_start_mode") or "window"
+                    _STATE["user"]["force_change_pin"] = bool(row["role"] == "admin" and hmac.compare_digest(db.hash_pin("1234", row["pin_salt"]), row["pin_hash"]))
         return {"user": _STATE["user"]}
 
     def logout(self):
@@ -993,6 +1000,26 @@ class Api:
                 )
             self._settings_cache = None
             return self._settings(conn)
+
+    def db_backup(self, reason="manual"):
+        """إنشاء نسخة احتياطية فورية لقاعدة البيانات (للمدير)."""
+        self._perm("settings_manage")
+        path = db.backup_database(str(reason or "manual"))
+        if not path:
+            raise ApiError("فشل إنشاء النسخة الاحتياطية لقاعدة البيانات")
+        stat = path.stat()
+        return {
+            "name": path.name,
+            "path": str(path),
+            "size_bytes": stat.st_size,
+            "size_kb": round(stat.st_size / 1024, 1),
+            "created_at": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+    def backups_list(self):
+        """استعراض النسخ الاحتياطية المتوفرة (للمدير)."""
+        self._perm("settings_manage")
+        return db.list_backups()
 
     def _load_payment_methods(self, conn):
         cache = getattr(self, "_pm_cache", None)
@@ -1746,7 +1773,13 @@ class Api:
                 "UPDATE shifts SET closed_at=?, counted_cash=?, expected_cash=?, diff=? WHERE id=?",
                 (db.now(), counted, expected, counted - expected, s["id"]),
             )
-            return dict(conn.execute("SELECT * FROM shifts WHERE id=?", (s["id"],)).fetchone())
+            res = dict(conn.execute("SELECT * FROM shifts WHERE id=?", (s["id"],)).fetchone())
+        # أخذ نسخة احتياطية تلقائية لقاعدة البيانات عند إغلاق كل وردية
+        try:
+            db.backup_database("shift_close")
+        except Exception:
+            pass
+        return res
 
     def shifts(self):
         self._perm("reports_view")
