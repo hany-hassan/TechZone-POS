@@ -29,7 +29,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 19 tables schema, minor-unit money rules, and 16-permission matrix | English |
 | [`docs/STACK.md`](docs/STACK.md) | Pinned runtime stack, versions, and upgrade policies | English |
 | [`docs/CODING-STANDARDS.md`](docs/CODING-STANDARDS.md) | Coding style, SQL guidelines, money formatting, and RTL conventions | English |
-| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (104 checks), test gates, and manual QA | English |
+| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (114 checks), test gates, and manual QA | English |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, PBKDF2 hashing, lockout rules, and Egyptian PDPL | English |
 | [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | TechZone OS color tokens, Arabic typography, layout, and invoice specs | English |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Standalone .exe compilation (PyInstaller), backup routines, and setup | English |
@@ -54,7 +54,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (108 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (114 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -67,13 +67,13 @@ Detailed technical specifications are modularized in the `docs/` directory:
 project001/
 ├── app/
 │   ├── main.py          # Entry point: pywebview window setup & branding
-│   ├── api.py           # Backend Api class (69+ methods dispatched via bridge)
-│   ├── db.py            # SQLite schema (19 tables), connection wrapper, seed, migration
-│   └── selfcheck.py     # Comprehensive automated regression suite (104 checks)
+│   ├── api.py           # Backend Api class (77 methods dispatched via bridge)
+│   ├── db.py            # SQLite schema (19 tables), connection wrapper, seed, migration & backups
+│   └── selfcheck.py     # Comprehensive automated regression suite (114 checks)
 ├── web/
-│   ├── index.html       # Smart login screen (auto role/user detection by PIN)
+│   ├── index.html       # Smart login screen (auto role/user detection by PIN & force-PIN security)
 │   ├── desktop.html     # TechZone OS hybrid desktop shell (dock, start menu, iframes)
-│   ├── pos.html         # High-speed retail POS cashier
+│   ├── pos.html         # High-speed retail POS cashier (with global hardware barcode listener)
 │   ├── sales_quotes.html# Official B2B A4 sales invoices & price quotations
 │   ├── inventory.html   # Product catalog, stock tracking, and serial numbers
 │   ├── customers.html   # Customer database, debt totals, and ledger shortcuts
@@ -84,14 +84,15 @@ project001/
 │   ├── reports.html     # Daily/monthly financials, shift logs, and net profits
 │   ├── staff.html       # Employee administration & 16-permission matrix
 │   ├── profile.html     # Employee personal profile, PIN, and desktop theme setup
-│   ├── settings.html    # Store info, tax toggle, login mode, and invoice studio
+│   ├── settings.html    # Store info, tax toggle, login mode, invoice studio & database backups/restore hub
 │   ├── receipt.html     # Thermal 80mm & A4 preview and WhatsApp sharing
 │   ├── app.js           # Bridge api() caller, permissions, and invoice builder
 │   ├── app.css          # Pre-compiled Tailwind CSS bundle
 │   └── fonts/           # 23 local WOFF2 font files
 ├── data/
 │   ├── shop.db          # Operating SQLite database (git-ignored)
-│   └── receipts/        # Generated PDF invoices and vouchers
+│   ├── backups/         # Automated (startup + shift close) & manual ACID SQLite snapshots
+│   └── receipts/        # Generated PDF invoices and vouchers (git-ignored)
 ├── docs/                # Comprehensive engineering and requirements documentation
 ├── tools/               # Data import and screenshot automation utilities
 ├── icon.ico             # Official application executable and window icon

@@ -32,13 +32,21 @@ Because the system is **100% offline** and binds to no public network interfaces
 - **Login Lockout Policy:** Configurable login lock mechanism (`login_max_attempts` default: 5, `login_lockout_minutes` default: 10 minutes).
 - **Persistent Lockout State:** Failed attempt state and countdown timers are tracked in `settings` (`login_fail_state`) to prevent bypassing lockouts via application restarts.
 - **Active Countdown & Input Freeze:** The UI disables inputs and shows remaining lockout seconds.
+- **Mandatory Default PIN Protection:** On first run or whenever the administrative account uses default credentials (`1234`), a blocking modal (`#modal-force-pin`) prevents access to the system until a secure 4-8 digit PIN is configured and confirmed. Weak patterns (`1234`, `0000`, `1111`) are rejected.
 
-### 2.3 Server-Side Authorization (`_perm`)
+### 2.3 Automated Backup & Disaster Recovery
+- **ACID Zero-Lock Snapshots:** Automated SQLite Online Backup API (`src_conn.backup(dest_conn)`) guarantees consistent point-in-time snapshots without locking the database or interrupting POS sales.
+- **Trigger Points:** Automatic backup on application startup (`daily_startup_backup`) and upon every cashier shift closure (`shift_close`).
+- **Retention & Rotation:** Automatically maintains the latest 30 snapshots in `data/backups/`, pruning older files.
+- **Safe In-App Database Restore (`db_restore`):** Managers can restore any snapshot directly from `settings.html`. Before overwriting, a safety snapshot (`shop_YYYYMMDD_HHMMSS_before_restore.db`) is generated, ensuring zero data loss even if an incorrect backup is selected. Integrity is verified with `PRAGMA quick_check` prior to restore.
+
+### 2.4 Server-Side Authorization (`_perm`)
 - **Backend-Enforced Authorization:** Authorization is verified strictly in Python (`app/api.py`) via `_perm(key)` and `_perm_any(*keys)`. Frontend checks in JavaScript (`hasPerm()`) are strictly for UI visibility and do not govern execution.
 - **16 Granular Permissions:** Cashiers operate under least-privilege principles covering sales, price modification, discounts, returns, customer data, inventory, repairs, used devices, reports, and settings.
+- **Database Backup & Restore Isolation:** Endpoints `db_backup`, `backups_list`, and `db_restore` require `settings_manage` authorization; cashiers are strictly blocked.
 - **Immutable Historical Invoices:** Sales invoices (`sales`) cannot be deleted once committed. Adjustments must follow structured return procedures (`sale_returns`) with full audit traceability.
 
-### 2.4 Injection and Input Defense
+### 2.5 Injection and Input Defense
 - **SQL Parameterization:** 100% of database queries in `app/api.py` and `app/db.py` use parameterized queries (`?`). String interpolation is strictly prohibited.
 - **Safe Output Escaping:** Dynamic text inserted into invoice and receipt previews is sanitized via `esc()` to prevent injection.
 - **Upload Validation & Magic Bytes:** Image uploads (logos, avatars, product pictures) are validated for Base64 integrity, size limits, and cryptographic magic bytes (rejecting HTML, SVG, and binary executables disguised as images).

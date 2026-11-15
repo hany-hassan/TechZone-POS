@@ -15,8 +15,8 @@ flowchart TD
     subgraph Native["Native Layer"]
         MAIN["app/main.py\n(Entry Point)"]
         PV["pywebview 6.2.1\nWindow (maximized)"]
-        API["app/api.py\nApi class — 69 functions"]
-        DB_MOD["app/db.py\nSchema · Seed · Migrations"]
+        API["app/api.py\nApi class — 77 methods"]
+        DB_MOD["app/db.py\nSchema · Seed · Backups"]
         PDF["PDF 1.4 Generator\n(pure Python in api.py)"]
         WA["WhatsApp Integration\nctypes Win32 CF_HDROP"]
     end
@@ -26,7 +26,7 @@ flowchart TD
     end
 
     subgraph Frontend["Frontend (web/)"]
-        INDEX["index.html\n(Login Screen)"]
+        INDEX["index.html\n(Login & PIN Security)"]
         DESKTOP["desktop.html\n(TechZone OS Shell)"]
         PAGES["13 App Pages\n(loaded in iframes)"]
         APPJS["app.js\nBridge · Permissions · Invoices"]
@@ -36,6 +36,7 @@ flowchart TD
 
     subgraph Data["Data Layer"]
         SQLITE[("data/shop.db\n19 Tables")]
+        BACKUPS["data/backups/\nACID Snapshots & Restores"]
         RECEIPTS["data/receipts/\nExported PDFs"]
     end
 
@@ -91,7 +92,7 @@ When packaged with PyInstaller (`sys.frozen` is `True`), `web/` assets are read 
 | `repair.html` | Repair/service ticket management |
 | `buy_used.html` | Used device purchasing |
 | `receipt.html` | Invoice/receipt preview, print, and WhatsApp sharing |
-| `settings.html` | System settings (3 tabs: store, login, invoice designer) |
+| `settings.html` | System settings (4 tabs: store, login, invoice designer, and database backups/restore hub) |
 | `staff.html` | Employee management and per-user permission assignment |
 | `profile.html` | Personal profile and per-user desktop preferences |
 | `reports.html` | Financial reports and analytics |
@@ -129,7 +130,7 @@ All fonts and Material Symbols icons are served from `web/fonts/` as `.woff2` fi
 
 ### `app/api.py` — The Api Class (≈ 3 500 lines)
 
-A single Python class, `Api`, exposes every backend operation to the frontend. The class contains **69 public methods** covering:
+A single Python class, `Api`, exposes every backend operation to the frontend. The class contains **77 public methods** covering:
 
 - Session management (`login`, `logout`, `session`, `login_config`)
 - User/staff CRUD (`users_list`, `user_save`, `user_delete`, `profile_save`)
@@ -142,6 +143,7 @@ A single Python class, `Api`, exposes every backend operation to the frontend. T
 - Repairs (`repair_save`, `repair_status_update`)
 - Used device purchases (`used_purchase_save`)
 - Reports and analytics (`report_daily`, `report_monthly`, `report_top_products`)
+- Database snapshots & recovery (`db_backup`, `backups_list`, `db_restore`)
 - Settings (`settings_get`, `settings_save`, `pos_categories_config_save`)
 - PDF generation and WhatsApp sharing (`generate_receipt_pdf`, `send_pdf_to_whatsapp`)
 - Invoice template management

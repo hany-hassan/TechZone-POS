@@ -1,6 +1,6 @@
 # TechZone Testing Strategy
 
-## Current: `selfcheck.py` (104 Assertions)
+## Current: `selfcheck.py` (114 Assertions)
 
 TechZone ships with a single integration-level test suite in `app/selfcheck.py`. It validates the database schema, API functions, business-logic constraints, and data integrity in one pass.
 
@@ -13,7 +13,7 @@ python app/selfcheck.py
 A successful run prints each check with a ✓ and ends with:
 
 ```
-✅ 104/104 checks passed
+ALL 114 CHECKS PASSED
 ```
 
 Any failure raises `AssertionError` with a descriptive message identifying the broken invariant.
@@ -25,20 +25,23 @@ Any failure raises `AssertionError` with a descriptive message identifying the b
 | **DB schema** | All 19 tables exist; required columns present; foreign keys valid |
 | **Settings** | Default seed values populated (store name, currency, VAT rate, login mode, invoice templates) |
 | **Users & auth** | Admin account exists; PIN hashing and salt are non-empty; role values are `admin` or `cashier` |
-| **Permissions** | All 16 permission keys recognized; admin has full access; cashier permissions respect the stored JSON |
+| **Default PIN Security** | Admin login with default `1234` flags `force_change_pin=True`; `profile_save` with `pin` alias updates PIN and clears flag |
+| **Permissions** | All 16 permission keys recognized; admin has full access; cashier permissions respect the stored JSON; cashier blocked from backup and restore |
+| **Database Backups & Restore** | `db_backup` creates valid zero-lock snapshot; `backups_list` enumerates snapshots; `db_restore` performs safe rollback with pre-restore safety snapshot |
+| **Hardware & POS** | `pos.html` global barcode keydown listener (<85ms burst) registered in DOM |
 | **Products & inventory** | SKU uniqueness; price/cost stored as integer minor units; `tracked` flag controls serial enforcement |
 | **Sales flow** | Sale creation decrements stock; payment totals match sale total; returns restore quantities |
 | **Quotations** | Quote creation, item linkage, status transitions |
 | **Customers & payments** | Customer creation; balance tracking; `customer_payments` linked correctly |
 | **Repairs** | Ticket creation; part linkage; status values valid |
 | **Used device purchases** | Purchase record creation and field validation |
-| **Shifts** | Shift open/close; cash counting fields; association with user |
+| **Shifts** | Shift open/close; cash counting fields; association with user; automatic shift-close backup trigger |
 | **PDF generation** | Invoice and receipt PDF functions return valid bytes (PDF 1.4 header check) |
-| **API dispatcher** | `call(name, payload)` routes to correct functions; unknown names raise errors |
+| **API dispatcher** | `call(name, payload)` routes to correct functions; contract check ensures all frontend `api()` calls exist on `Api` |
 
 ### Running selfcheck After Every Change
 
-Every code or schema change **must** pass all 104 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
+Every code or schema change **must** pass all 114 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
 
 ---
 
