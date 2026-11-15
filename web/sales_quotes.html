@@ -38,6 +38,25 @@
     }
   }
   #standalone-print-area { display: none; }
+  #doc-modal {
+    overflow-y: auto;
+  }
+  #doc-modal-card {
+    width: 100%;
+    max-width: 900px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: auto;
+  }
+  #modal-doc-body {
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .tab-btn.active {
     background: var(--tz-accent, #137fec);
     color: #fff;
@@ -427,9 +446,15 @@
 
 <!-- نافذة معاينة مستند محفوظ وطباعته -->
 <div id="doc-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
-  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl max-h-[94vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
-    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
-      <h3 class="font-bold text-sm md:text-base" id="modal-doc-title">معاينة الفاتورة</h3>
+  <div id="doc-modal-card" class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
+    <div class="p-3.5 md:p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0 bg-white dark:bg-slate-900">
+      <div class="flex items-center gap-2">
+        <button type="button" id="modal-btn-close" class="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-rose-600 hover:text-white text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors">
+          <span class="material-icons-round text-sm">arrow_forward</span>
+          <span>رجوع وإغلاق المعاينة</span>
+        </button>
+        <h3 class="font-bold text-sm md:text-base" id="modal-doc-title">معاينة الفاتورة</h3>
+      </div>
       <div class="flex flex-wrap items-center gap-2">
         <button type="button" id="modal-btn-convert" class="hidden px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1">
           <span class="material-icons-round text-sm">transform</span>
@@ -451,12 +476,16 @@
           <span class="material-icons-round text-sm">send</span>
           <span>إرسال PDF واتساب</span>
         </button>
-        <button type="button" onclick="document.getElementById('doc-modal').classList.replace('flex','hidden')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700">
-          <span class="material-icons-round">close</span>
-        </button>
       </div>
     </div>
-    <div id="modal-doc-body" class="p-4 overflow-y-auto bg-slate-100 dark:bg-slate-950 flex-1"></div>
+    <div id="modal-doc-body" class="p-4 md:p-6 overflow-y-auto overflow-x-auto bg-slate-100 dark:bg-slate-950 flex-1 min-h-0"></div>
+    <div class="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-2 shrink-0">
+      <span class="text-[11px] text-slate-400">يمكنك التمرير لمشاهدة الفاتورة كاملة، أو الضغط على «رجوع» أو زر Escape للخروج من المعاينة</span>
+      <button type="button" id="modal-btn-back-bottom" class="px-4 py-2 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
+        <span class="material-icons-round text-sm">close</span>
+        <span>رجوع إلى شاشة المبيعات وعروض الأسعار</span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -1216,7 +1245,7 @@ $('btn-confirm-inv-return').addEventListener('click', async () => {
   if (res) {
     toast(`تم تسجيل مرتجع الفاتورة بنجاح بقيمة ${fmt(res.total)} وإعادة الأصناف للمخزون`);
     $('inv-return-modal').classList.replace('flex', 'hidden');
-    $('doc-modal').classList.replace('flex', 'hidden');
+    closeDocModal();
     loadDocsList();
   }
 });
@@ -1386,6 +1415,14 @@ document.querySelectorAll('.filter-pill').forEach((btn) => {
 
 $('list-search').addEventListener('input', loadDocsList);
 
+function closeDocModal() {
+  const m = $('doc-modal');
+  if (!m) return;
+  m.classList.remove('flex');
+  m.classList.add('hidden');
+  MODAL_DOC = null;
+}
+
 function openDocModal(doc) {
   MODAL_DOC = doc;
   const isInv = doc.doc_type === 'invoice' || doc.status === 'converted';
@@ -1395,8 +1432,37 @@ function openDocModal(doc) {
   $('modal-btn-cancel-quote').classList.toggle('hidden', isInv || isCancelled);
   $('modal-btn-return-inv').classList.toggle('hidden', !isInv || !doc.converted_sale_id || doc.sale_status === 'returned');
   $('modal-doc-body').innerHTML = buildA4InvoiceHtml(doc, A4_TPL);
-  $('doc-modal').classList.replace('hidden', 'flex');
+  const modal = $('doc-modal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  requestAnimationFrame(() => {
+    const bodyEl = $('modal-doc-body');
+    if (bodyEl) bodyEl.scrollTop = 0;
+  });
 }
+
+$('modal-btn-close').addEventListener('click', closeDocModal);
+$('modal-btn-back-bottom').addEventListener('click', closeDocModal);
+$('doc-modal').addEventListener('click', (e) => {
+  if (e.target === $('doc-modal')) closeDocModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const invRet = $('inv-return-modal');
+    if (invRet && !invRet.classList.contains('hidden')) {
+      invRet.classList.replace('flex', 'hidden');
+      return;
+    }
+    const pmModal = $('pay-methods-modal');
+    if (pmModal && !pmModal.classList.contains('hidden')) {
+      pmModal.classList.replace('flex', 'hidden');
+      return;
+    }
+    if ($('doc-modal') && !$('doc-modal').classList.contains('hidden')) {
+      closeDocModal();
+    }
+  }
+});
 
 $('modal-btn-print').addEventListener('click', () => {
   if (!MODAL_DOC) return;
@@ -1466,6 +1532,11 @@ $('modal-btn-return-inv').addEventListener('click', () => {
 
   resetNewDocForm();
   await loadDocsList();
+  const viewId = new URLSearchParams(location.search).get('view');
+  if (viewId) {
+    const full = await guard(() => api('quotation', { id: +viewId }));
+    if (full) openDocModal(full);
+  }
 })();
 </script>
 </body>

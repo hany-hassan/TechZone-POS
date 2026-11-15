@@ -980,7 +980,82 @@ ${esc(info.notes)}</div>` : ""}
   `;
 }
 
+/* ===== توليد صورة الفاتورة A4 من نفس HTML المعاينة (WYSIWYG) عبر SVG foreignObject مع تضمين الخطوط المحلية ===== */
+let _A4_FONT_CSS_CACHE = null;
+async function _a4EmbeddedFontCss() {
+  if (_A4_FONT_CSS_CACHE) return _A4_FONT_CSS_CACHE;
+  const toB64 = (buf) => {
+    const bytes = new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  };
+  const cache = {};
+  const load = async (name) => {
+    if (!cache[name]) {
+      const r = await fetch(`fonts/${name}.woff2`);
+      if (!r.ok) throw new Error("font " + name);
+      cache[name] = toB64(await r.arrayBuffer());
+    }
+    return cache[name];
+  };
+  let css = "";
+  for (const [w, fileW] of [[400, 400], [500, 500], [600, 600], [700, 700], [800, 700]]) {
+    for (const sub of ["arabic", "latin"]) {
+      const b64 = await load(`ibm-plex-sans-arabic-${fileW}-${sub}`);
+      css += `@font-face{font-family:'IBM Plex Sans Arabic';font-style:normal;font-weight:${w};src:url(data:font/woff2;base64,${b64}) format('woff2');}`;
+    }
+  }
+  _A4_FONT_CSS_CACHE = css;
+  return css;
+}
+
+function _a4LoadSvgImage(url) {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = () => reject(new Error("svg render failed"));
+    im.src = url;
+  });
+}
+
 async function renderA4DocumentToJpeg(rawDoc, a4Cfg = {}) {
+  try {
+    const fontCss = await _a4EmbeddedFontCss();
+    const host = document.createElement("div");
+    host.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;visibility:hidden;pointer-events:none";
+    host.innerHTML = buildA4InvoiceHtml(rawDoc, a4Cfg);
+    document.body.appendChild(host);
+    const sheet = host.querySelector(".tz-a4-sheet");
+    sheet.style.boxShadow = "none";
+    sheet.style.margin = "0";
+    sheet.style.width = "794px";
+    sheet.style.maxWidth = "794px";
+    const W = 794;
+    const H = Math.max(1122, Math.ceil(sheet.getBoundingClientRect().height));
+    const xml = new XMLSerializer().serializeToString(sheet);
+    host.remove();
+    const reset = "*,::before,::after{box-sizing:border-box;border-width:0;border-style:solid}table{border-collapse:collapse}";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><foreignObject x="0" y="0" width="${W}" height="${H}"><div xmlns="http://www.w3.org/1999/xhtml" style="width:${W}px;height:${H}px;background:#fff"><style>${fontCss}${reset}</style>${xml}</div></foreignObject></svg>`;
+    const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    await _a4LoadSvgImage(url);           // تسخين: تحميل الخطوط
+    await new Promise((r) => setTimeout(r, 120));
+    const im = await _a4LoadSvgImage(url);
+    const SCALE = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = W * SCALE;
+    canvas.height = H * SCALE;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(im, 0, 0, canvas.width, canvas.height);
+    return { dataUrl: canvas.toDataURL("image/jpeg", 0.93), width: canvas.width, height: canvas.height };
+  } catch (e) {
+    console.warn("A4 WYSIWYG render failed, using legacy canvas renderer", e);
+    return renderA4DocumentToJpegLegacy(rawDoc, a4Cfg);
+  }
+}
+async function renderA4DocumentToJpegLegacy(rawDoc, a4Cfg = {}) {
   const cfg = Object.assign({
     theme: "taqnia_wave",
     primary_color: "#0e6ba8",

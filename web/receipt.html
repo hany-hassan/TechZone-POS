@@ -35,6 +35,10 @@
 <p class="text-gray-500 dark:text-gray-400 text-sm" id="inv-line">اختر فاتورة لعرضها وطباعتها</p>
 </div>
 <div class="flex items-center gap-2 no-print">
+<button type="button" onclick="if(history.length>1){history.back()}else{location.href='sales_quotes.html'}" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold flex items-center gap-1.5 transition-colors">
+  <span class="material-icons-round text-base">arrow_forward</span>
+  <span>رجوع</span>
+</button>
 <a href="settings.html?tab=invoices" class="px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
   <span class="material-icons-round text-base">settings</span>
   <span>تعديل إعدادات المتجر وتصميم الفاتورة</span>

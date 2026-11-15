@@ -29,7 +29,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 19 tables schema, minor-unit money rules, and 16-permission matrix | English |
 | [`docs/STACK.md`](docs/STACK.md) | Pinned runtime stack, versions, and upgrade policies | English |
 | [`docs/CODING-STANDARDS.md`](docs/CODING-STANDARDS.md) | Coding style, SQL guidelines, money formatting, and RTL conventions | English |
-| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (114 checks), test gates, and manual QA | English |
+| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (115 checks), test gates, and manual QA | English |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, PBKDF2 hashing, lockout rules, and Egyptian PDPL | English |
 | [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | TechZone OS color tokens, Arabic typography, layout, and invoice specs | English |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Standalone .exe compilation (PyInstaller), backup routines, and setup | English |
@@ -54,7 +54,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (114 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (115 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -69,7 +69,7 @@ project001/
 │   ├── main.py          # Entry point: pywebview window setup & branding
 │   ├── api.py           # Backend Api class (77 methods dispatched via bridge)
 │   ├── db.py            # SQLite schema (19 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (114 checks)
+│   └── selfcheck.py     # Comprehensive automated regression suite (115 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN & force-PIN security)
 │   ├── desktop.html     # TechZone OS hybrid desktop shell (dock, start menu, iframes)
@@ -132,12 +132,24 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain 114/114 passing tests in `python app/selfcheck.py`.
+6. **Selfcheck Verification:** Every change must maintain 115/115 passing tests in `python app/selfcheck.py`.
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-15 — Fix: WhatsApp A4 PDF Layout Now Matches Preview (WYSIWYG)
+- **Issue**: `renderA4DocumentToJpeg()` in `web/app.js` re-drew the invoice by hand on a Canvas (different fonts, spacing, columns), so the WhatsApp PDF differed from the HTML preview.
+- **Fix**: It now renders the exact `buildA4InvoiceHtml()` output via SVG `foreignObject` (794px x2) with local IBM Plex woff2 fonts embedded as base64 (offline). Old canvas renderer kept as `renderA4DocumentToJpegLegacy` fallback. Backend unchanged; 115/115 checks pass.
+
+### 2026-11-15 — Fix: Saved Document A4 Preview Cropping & Exit/Back Trap in Sales & Quotations
+- **Issue**: After saving or previewing a saved invoice/quotation in `web/sales_quotes.html` (`#doc-modal`), uncompiled Tailwind classes (`max-w-4xl`, `max-h-[94vh]`) in `web/app.css` left `#doc-modal` height unconstrained (`~1220px`), pushing the header/close button and top/bottom of the A4 template off-screen so users saw a cropped document and could only exit by refreshing.
+- **Executed Fix**:
+  1. **Scrollable Modal Card & Explicit CSS Safeguards (`web/sales_quotes.html`)**: Added explicit `#doc-modal`, `#doc-modal-card` (`max-width: 900px; max-height: 92vh`), and `#modal-doc-body` (`flex: 1 1 0%; min-height: 0; overflow-y: auto`) rules plus `scrollTop = 0` reset on `openDocModal()`, ensuring the full A4 template renders cleanly from top to bottom matching `#live-a4-preview`.
+  2. **Accessible Exit & Back Navigation (`web/sales_quotes.html`, `web/history.html`, `web/receipt.html`)**: Added `closeDocModal()`, prominent top (`#modal-btn-close`) and sticky bottom (`#modal-btn-back-bottom`) back/close buttons, backdrop click and `Escape` key dismissal, `?view=<id>` deep-linking from `web/history.html`, and a back button in `web/receipt.html`.
+  3. **Tailwind CSS Recompilation (`web/app.css`)**: Rebuilt `web/app.css` via `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` so `max-w-4xl`, `max-h-[92vh]`, `max-h-52`, `max-h-64`, `min-w-[180px]`, and `min-h-0` are compiled.
+  4. **Regression Verification (`app/selfcheck.py`)**: Added check verifying `#doc-modal-card`, `#modal-btn-close`, `#modal-btn-back-bottom`, `closeDocModal`, `scrollTop = 0`, and compiled CSS utilities. All 115 checks pass.
 
 ### 2026-11-12 — Safe In-App Database Restore (`db_restore`) with Pre-Restore Safety Snapshots
 - **Goal & Request**: Implement and explain database restore functionality: provide safe in-app snapshot restoration for the manager with automatic pre-restore safety backups, integrity checks, and explain emergency manual file recovery.

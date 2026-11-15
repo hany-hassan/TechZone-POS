@@ -697,7 +697,7 @@ document.getElementById('d-quote-del-btn').addEventListener('click', async () =>
 document.getElementById('d-print').addEventListener('click', () => {
   if (ACTIVE_SALE) {
     if (ACTIVE_SALE.doc_type === 'b2b' && ACTIVE_SALE.quote_id) {
-      location.href = `sales_quotes.html`;
+      location.href = `sales_quotes.html?view=${ACTIVE_SALE.quote_id}`;
     } else {
       location.href = `receipt.html?id=${ACTIVE_SALE.id}`;
     }

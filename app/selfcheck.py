@@ -589,6 +589,18 @@ check("profile_save with pin alias updates PIN and clears force_change_pin",
 # استعادة الرمز إلى 1234 للحفاظ على حالة الاختبار
 call(a, "profile_save", {"new_pin": "1234", "current_pin": "5566"})
 
+# (ن) فحص نافذة معاينة المستند المحفوظ في sales_quotes.html ووجود فئات CSS المجمعة في app.css
+sq_html_text = (ROOT / "web" / "sales_quotes.html").read_text(encoding="utf-8")
+app_css_text = (ROOT / "web" / "app.css").read_text(encoding="utf-8")
+check("sales_quotes.html doc-modal has constrained scrollable A4 preview & exit/back controls",
+      'id="doc-modal-card"' in sq_html_text
+      and 'id="modal-btn-close"' in sq_html_text
+      and 'id="modal-btn-back-bottom"' in sq_html_text
+      and "closeDocModal" in sq_html_text
+      and "scrollTop = 0" in sq_html_text
+      and "max-w-4xl" in app_css_text
+      and "min-h-0" in app_css_text)
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:
