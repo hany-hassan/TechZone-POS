@@ -141,26 +141,33 @@
   const canDelete = hasPerm('customers_delete');
   if (!canEdit) $('btn-add').classList.add('hidden');
 
-  let currentOffset = 0, lastTotal = 0;
+  let currentOffset = 0, lastTotal = 0, summaryLoaded = false, searchTimer = null;
   const LIMIT = 50;
 
-  async function loadCustomers() {
+  function renderSummary(sm) {
+    if (!sm) return;
+    $('sum-cust-count').textContent = n(sm.total_customers || 0);
+    $('sum-debt-count').textContent = n(sm.debt_customers_count || 0);
+    $('sum-total-credit').textContent = money(sm.total_credit || 0);
+    $('sum-total-paid').textContent = money(sm.total_paid || 0);
+    $('sum-total-debt').textContent = money(sm.total_debt || 0);
+  }
+
+  async function loadCustomers(forceSummary = false) {
     const q = $('q').value.trim();
     const debtOnly = $('debt-only').checked;
-    const baseRes = await guard(() => api('customers_list', { limit: LIMIT, offset: currentOffset, debt_only: debtOnly }));
-    if (baseRes && baseRes.summary) {
-      const sm = baseRes.summary;
-      $('sum-cust-count').textContent = n(sm.total_customers || 0);
-      $('sum-debt-count').textContent = n(sm.debt_customers_count || 0);
-      $('sum-total-credit').textContent = money(sm.total_credit || 0);
-      $('sum-total-paid').textContent = money(sm.total_paid || 0);
-      $('sum-total-debt').textContent = money(sm.total_debt || 0);
+    let res;
+    if (q) {
+      if (!summaryLoaded || forceSummary) {
+        const baseRes = await guard(() => api('customers_list', { limit: 1, offset: 0, debt_only: debtOnly }));
+        if (baseRes && baseRes.summary) { renderSummary(baseRes.summary); summaryLoaded = true; }
+      }
+      res = await guard(() => api('customers_search', { q }));
+    } else {
+      res = await guard(() => api('customers_list', { limit: LIMIT, offset: currentOffset, debt_only: debtOnly }));
+      if (res && res.summary) { renderSummary(res.summary); summaryLoaded = true; }
     }
 
-    const res = q
-      ? await guard(() => api('customers_search', { q }))
-      : baseRes;
-    
     if (!res) return;
     let rows = q ? res : res.rows;
     if (q && debtOnly) rows = rows.filter((c) => (c.debt || 0) > 0);
@@ -213,7 +220,7 @@
     if (!confirm('هل أنت متأكد من حذف هذا العميل؟')) return;
     if (await guard(() => api('customers_delete', { id }))) {
       toast('تم حذف العميل');
-      loadCustomers();
+      loadCustomers(true);
     }
   };
 
@@ -239,11 +246,15 @@
     if (res) {
       toast('تم حفظ بيانات العميل');
       $('cust-modal').classList.replace('flex', 'hidden');
-      loadCustomers();
+      loadCustomers(true);
     }
   });
 
-  $('q').addEventListener('input', () => { currentOffset = 0; loadCustomers(); });
+  $('q').addEventListener('input', () => {
+    currentOffset = 0;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadCustomers(), 200);
+  });
   $('debt-only').addEventListener('change', () => { currentOffset = 0; loadCustomers(); });
 
   $('prev').addEventListener('click', () => {

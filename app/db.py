@@ -159,8 +159,29 @@ CREATE TABLE IF NOT EXISTS customers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   phone TEXT,
+  total_purchases INTEGER NOT NULL DEFAULT 0,
+  credit_total INTEGER NOT NULL DEFAULT 0,
+  paid_total INTEGER NOT NULL DEFAULT 0,
+  debt INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   UNIQUE(name, phone)
+);
+CREATE TABLE IF NOT EXISTS customer_ledger (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('credit_sale','voucher','return_credit','adjustment','installment_charge','installment_payment')),
+  ref TEXT,
+  sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+  voucher_id INTEGER REFERENCES customer_payments(id) ON DELETE SET NULL,
+  debit INTEGER NOT NULL DEFAULT 0,
+  credit INTEGER NOT NULL DEFAULT 0,
+  balance_after INTEGER NOT NULL DEFAULT 0,
+  method TEXT,
+  ref_no TEXT,
+  notes TEXT,
+  user_id INTEGER REFERENCES users(id),
+  user_name TEXT
 );
 CREATE TABLE IF NOT EXISTS sales (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -445,17 +466,40 @@ class _ClosingConnection:
         return getattr(self._conn, name)
 
 
+_PERFORMANCE_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)",
+    "CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)",
+    "CREATE INDEX IF NOT EXISTS idx_customers_debt ON customers(debt)",
+    "CREATE INDEX IF NOT EXISTS idx_ledger_cust_id ON customer_ledger(customer_id, id)",
+    "CREATE INDEX IF NOT EXISTS idx_ledger_sale ON customer_ledger(sale_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ledger_voucher ON customer_ledger(voucher_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sales_phone ON sales(customer_phone)",
+    "CREATE INDEX IF NOT EXISTS idx_sales_null_cust_name ON sales(customer_name) WHERE customer_id IS NULL",
+    "CREATE INDEX IF NOT EXISTS idx_sales_doc_type_status ON sales(doc_type, status)",
+    "CREATE INDEX IF NOT EXISTS idx_payments_method ON payments(method, sale_id)",
+    "CREATE INDEX IF NOT EXISTS idx_products_active_name ON products(active, name)",
+    "CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)",
+)
+
+
 def connect() -> "_ClosingConnection":
     _migrate_once()
     path = db_path()
     conn = sqlite3.connect(path, timeout=15, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA cache_size=-16000")
     if path not in _INITIALIZED_DBS:
+        conn.execute("PRAGMA journal_mode=WAL")
         init_db(conn)
         _ensure_schema_columns(conn)
         _migrate_customers(conn)
+        for idx_sql in _PERFORMANCE_INDEXES:
+            conn.execute(idx_sql)
+        _migrate_customer_ledger(conn)
         conn.commit()
         _INITIALIZED_DBS.add(path)
     return _ClosingConnection(conn)
@@ -656,6 +700,30 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
         if "image" not in prod_cols:
             conn.execute("ALTER TABLE products ADD COLUMN image TEXT")
 
+        cust_cols = {c["name"] for c in conn.execute("PRAGMA table_info(customers)").fetchall()}
+        for col in ("total_purchases", "credit_total", "paid_total", "debt"):
+            if col not in cust_cols:
+                conn.execute(f"ALTER TABLE customers ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS customer_ledger (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+              created_at TEXT NOT NULL,
+              kind TEXT NOT NULL CHECK (kind IN ('credit_sale','voucher','return_credit','adjustment','installment_charge','installment_payment')),
+              ref TEXT,
+              sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+              voucher_id INTEGER REFERENCES customer_payments(id) ON DELETE SET NULL,
+              debit INTEGER NOT NULL DEFAULT 0,
+              credit INTEGER NOT NULL DEFAULT 0,
+              balance_after INTEGER NOT NULL DEFAULT 0,
+              method TEXT,
+              ref_no TEXT,
+              notes TEXT,
+              user_id INTEGER REFERENCES users(id),
+              user_name TEXT
+            )"""
+        )
+
         te = conn.execute("SELECT value FROM settings WHERE key='tax_enabled'").fetchone()
         if not te:
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('tax_enabled', '1')")
@@ -721,6 +789,129 @@ def _migrate_customers(conn):
         conn.commit()
     except Exception as e:
         print(f"Migration error: {e}")
+
+
+def _migrate_customer_ledger(conn: sqlite3.Connection) -> None:
+    """ترحيل لمرة واحدة: تعبئة دفتر الأستاذ (customer_ledger) وأرصدة العملاء المخزّنة للبيانات التاريخية."""
+    try:
+        flag = conn.execute("SELECT value FROM settings WHERE key='customer_ledger_migrated'").fetchone()
+        if flag and flag["value"] == "1":
+            return
+
+        # 1) تحديث الأرصدة المجمّعة في جدول customers عبر SQL سريع
+        conn.execute(
+            """
+            WITH sale_credit AS (
+                SELECT sale_id, COALESCE(SUM(amount), 0) AS credit_amt
+                FROM payments WHERE method = 'credit' GROUP BY sale_id
+            ),
+            sale_ret AS (
+                SELECT sale_id, COALESCE(SUM(total), 0) AS ret_amt
+                FROM sale_returns GROUP BY sale_id
+            ),
+            cust_sales_links AS (
+                SELECT customer_id AS cid, id AS sid FROM sales WHERE customer_id IS NOT NULL
+                UNION
+                SELECT c.id AS cid, s.id AS sid FROM customers c JOIN sales s ON s.customer_id IS NULL AND s.customer_name = c.name
+                UNION
+                SELECT c.id AS cid, s.id AS sid FROM customers c JOIN sales s ON c.phone IS NOT NULL AND c.phone != '' AND s.customer_phone = c.phone
+            ),
+            cust_sales_agg AS (
+                SELECT l.cid,
+                       COALESCE(SUM(MAX(0, s.total - COALESCE(sr.ret_amt, 0))), 0) AS total_purchases,
+                       COALESCE(SUM(MAX(0, COALESCE(sc.credit_amt, 0) - COALESCE(sr.ret_amt, 0))), 0) AS credit_total
+                FROM cust_sales_links l
+                JOIN sales s ON s.id = l.sid
+                LEFT JOIN sale_credit sc ON sc.sale_id = s.id
+                LEFT JOIN sale_ret sr ON sr.sale_id = s.id
+                GROUP BY l.cid
+            ),
+            cust_paid AS (
+                SELECT customer_id AS cid, COALESCE(SUM(amount), 0) AS paid_total
+                FROM customer_payments GROUP BY customer_id
+            )
+            UPDATE customers
+            SET total_purchases = COALESCE((SELECT total_purchases FROM cust_sales_agg WHERE cid = customers.id), 0),
+                credit_total = COALESCE((SELECT credit_total FROM cust_sales_agg WHERE cid = customers.id), 0),
+                paid_total = COALESCE((SELECT paid_total FROM cust_paid WHERE cid = customers.id), 0),
+                debt = MAX(0, COALESCE((SELECT credit_total FROM cust_sales_agg WHERE cid = customers.id), 0)
+                            - COALESCE((SELECT paid_total FROM cust_paid WHERE cid = customers.id), 0))
+            """
+        )
+
+        # 2) تعبئة حركات دفتر الأستاذ التاريخية فقط إذا كان الجدول فارغاً
+        has_rows = conn.execute("SELECT 1 FROM customer_ledger LIMIT 1").fetchone()
+        if not has_rows:
+            credit_rows = conn.execute(
+                """
+                WITH sale_credit AS (
+                    SELECT sale_id, COALESCE(SUM(amount), 0) AS credit_amt
+                    FROM payments WHERE method = 'credit' GROUP BY sale_id
+                ),
+                sale_ret AS (
+                    SELECT sale_id, COALESCE(SUM(total), 0) AS ret_amt
+                    FROM sale_returns GROUP BY sale_id
+                ),
+                cust_sales_links AS (
+                    SELECT customer_id AS cid, id AS sid FROM sales WHERE customer_id IS NOT NULL
+                    UNION
+                    SELECT c.id AS cid, s.id AS sid FROM customers c JOIN sales s ON s.customer_id IS NULL AND s.customer_name = c.name
+                    UNION
+                    SELECT c.id AS cid, s.id AS sid FROM customers c JOIN sales s ON c.phone IS NOT NULL AND c.phone != '' AND s.customer_phone = c.phone
+                )
+                SELECT l.cid AS customer_id, s.id AS sale_id, s.invoice_no AS ref, s.created_at,
+                       MAX(0, COALESCE(sc.credit_amt, 0) - COALESCE(sr.ret_amt, 0)) AS net_credit,
+                       s.user_id
+                FROM cust_sales_links l
+                JOIN sales s ON s.id = l.sid
+                LEFT JOIN sale_credit sc ON sc.sale_id = s.id
+                LEFT JOIN sale_ret sr ON sr.sale_id = s.id
+                WHERE MAX(0, COALESCE(sc.credit_amt, 0) - COALESCE(sr.ret_amt, 0)) > 0
+                """
+            ).fetchall()
+
+            voucher_rows = conn.execute(
+                """SELECT cp.id AS voucher_id, cp.customer_id, cp.sale_id, cp.ref, cp.created_at,
+                          cp.amount, cp.method, cp.ref_no, cp.notes, cp.user_id, u.name AS user_name
+                   FROM customer_payments cp
+                   LEFT JOIN users u ON u.id = cp.user_id"""
+            ).fetchall()
+
+            by_cust = {}
+            for r in credit_rows:
+                by_cust.setdefault(r["customer_id"], []).append((
+                    r["created_at"], 0, r["sale_id"],
+                    (r["customer_id"], r["created_at"], "credit_sale", r["ref"], r["sale_id"], None,
+                     r["net_credit"], 0, "credit", None, f"فاتورة آجلة ({r['ref']})", r["user_id"], None)
+                ))
+            for v in voucher_rows:
+                note = v["notes"] or ("سداد نقدي" if v["method"] == "cash" else "سداد محفظة")
+                by_cust.setdefault(v["customer_id"], []).append((
+                    v["created_at"], 1, v["voucher_id"],
+                    (v["customer_id"], v["created_at"], "voucher", v["ref"], v["sale_id"], v["voucher_id"],
+                     0, v["amount"], v["method"], v["ref_no"], note, v["user_id"], v["user_name"])
+                ))
+
+            to_insert = []
+            for cid, evs in by_cust.items():
+                evs.sort(key=lambda x: (x[0], x[1], x[2]))
+                running = 0
+                for _, _, _, tpl in evs:
+                    running = max(0, running + tpl[6] - tpl[7])
+                    to_insert.append(tpl[:8] + (running,) + tpl[8:])
+
+            if to_insert:
+                conn.executemany(
+                    """INSERT INTO customer_ledger
+                       (customer_id, created_at, kind, ref, sale_id, voucher_id, debit, credit, balance_after, method, ref_no, notes, user_id, user_name)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    to_insert,
+                )
+
+        conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('customer_ledger_migrated', '1')")
+        conn.commit()
+    except Exception as e:
+        print(f"Ledger migration error: {e}")
 
 
 def init_db(conn: sqlite3.Connection) -> None:

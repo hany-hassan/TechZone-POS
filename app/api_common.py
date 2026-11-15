@@ -1,0 +1,664 @@
+"""Backend Api: كل دوال النظام + dispatcher واحد للواجهة (window.pywebview.api.call)."""
+import datetime
+import hmac
+import json
+import os
+import pathlib
+import sqlite3
+import sys
+import time
+import traceback
+from decimal import Decimal, ROUND_HALF_UP
+
+import db
+
+# حالة الجلسة (مستخدم واحد، نافذة واحدة) — الدور والصلاحيات تُقرأ من هنا وليس من JS
+_STATE = {"user": None}
+
+# حماية من هجمات التخمين (brute-force) على تسجيل الدخول
+_LOGIN_ATTEMPTS = {}  # key -> {"count": int, "locked_until": float}
+
+
+class ApiError(Exception):
+    pass
+
+
+def _money(v, default=0):
+    """عرض/مبالغ من الواجهة (وحدات كاملة 123.45) → INTEGER وحدات صغرى."""
+    if v in (None, ""):
+        return int(default)
+    if isinstance(v, bool):
+        raise ApiError("قيمة مبلغ غير صالحة")
+    try:
+        d = Decimal(str(v).strip()).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except Exception:
+        raise ApiError("قيمة مبلغ غير صالحة")
+    return int(d * 100)
+
+
+def _int(v, default=0):
+    if v in (None, ""):
+        return int(default)
+    try:
+        return int(v)
+    except Exception:
+        raise ApiError("قيمة عددية غير صالحة")
+
+
+def _validate_image_data_url(s, max_bytes=None):
+    """التحقق من صحة data URL صورة (magic bytes) وحجمها."""
+    if not isinstance(s, str) or not s.startswith("data:image/"):
+        raise ApiError("صيغة الصورة غير صالحة (يجب أن تكون data:image/)")
+    # رفض SVG/HTML
+    if "svg" in s[:40].lower() or "html" in s[:40].lower():
+        raise ApiError("صيغة الصورة غير مدعومة")
+    if "," not in s:
+        raise ApiError("صيغة الصورة غير صالحة")
+    import base64
+    try:
+        b64_part = s.split(",", 1)[1]
+        raw = base64.b64decode(b64_part, validate=True)
+    except Exception:
+        raise ApiError("بيانات الصورة غير صالحة (base64)")
+    if max_bytes is not None and len(raw) > max_bytes:
+        raise ApiError("حجم الصورة يتجاوز الحد المسموح")
+    # magic bytes
+    if raw.startswith(b"\xff\xd8\xff"):
+        return True
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    if raw.startswith(b"GIF87a") or raw.startswith(b"GIF89a"):
+        return True
+    if raw.startswith(b"RIFF") and raw[8:12] == b"WEBP":
+        return True
+    raise ApiError("صيغة الصورة غير مدعومة (JPEG/PNG/GIF/WebP فقط)")
+
+
+
+# 1x1 white JPEG fallback for headless/CLI tests when canvas image is not passed
+_FALLBACK_JPEG = (
+    b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00"
+    b"\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t"
+    b"\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a"
+    b"\x1f\x1e\x1d\x1a\x1c\x1c $.\' \",#\x1c\x1c(7),01444\x1f\'9=82<.342"
+    b"\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4"
+    b"\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00"
+    b"\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b"
+    b"\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xfb\xd2\x8a(\x03\xff\xd9"
+)
+
+
+
+def _win32_copy_pdf_to_clipboard(filepath: str) -> bool:
+    """نسخ ملف الـ PDF إلى حافظة ويندوز (CF_HDROP = 15) مباشرة عبر Win32 API المتوافق مع 64-bit."""
+    if os.name != "nt":
+        return False
+    import ctypes
+    from ctypes import wintypes
+    import struct
+    import time
+
+    CF_HDROP = 15
+    GMEM_MOVEABLE = 0x0002
+    GMEM_ZEROINIT = 0x0040
+
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+
+    kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+    kernel32.GlobalAlloc.restype = wintypes.HANDLE
+    kernel32.GlobalLock.argtypes = [wintypes.HANDLE]
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalUnlock.argtypes = [wintypes.HANDLE]
+    kernel32.GlobalUnlock.restype = wintypes.BOOL
+    user32.OpenClipboard.argtypes = [wintypes.HWND]
+    user32.OpenClipboard.restype = wintypes.BOOL
+    user32.EmptyClipboard.argtypes = []
+    user32.EmptyClipboard.restype = wintypes.BOOL
+    user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+    user32.SetClipboardData.restype = wintypes.HANDLE
+    user32.CloseClipboard.argtypes = []
+    user32.CloseClipboard.restype = wintypes.BOOL
+
+    header = struct.pack("<IiiII", 20, 0, 0, 0, 1)
+    path_bytes = filepath.encode("utf-16le") + b"\x00\x00\x00\x00"
+    payload = header + path_bytes
+
+    for _ in range(6):
+        if user32.OpenClipboard(None):
+            try:
+                user32.EmptyClipboard()
+                h_global = kernel32.GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, len(payload))
+                if h_global:
+                    ptr = kernel32.GlobalLock(h_global)
+                    if ptr:
+                        ctypes.memmove(ptr, payload, len(payload))
+                        kernel32.GlobalUnlock(h_global)
+                        if user32.SetClipboardData(CF_HDROP, h_global):
+                            return True
+            finally:
+                user32.CloseClipboard()
+        time.sleep(0.05)
+    return False
+
+
+def _find_whatsapp_hwnd():
+    """البحث السريع عن مقبض نافذة واتساب المرئية (WhatsApp / واتساب) على ويندوز."""
+    if os.name != "nt":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    found = []
+
+    def cb(hwnd, _):
+        if user32.IsWindowVisible(hwnd):
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length > 0:
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buf, length + 1)
+                title = buf.value.replace("\u200e", "").replace("\u200f", "").strip()
+                if "WhatsApp" in title or "واتساب" in title:
+                    found.append(hwnd)
+        return True
+
+    user32.EnumWindows(WNDENUMPROC(cb), 0)
+    return found[0] if found else None
+
+
+def _win32_auto_paste_into_whatsapp(pdf_abs: str, was_already_open: bool = False):
+    """التقاط نافذة واتساب فور تفعيلها بلحظات ولصق ملف الـ PDF مباشرة مع النص دون تأخير."""
+    if os.name != "nt":
+        return
+    import ctypes
+    from ctypes import wintypes
+    import time
+
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
+    # رصد سريع جداً (كل 40 مللي ثانية) للحظة ظهور/تفعيل نافذة واتساب
+    wa_hwnd = None
+    t0 = time.monotonic()
+    for _ in range(75):  # حد أقصى 3 ثوانٍ في حال كان البرنامج مغلقاً تماماً
+        wa_hwnd = _find_whatsapp_hwnd()
+        if wa_hwnd:
+            fg = user32.GetForegroundWindow()
+            if fg == wa_hwnd or (time.monotonic() - t0) >= 0.20:
+                break
+        time.sleep(0.04)
+
+    if not wa_hwnd:
+        wa_hwnd = _find_whatsapp_hwnd()
+
+    if wa_hwnd:
+        try:
+            fg_hwnd = user32.GetForegroundWindow()
+            if fg_hwnd != wa_hwnd:
+                fg_tid = user32.GetWindowThreadProcessId(fg_hwnd, None) if fg_hwnd else 0
+                cur_tid = kernel32.GetCurrentThreadId()
+                if fg_tid and fg_tid != cur_tid:
+                    user32.AttachThreadInput(cur_tid, fg_tid, True)
+                user32.ShowWindow(wa_hwnd, 9)  # SW_RESTORE
+                user32.SetForegroundWindow(wa_hwnd)
+                if fg_tid and fg_tid != cur_tid:
+                    user32.AttachThreadInput(cur_tid, fg_tid, False)
+        except Exception:
+            pass
+
+    # انتظار قصير جداً فقط ريثما يضع واتساب النص في صندوق المحادثة (0.55 ثانية إذا كان مفتوحاً)
+    time.sleep(0.55 if was_already_open else 1.25)
+
+    # تأكيد وجود ملف الـ PDF في الحافظة قبل اللصق مباشرة
+    _win32_copy_pdf_to_clipboard(pdf_abs)
+
+    if wa_hwnd:
+        # نقرة سريعة داخل خانة كتابة الرسالة أسفل منتصف نافذة واتساب لتفعيل التركيز
+        rect = wintypes.RECT()
+        if user32.GetWindowRect(wa_hwnd, ctypes.byref(rect)):
+            win_w = rect.right - rect.left
+            win_h = rect.bottom - rect.top
+            if win_w > 300 and win_h > 300:
+                click_x = rect.left + int(win_w * 0.50)
+                click_y = rect.bottom - 52
+                user32.SetCursorPos(click_x, click_y)
+                time.sleep(0.02)
+                user32.mouse_event(0x0002, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTDOWN
+                time.sleep(0.01)
+                user32.mouse_event(0x0004, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTUP
+                time.sleep(0.05)
+
+    # إرسال Ctrl+V فوري عبر keybd_event مع Scan Codes الحقيقية
+    VK_CONTROL = 0x11
+    VK_V = 0x56
+    KEYEVENTF_KEYUP = 0x0002
+    scan_ctrl = user32.MapVirtualKeyW(VK_CONTROL, 0)
+    scan_v = user32.MapVirtualKeyW(VK_V, 0)
+
+    user32.keybd_event(VK_CONTROL, scan_ctrl, 0, 0)
+    time.sleep(0.02)
+    user32.keybd_event(VK_V, scan_v, 0, 0)
+    time.sleep(0.02)
+    user32.keybd_event(VK_V, scan_v, KEYEVENTF_KEYUP, 0)
+    time.sleep(0.02)
+    user32.keybd_event(VK_CONTROL, scan_ctrl, KEYEVENTF_KEYUP, 0)
+
+
+def _jpeg_to_pdf_bytes(jpeg_bytes: bytes, img_w: int, img_h: int) -> bytes:
+    """تحويل صورة الفاتورة (JPEG) إلى ملف PDF 1.4 قياسي (يدعم A4 للفواتير الرسمية وعروض الأسعار أو 80mm لإيصال الكاشير)."""
+    img_w = max(1, int(img_w or 720))
+    img_h = max(1, int(img_h or 1000))
+    if img_w >= 900:
+        pdf_w = 595.0  # Standard A4 width in points
+        pdf_h = round(pdf_w * (img_h / img_w), 2)
+    else:
+        pdf_w = 226.77  # 80mm thermal width in points
+        pdf_h = round(pdf_w * (img_h / img_w), 2)
+
+    objs = []
+    objs.append(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+    objs.append(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+    objs.append(
+        (
+            f"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {pdf_w} {pdf_h}] "
+            f"/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n"
+        ).encode("ascii")
+    )
+    img_head = (
+        f"4 0 obj\n<< /Type /XObject /Subtype /Image /Width {img_w} /Height {img_h} "
+        f"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length {len(jpeg_bytes)} >>\nstream\n"
+    ).encode("ascii")
+    objs.append(img_head + jpeg_bytes + b"\nendstream\nendobj\n")
+
+    content_stream = f"q\n{pdf_w} 0 0 {pdf_h} 0 0 cm\n/Im0 Do\nQ\n".encode("ascii")
+    objs.append(
+        f"5 0 obj\n<< /Length {len(content_stream)} >>\nstream\n".encode("ascii")
+        + content_stream
+        + b"\nendstream\nendobj\n"
+    )
+
+    out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = []
+    for o in objs:
+        offsets.append(len(out))
+        out.extend(o)
+
+    xref_pos = len(out)
+    out.extend(f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode("ascii"))
+    for off in offsets:
+        out.extend(f"{off:010d} 00000 n \n".encode("ascii"))
+    out.extend(
+        f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n".encode("ascii")
+    )
+    return bytes(out)
+
+
+def _fmt_money(minor: int) -> str:
+    """دالة تنسيق واحدة: وحدات صغرى → نص عرض."""
+    return f"{(minor / 100):,.2f}"
+
+
+def _format_doc_seq(prefix: str, seq_num: int) -> str:
+    """توليد رقم الفاتورة أو عرض السعر تلقائياً حسب البادئة المحددة من المدير (مثل N00 -> N001 أو الفات/2026/ -> الفات/2026/00001)."""
+    p = (prefix or "").strip()
+    if not p:
+        p = "INV-"
+    if p[-1].isdigit():
+        return f"{p}{seq_num}"
+    return f"{p}{seq_num:05d}"
+
+
+REPAIR_FLOW = {
+    "received": ["in_review", "rejected"],
+    "in_review": ["pending_approval", "repaired", "rejected"],
+    "pending_approval": ["in_review", "repaired", "rejected"],
+    "repaired": ["delivered"],
+    "rejected": [],
+    "delivered": [],
+}
+
+
+def _upsert_customer(conn, name, phone=None):
+    """إدراج أو استرجاع معرف العميل بأمان مع دعم الهاتف الفارغ."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    phone = (phone or "").strip() or None
+    row = conn.execute(
+        "SELECT id, phone FROM customers WHERE name=? AND (phone=? OR (? IS NULL AND phone IS NULL) OR phone IS NULL) ORDER BY id LIMIT 1",
+        (name, phone, phone),
+    ).fetchone()
+    if row:
+        if phone and not row["phone"]:
+            try:
+                conn.execute("UPDATE customers SET phone=? WHERE id=?", (phone, row["id"]))
+            except sqlite3.IntegrityError:
+                pass
+        return row["id"]
+    cur = conn.execute(
+        "INSERT INTO customers(name, phone, created_at) VALUES(?,?,?)",
+        (name, phone, db.now()),
+    )
+    return cur.lastrowid
+
+
+def _customer_debt_summary(conn, cust_row) -> dict:
+    """حساب إجمالي المشتريات، إجمالي الآجل الصافي، إجمالي المسدد بسندات قبض، والمديونية المتبقية للعميل."""
+    cid = cust_row["id"]
+    cname = cust_row["name"]
+    cphone = cust_row["phone"]
+    sales = conn.execute(
+        """SELECT s.id, s.invoice_no, s.created_at, s.total, s.status
+            FROM sales s
+            WHERE s.customer_id=?
+               OR (s.customer_id IS NULL AND s.customer_name=?)
+               OR (? IS NOT NULL AND ? != '' AND s.customer_phone=?)
+            ORDER BY s.id DESC""",
+        (cid, cname, cphone, cphone, cphone),
+    ).fetchall()
+
+    # جمع المدفوعات دفعة واحدة (تجنب N+1)
+    sale_ids = [s["id"] for s in sales]
+    pay_map = {}
+    ret_map = {}
+    if sale_ids:
+        placeholders = ",".join("?" for _ in sale_ids)
+        for p in conn.execute(
+            f"SELECT sale_id, method, COALESCE(SUM(amount),0) AS amt FROM payments WHERE sale_id IN ({placeholders}) GROUP BY sale_id, method",
+            sale_ids,
+        ).fetchall():
+            pay_map.setdefault(p["sale_id"], {})[p["method"]] = p["amt"]
+        for r in conn.execute(
+            f"SELECT sale_id, COALESCE(SUM(total),0) AS amt FROM sale_returns WHERE sale_id IN ({placeholders}) GROUP BY sale_id",
+            sale_ids,
+        ).fetchall():
+            ret_map[r["sale_id"]] = r["amt"]
+
+    total_purchases = 0
+    credit_total = 0
+    sales_out = []
+    for s in sales:
+        d = dict(s)
+        pm = pay_map.get(d["id"], {})
+        credit_amt = pm.get("credit", 0)
+        cash_amt = pm.get("cash", 0)
+        wallet_amt = pm.get("wallet", 0)
+        ret_amt = ret_map.get(d["id"], 0)
+        net_total = max(0, d["total"] - ret_amt)
+        net_credit = max(0, credit_amt - ret_amt)
+        d["credit_amt"] = credit_amt
+        d["cash_amt"] = cash_amt
+        d["wallet_amt"] = wallet_amt
+        d["ret_amt"] = ret_amt
+        d["net_total"] = net_total
+        d["net_credit"] = net_credit
+        total_purchases += net_total
+        credit_total += net_credit
+        sales_out.append(d)
+
+    vouchers = conn.execute(
+        """SELECT cp.*, u.name AS user_name, s.invoice_no
+           FROM customer_payments cp
+           LEFT JOIN users u ON u.id=cp.user_id
+           LEFT JOIN sales s ON s.id=cp.sale_id
+           WHERE cp.customer_id=?
+           ORDER BY cp.id DESC""",
+        (cid,),
+    ).fetchall()
+    vouchers_out = [dict(v) for v in vouchers]
+    paid_total = sum(v["amount"] for v in vouchers_out)
+    debt = max(0, credit_total - paid_total)
+    return {
+        "total_purchases": total_purchases,
+        "credit_total": credit_total,
+        "paid_total": paid_total,
+        "debt": debt,
+        "sales": sales_out,
+        "vouchers": vouchers_out,
+    }
+
+
+def _customers_enriched_cte(cust_filter_sql: str = "") -> str:
+    """بناء CTE موحد لحساب المشتريات والآجل والسداد والمديونية بكفاءة SQL دون حلقات N+1."""
+    return f"""
+    WITH target_customers AS (
+        SELECT id, name, phone, created_at FROM customers {cust_filter_sql}
+    ),
+    cust_sales_links AS (
+        SELECT s.customer_id AS cid, s.id AS sid
+        FROM sales s
+        JOIN target_customers tc ON tc.id = s.customer_id
+        UNION
+        SELECT tc.id AS cid, s.id AS sid
+        FROM target_customers tc
+        JOIN sales s ON s.customer_id IS NULL AND s.customer_name = tc.name
+        UNION
+        SELECT tc.id AS cid, s.id AS sid
+        FROM target_customers tc
+        JOIN sales s ON tc.phone IS NOT NULL AND tc.phone != '' AND s.customer_phone = tc.phone
+    ),
+    sale_credit AS (
+        SELECT p.sale_id, COALESCE(SUM(p.amount), 0) AS credit_amt
+        FROM payments p
+        WHERE p.method = 'credit' AND p.sale_id IN (SELECT sid FROM cust_sales_links)
+        GROUP BY p.sale_id
+    ),
+    sale_ret AS (
+        SELECT r.sale_id, COALESCE(SUM(r.total), 0) AS ret_amt
+        FROM sale_returns r
+        WHERE r.sale_id IN (SELECT sid FROM cust_sales_links)
+        GROUP BY r.sale_id
+    ),
+    cust_sales_agg AS (
+        SELECT l.cid,
+               COALESCE(SUM(MAX(0, s.total - COALESCE(sr.ret_amt, 0))), 0) AS total_purchases,
+               COALESCE(SUM(MAX(0, COALESCE(sc.credit_amt, 0) - COALESCE(sr.ret_amt, 0))), 0) AS credit_total
+        FROM cust_sales_links l
+        JOIN sales s ON s.id = l.sid
+        LEFT JOIN sale_credit sc ON sc.sale_id = s.id
+        LEFT JOIN sale_ret sr ON sr.sale_id = s.id
+        GROUP BY l.cid
+    ),
+    cust_paid AS (
+        SELECT cp.customer_id AS cid, COALESCE(SUM(cp.amount), 0) AS paid_total
+        FROM customer_payments cp
+        JOIN target_customers tc ON tc.id = cp.customer_id
+        GROUP BY cp.customer_id
+    ),
+    enriched AS (
+        SELECT tc.id, tc.name, tc.phone, tc.created_at,
+               COALESCE(csa.total_purchases, 0) AS total_purchases,
+               COALESCE(csa.credit_total, 0) AS credit_total,
+               COALESCE(cp.paid_total, 0) AS paid_total,
+               MAX(0, COALESCE(csa.credit_total, 0) - COALESCE(cp.paid_total, 0)) AS debt
+        FROM target_customers tc
+        LEFT JOIN cust_sales_agg csa ON csa.cid = tc.id
+        LEFT JOIN cust_paid cp ON cp.cid = tc.id
+    )
+    """
+
+
+def _resolve_sale_customer_id(conn, sale_row):
+    """إرجاع معرف العميل المرتبط بفاتورة بيع (أو مطابقته بالهاتف/الاسم للفواتير القديمة)."""
+    if not sale_row:
+        return None
+    if sale_row["customer_id"]:
+        return sale_row["customer_id"]
+    phone = (sale_row["customer_phone"] or "").strip() if "customer_phone" in sale_row.keys() else ""
+    name = (sale_row["customer_name"] or "").strip() if "customer_name" in sale_row.keys() else ""
+    if phone:
+        r = conn.execute("SELECT id FROM customers WHERE phone=? LIMIT 1", (phone,)).fetchone()
+        if r:
+            return r["id"]
+    if name:
+        r = conn.execute("SELECT id FROM customers WHERE name=? LIMIT 1", (name,)).fetchone()
+        if r:
+            return r["id"]
+    return None
+
+
+def _sale_net_credit(conn, sale_id: int) -> int:
+    """حساب صافي المبلغ الآجل المتبقي على فاتورة واحدة بعد المرتجعات."""
+    cr = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE sale_id=? AND method='credit'",
+        (sale_id,),
+    ).fetchone()[0]
+    ret = conn.execute(
+        "SELECT COALESCE(SUM(total), 0) FROM sale_returns WHERE sale_id=?",
+        (sale_id,),
+    ).fetchone()[0]
+    return max(0, cr - ret)
+
+
+def _refresh_customer_cache(conn, customer_id: int) -> dict | None:
+    """تحديث الأعمدة المخزّنة لملخص حساب العميل داخل نفس المعاملة."""
+    if not customer_id:
+        return None
+    cust = conn.execute("SELECT * FROM customers WHERE id=?", (customer_id,)).fetchone()
+    if not cust:
+        return None
+    summary = _customer_debt_summary(conn, cust)
+    conn.execute(
+        "UPDATE customers SET total_purchases=?, credit_total=?, paid_total=?, debt=? WHERE id=?",
+        (summary["total_purchases"], summary["credit_total"], summary["paid_total"], summary["debt"], customer_id),
+    )
+    return summary
+
+
+def _append_ledger_entry(
+    conn,
+    customer_id: int,
+    kind: str,
+    ref: str,
+    debit: int = 0,
+    credit: int = 0,
+    sale_id: int | None = None,
+    voucher_id: int | None = None,
+    method: str | None = None,
+    ref_no: str | None = None,
+    notes: str | None = None,
+    user_id: int | None = None,
+    user_name: str | None = None,
+    created_at: str | None = None,
+) -> int:
+    """إضافة قيد جديد في دفتر الأستاذ (customer_ledger) وتحديث رصيد العميل المخزّن."""
+    if not customer_id:
+        return 0
+    last = conn.execute(
+        "SELECT balance_after FROM customer_ledger WHERE customer_id=? ORDER BY id DESC LIMIT 1",
+        (customer_id,),
+    ).fetchone()
+    if last is not None:
+        prev_bal = last["balance_after"]
+    else:
+        row = conn.execute("SELECT debt FROM customers WHERE id=?", (customer_id,)).fetchone()
+        prev_bal = row["debt"] if row else 0
+    bal_after = max(0, prev_bal + int(debit or 0) - int(credit or 0))
+    conn.execute(
+        """INSERT INTO customer_ledger
+           (customer_id, created_at, kind, ref, sale_id, voucher_id, debit, credit, balance_after, method, ref_no, notes, user_id, user_name)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            customer_id,
+            created_at or db.now(),
+            kind,
+            ref,
+            sale_id,
+            voucher_id,
+            int(debit or 0),
+            int(credit or 0),
+            bal_after,
+            method,
+            ref_no,
+            notes,
+            user_id,
+            user_name,
+        ),
+    )
+    _refresh_customer_cache(conn, customer_id)
+    return bal_after
+
+
+def _sync_sale_ledger_delta(conn, sale_row, prev_net_credit: int, user=None, reason_prefix: str = "تعديل فاتورة آجلة") -> None:
+    """تسجيل قيد تسوية في دفتر الأستاذ عند تغيّر صافي الآجل لفاتورة بعد مرتجع أو خصم."""
+    cid = _resolve_sale_customer_id(conn, sale_row)
+    if not cid:
+        return
+    new_net_credit = _sale_net_credit(conn, sale_row["id"])
+    delta = prev_net_credit - new_net_credit
+    uid = user["id"] if user else None
+    uname = user["name"] if user else None
+    if delta > 0:
+        _append_ledger_entry(
+            conn, cid, "return_credit", sale_row["invoice_no"],
+            credit=delta, sale_id=sale_row["id"],
+            notes=f"{reason_prefix} ({sale_row['invoice_no']})",
+            user_id=uid, user_name=uname,
+        )
+    elif delta < 0:
+        _append_ledger_entry(
+            conn, cid, "adjustment", sale_row["invoice_no"],
+            debit=-delta, sale_id=sale_row["id"],
+            notes=f"{reason_prefix} ({sale_row['invoice_no']})",
+            user_id=uid, user_name=uname,
+        )
+    else:
+        _refresh_customer_cache(conn, cid)
+
+
+
+
+class _BaseApiMixin:
+    # ---------------------------------------------------------- صلاحيات
+    def _user(self):
+        u = _STATE["user"]
+        if not u:
+            raise ApiError("يجب تسجيل الدخول أولاً")
+        return u
+
+    def _has_perm(self, key: str) -> bool:
+        u = _STATE["user"]
+        if not u:
+            return False
+        if u["role"] == "admin":
+            return True
+        return bool((u.get("permissions") or {}).get(key, False))
+
+    def _perm(self, key: str):
+        u = self._user()
+        if u["role"] == "admin":
+            return u
+        if not (u.get("permissions") or {}).get(key, False):
+            raise ApiError("ممنوع: للمدير أو لمن يملك الصلاحية فقط")
+        return u
+
+    def _perm_any(self, *keys):
+        u = self._user()
+        if u["role"] == "admin":
+            return u
+        perms = u.get("permissions") or {}
+        if not any(perms.get(k, False) for k in keys):
+            raise ApiError("ممنوع: للمدير أو لمن يملك الصلاحية فقط")
+        return u
+
+    def _admin(self):
+        u = self._user()
+        if u["role"] != "admin":
+            raise ApiError("ممنوع: للمدير فقط")
+        return u
+
+    def _settings(self, conn):
+        cache = getattr(self, "_settings_cache", None)
+        if cache is None:
+            cache = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
+            self._settings_cache = cache
+        return cache
+
+    def _open_shift(self, conn, user_id):
+        return conn.execute(
+            "SELECT * FROM shifts WHERE user_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+

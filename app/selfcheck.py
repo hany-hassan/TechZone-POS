@@ -601,6 +601,154 @@ check("sales_quotes.html doc-modal has constrained scrollable A4 preview & exit/
       and "max-w-4xl" in app_css_text
       and "min-h-0" in app_css_text)
 
+# (س) فحص حماية حذف العميل المدين أو المرتبط بفواتير + تصفية المديونيات والأداء
+debt_list = call(a, "customers_list", {"limit": 50, "offset": 0, "debt_only": True})
+check("customers_list debt_only filters only indebted customers",
+      debt_list["ok"] and all(r["debt"] > 0 for r in debt_list["data"]["rows"])
+      and debt_list["data"]["total"] == debt_list["data"]["summary"]["debt_customers_count"])
+
+# محاولة حذف عميل عليه مديونية أو فواتير يجب أن ترفض، بينما عميل نظيف يُحذف بنجاح
+if debt_list["data"]["rows"]:
+    indebted_id = debt_list["data"]["rows"][0]["id"]
+    del_indebted = call(a, "customers_delete", {"id": indebted_id})
+    check("customers_delete blocks deleting indebted customer", not del_indebted["ok"])
+clean_cust = call(a, "customers_save", {"name": "عميل قابل للحذف", "phone": "01999888777"})
+check("clean customer created for delete check", clean_cust["ok"])
+del_clean = call(a, "customers_delete", {"id": clean_cust["data"]["id"]})
+check("customers_delete allows deleting clean customer with no history", del_clean["ok"])
+
+# اختبار سرعة customers_list على 1000 عميل في قاعدة اختبار
+import time as _time
+with db.connect() as _c:
+    _now = db.now()
+    _c.executemany(
+        "INSERT INTO customers(name, phone, created_at) VALUES(?,?,?)",
+        [(f"عميل سرعة {i}", f"018{i:08d}", _now) for i in range(1000)],
+    )
+_t0 = _time.perf_counter()
+_perf_res = call(a, "customers_list", {"limit": 50, "offset": 0})
+_elapsed = _time.perf_counter() - _t0
+check(f"customers_list handles 1000+ customers fast ({_elapsed*1000:.1f}ms < 500ms)",
+      _perf_res["ok"] and _perf_res["data"]["summary"]["total_customers"] >= 1000 and _elapsed < 0.5)
+
+# (ع) فحص customers_search مع limit وتعديل شراء مستعمل (used_update) وتمرير buy_used.html
+cs_lim = call(a, "customers_search", {"q": "", "limit": 8})
+check("customers_search accepts limit=8 and caps results", cs_lim["ok"] and len(cs_lim["data"]) <= 8)
+
+u_created = call(a, "used_create", {
+    "seller_name": "بائع للتعديل", "seller_phone": "01012340000",
+    "device_type": "هاتف ذكي", "brand": "Apple", "model": "iPhone 13",
+    "serial": "SN-USED-UPD-1", "condition": "جيد جداً",
+    "buy_price": 10000, "resale_price": 13500, "to_inventory": True,
+})
+check("used_create returns id for update test", u_created["ok"] and bool(u_created["data"].get("id")))
+if u_created["ok"]:
+    u_upd = call(a, "used_update", {
+        "id": u_created["data"]["id"],
+        "seller_name": "بائع معدل", "seller_phone": "01012340000",
+        "device_type": "هاتف ذكي", "brand": "Apple", "model": "iPhone 13 Pro",
+        "serial": "SN-USED-UPD-2", "condition": "ممتاز",
+        "buy_price": 11000, "resale_price": 14500,
+    })
+    check("used_update edits purchase and syncs linked product/serial", u_upd["ok"])
+    with db.connect() as _c:
+        _sn2 = _c.execute("SELECT * FROM serials WHERE serial='SN-USED-UPD-2'").fetchone()
+        _pr2 = _c.execute("SELECT * FROM products WHERE id=?", (u_created["data"]["product_id"],)).fetchone()
+        check("used_update synced product cost/price/serial",
+              _sn2 is not None and _pr2 is not None and _pr2["cost"] == 1100000 and _pr2["price"] == 1450000)
+
+bu_html_text = (ROOT / "web" / "buy_used.html").read_text(encoding="utf-8")
+check("buy_used.html has min-h-0 scroll fix & edit support",
+      "lg:grid-rows-[minmax(0,1fr)]" in bu_html_text
+      and "min-h-0" in bu_html_text
+      and "startEditUsed" in bu_html_text
+      and "used_update" in bu_html_text)
+
+# (ف) فحص دفتر الأستاذ (customer_ledger) وتحديث أرصدة العملاء والترحيل التلقائي (Phase C)
+call(a, "settings_save", {"tax_enabled": "0"})
+call(a, "product_adjust", {"id": pid, "qty_change": 10, "reason": "فحص دفتر الأستاذ"})
+if not (call(a, "shift").get("data") or {}).get("shift"):
+    call(a, "shift_open", {"opening_cash": 0})
+lg_cust = call(a, "customers_save", {"name": "عميل دفتر الأستاذ", "phone": "01777666555"})
+check("ledger test customer created", lg_cust["ok"])
+lg_cid = lg_cust["data"]["id"]
+
+# 1) فاتورة آجلة بقيمة 240 جنيه (2 وحدة × 120) -> قيد credit_sale = 24000
+lg_sale = call(a, "sale_create", {
+    "items": [{"product_id": pid, "qty": 2}],
+    "payments": [{"method": "credit", "amount": 240}],
+    "customer_name": "عميل دفتر الأستاذ",
+    "customer_phone": "01777666555",
+})
+check("ledger credit sale created", lg_sale["ok"])
+lg_sid = lg_sale["data"]["sale_id"]
+with db.connect() as _c:
+    _crow = _c.execute("SELECT total_purchases, credit_total, paid_total, debt FROM customers WHERE id=?", (lg_cid,)).fetchone()
+    _lrows = _c.execute("SELECT * FROM customer_ledger WHERE customer_id=? ORDER BY id", (lg_cid,)).fetchall()
+    check("customer_ledger recorded credit_sale & updated cached debt",
+          _crow["debt"] == 24000 and _crow["credit_total"] == 24000 and len(_lrows) == 1
+          and _lrows[0]["kind"] == "credit_sale" and _lrows[0]["debit"] == 24000 and _lrows[0]["balance_after"] == 24000)
+
+# 2) سند قبض 100 جنيه -> الرصيد يصبح 14000 (voucher)
+lg_pay = call(a, "customer_payment_create", {
+    "customer_id": lg_cid, "amount": 100, "method": "cash", "notes": "سداد جزئي"
+})
+check("ledger payment voucher ok", lg_pay["ok"] and lg_pay["data"]["remaining_debt"] == 14000)
+lg_vid = lg_pay["data"]["id"]
+
+# 3) حذف سند القبض -> يسجل قيد عكسي adjustment ويعود الرصيد إلى 24000
+lg_pdel = call(a, "customer_payment_delete", {"id": lg_vid})
+check("ledger voucher delete ok", lg_pdel["ok"])
+with db.connect() as _c:
+    _crow2 = _c.execute("SELECT debt, paid_total FROM customers WHERE id=?", (lg_cid,)).fetchone()
+    _l2 = _c.execute("SELECT kind, debit, credit, balance_after FROM customer_ledger WHERE customer_id=? ORDER BY id DESC LIMIT 1", (lg_cid,)).fetchone()
+    check("customer_payment_delete reversed balance via adjustment entry",
+          _crow2["debt"] == 24000 and _crow2["paid_total"] == 0
+          and _l2["kind"] == "adjustment" and _l2["debit"] == 10000 and _l2["balance_after"] == 24000)
+
+# 4) مرتجع جزئي على الفاتورة الآجلة (1 وحدة = 12000) -> قيد return_credit والرصيد 12000
+lg_sdet = call(a, "sale", {"id": lg_sid})["data"]
+lg_si_id = lg_sdet["items"][0]["id"]
+lg_ret = call(a, "sale_return", {
+    "sale_id": lg_sid, "items": [{"sale_item_id": lg_si_id, "qty": 1}], "reason": "تعديل كمية"
+})
+check("ledger partial return on credit sale ok", lg_ret["ok"] and lg_ret["data"]["total"] == 12000)
+with db.connect() as _c:
+    _crow3 = _c.execute("SELECT debt, credit_total FROM customers WHERE id=?", (lg_cid,)).fetchone()
+    _l3 = _c.execute("SELECT kind, credit, balance_after FROM customer_ledger WHERE customer_id=? ORDER BY id DESC LIMIT 1", (lg_cid,)).fetchone()
+    check("sale_return appended return_credit & lowered cached debt",
+          _crow3["debt"] == 12000 and _crow3["credit_total"] == 12000
+          and _l3["kind"] == "return_credit" and _l3["credit"] == 12000 and _l3["balance_after"] == 12000)
+
+# 5) تحويل عرض سعر بآجل جزئي يسجل قيداً في customer_ledger
+lg_q = call(a, "quotation_save", {
+    "doc_type": "quote",
+    "customer_name": "عميل دفتر الأستاذ",
+    "customer_phone": "01777666555",
+    "items": [{"product_id": pid, "name": "صنف عرض", "qty": 1, "unit_price": 200}],
+    "paid_amount": 50,
+    "payment_method": "cash",
+})
+check("ledger test quote saved", lg_q["ok"])
+lg_qconv = call(a, "quotation_convert_to_sale", {"id": lg_q["data"]["id"], "paid_amount": 50, "payment_method": "cash"})
+check("quote converted to partial-credit sale", lg_qconv["ok"])
+with db.connect() as _c:
+    _crow4 = _c.execute("SELECT debt FROM customers WHERE id=?", (lg_cid,)).fetchone()
+    check("converted credit quote increased customer debt & ledger", _crow4["debt"] == 27000)
+
+# 6) محاكاة ترحيل _migrate_customer_ledger عند مسح دفتر الأستاذ وإعادة تشغيل الاتصال
+with db.connect() as _c:
+    _c.execute("DELETE FROM customer_ledger")
+    _c.execute("UPDATE customers SET total_purchases=0, credit_total=0, paid_total=0, debt=0")
+    _c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('customer_ledger_migrated', '0')")
+db._INITIALIZED_DBS.discard(db.db_path())
+with db.connect() as _c:
+    _migrated_flag = _c.execute("SELECT value FROM settings WHERE key='customer_ledger_migrated'").fetchone()["value"]
+    _crow_mig = _c.execute("SELECT debt, credit_total FROM customers WHERE id=?", (lg_cid,)).fetchone()
+    _lcount_mig = _c.execute("SELECT COUNT(*) FROM customer_ledger WHERE customer_id=?", (lg_cid,)).fetchone()[0]
+    check("_migrate_customer_ledger accurately backfills debt and ledger rows",
+          _migrated_flag == "1" and _crow_mig["debt"] == 27000 and _crow_mig["credit_total"] == 27000 and _lcount_mig >= 2)
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:

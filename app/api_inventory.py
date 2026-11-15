@@ -1,0 +1,273 @@
+"""إدارة التصنيفات والمنتجات والأرقام التسلسلية والمخزون."""
+import datetime
+import hmac
+import json
+import os
+import pathlib
+import sqlite3
+import sys
+import time
+from decimal import Decimal, ROUND_HALF_UP
+
+import db
+from api_common import (
+    ApiError,
+    _FALLBACK_JPEG,
+    _LOGIN_ATTEMPTS,
+    _STATE,
+    _customer_debt_summary,
+    _customers_enriched_cte,
+    _fmt_money,
+    _format_doc_seq,
+    _int,
+    _jpeg_to_pdf_bytes,
+    _money,
+    _upsert_customer,
+    _validate_image_data_url,
+    _win32_auto_paste_into_whatsapp,
+    _win32_copy_pdf_to_clipboard,
+    _find_whatsapp_hwnd,
+)
+
+
+class InventoryMixin:
+    # ---------------------------------------------------------- فئات
+    def categories(self):
+        self._user()
+        with db.connect() as conn:
+            rows = conn.execute(
+                """SELECT c.id, c.name, COUNT(p.id) n FROM categories c
+                   LEFT JOIN products p ON p.category_id=c.id AND p.active=1
+                   GROUP BY c.id ORDER BY c.name"""
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def categories_save(self, name):
+        self._perm("inventory_edit")
+        name = (name or "").strip()
+        if not name:
+            raise ApiError("اسم الفئة مطلوب")
+        with db.connect() as conn:
+            try:
+                cur = conn.execute("INSERT INTO categories(name) VALUES(?)", (name,))
+            except sqlite3.IntegrityError:
+                raise ApiError("توجد فئة بهذا الاسم مسبقاً")
+            return {"id": cur.lastrowid}
+
+    def categories_delete(self, id):
+        self._perm("inventory_edit")
+        with db.connect() as conn:
+            n = conn.execute("SELECT COUNT(*) c FROM products WHERE category_id=? AND active=1", (id,)).fetchone()["c"]
+            if n:
+                raise ApiError("لا يمكن حذف فئة عليها منتجات")
+            conn.execute("DELETE FROM categories WHERE id=?", (id,))
+            return True
+
+    def categories_update(self, id, name):
+        self._perm("inventory_edit")
+        name = (name or "").strip()
+        if not name:
+            raise ApiError("اسم الفئة مطلوب")
+        with db.connect() as conn:
+            try:
+                cur = conn.execute("UPDATE categories SET name=? WHERE id=?", (name, _int(id)))
+            except sqlite3.IntegrityError:
+                raise ApiError("توجد فئة بهذا الاسم مسبقاً")
+            if not cur.rowcount:
+                raise ApiError("الفئة غير موجودة")
+            return True
+
+    def pos_categories_config_save(self, config=None):
+        """حفظ ترتيب وتخصيص الفئات المعروضة في شاشة نقاط البيع (POS)."""
+        self._user()
+        if config is None:
+            config = ""
+        if isinstance(config, (list, dict)):
+            s = json.dumps(config, ensure_ascii=False)
+        else:
+            s = str(config).strip()
+        with db.connect() as conn:
+            conn.execute(
+                "INSERT INTO settings(key, value) VALUES('pos_categories_config', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (s,),
+            )
+            self._settings_cache = None
+            return {"pos_categories_config": s}
+
+    # ---------------------------------------------------------- منتجات
+    def _product_row(self, r, show_cost):
+        d = dict(r)
+        if not show_cost:
+            d["cost"] = None
+        qty, minq = d["qty"], d["min_qty"]
+        d["stock_state"] = "out" if qty <= 0 else ("low" if qty <= minq else "in")
+        return d
+
+    def products(self, q=None, category_id=None, stock=None, limit=200, offset=0):
+        self._user()
+        show_cost = self._has_perm("cost_view")
+        limit, offset = _int(limit, 200), _int(offset, 0)
+        where, args = ["p.active=1"], []
+        if q:
+            where.append("(p.name LIKE ? OR p.sku LIKE ?)")
+            args += [f"%{q}%", f"%{q}%"]
+        if category_id:
+            where.append("p.category_id=?")
+            args.append(_int(category_id))
+        if stock == "out":
+            where.append("p.qty<=0")
+        elif stock == "low":
+            where.append("p.qty>0 AND p.qty<=p.min_qty")
+        elif stock == "in":
+            where.append("p.qty>p.min_qty")
+        base_from = "FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE " + " AND ".join(where)
+        with db.connect() as conn:
+            total = conn.execute(f"SELECT COUNT(*) {base_from}", args).fetchone()[0]
+            rows = conn.execute(
+                f"SELECT p.*, c.name category {base_from} ORDER BY p.name LIMIT ? OFFSET ?",
+                args + [limit, offset],
+            ).fetchall()
+            return {"rows": [self._product_row(r, show_cost) for r in rows], "total": total}
+
+    def product(self, id):
+        self._user()
+        show_cost = self._has_perm("cost_view")
+        with db.connect() as conn:
+            r = conn.execute(
+                """SELECT p.*, c.name category FROM products p
+                   LEFT JOIN categories c ON c.id=p.category_id WHERE p.id=?""", (id,),
+            ).fetchone()
+            if not r or not r["active"]:
+                raise ApiError("المنتج غير موجود")
+            return self._product_row(r, show_cost)
+
+    def product_save(self, id=None, sku="", name="", category_id=None, price=0, cost=0,
+                     min_qty=5, tracked=0, notes=None, serials=None, image=None):
+        self._perm("inventory_edit")
+        name = (name or "").strip()
+        sku = (sku or "").strip()
+        if not name or not sku:
+            raise ApiError("اسم المنتج والباركود/SKU مطلوبان")
+        if image is not None and image != "":
+            image = str(image).strip()
+            _validate_image_data_url(image, 600 * 1024)
+        serials = [s.strip() for s in (serials or []) if s and s.strip()]
+        with db.connect() as conn:
+            try:
+                if id:
+                    pid = _int(id)
+                    existing = conn.execute("SELECT image FROM products WHERE id=?", (pid,)).fetchone()
+                    if not existing:
+                        raise ApiError("المنتج غير موجود")
+                    final_img = existing["image"] if image is None else (None if image == "" else image)
+                    conn.execute(
+                        """UPDATE products SET sku=?, name=?, category_id=?, price=?, cost=?, min_qty=?, tracked=?, image=?, notes=?
+                           WHERE id=?""",
+                        (sku, name, _int(category_id) or None, _money(price), _money(cost),
+                         _int(min_qty, 5), _int(tracked), final_img, notes, pid),
+                    )
+                else:
+                    final_img = None if not image else image
+                    cur = conn.execute(
+                        """INSERT INTO products(sku, name, category_id, price, cost, min_qty, tracked, image, notes, created_at)
+                           VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                        (sku, name, _int(category_id) or None, _money(price), _money(cost),
+                         _int(min_qty, 5), _int(tracked), final_img, notes, db.now()),
+                    )
+                    pid = cur.lastrowid
+                if serials:
+                    self._add_serials(conn, pid, serials)
+            except sqlite3.IntegrityError:
+                raise ApiError("الباركود/SKU أو أحد الأرقام التسلسلية مسجل مسبقاً")
+            return {"id": pid}
+
+    def _add_serials(self, conn, pid, serials):
+        added = 0
+        for s in serials:
+            conn.execute("INSERT INTO serials(product_id, serial, status, created_at) VALUES(?,?,?,?)",
+                         (pid, s, "in_stock", db.now()))
+            added += 1
+        if added:
+            conn.execute("UPDATE products SET qty=qty+? WHERE id=?", (added, pid))
+            after = conn.execute("SELECT qty FROM products WHERE id=?", (pid,)).fetchone()[0]
+            conn.execute(
+                "INSERT INTO stock_movements(created_at, user_id, product_id, qty_change, qty_after, reason, ref) VALUES(?,?,?,?,?,?,?)",
+                (db.now(), self._user()["id"], pid, added, after, "serial_add", None),
+            )
+
+    def product_delete(self, id):
+        self._perm("inventory_edit")
+        with db.connect() as conn:
+            cur = conn.execute("UPDATE products SET active=0 WHERE id=?", (_int(id),))
+            if not cur.rowcount:
+                raise ApiError("المنتج غير موجود")
+            return True
+
+    def products_search(self, q=None, limit=60, category_id=None):
+        self._user()
+        q = (q or "").strip()
+        limit = _int(limit, 60)
+        cat = _int(category_id) if category_id not in (None, "") else None
+        cat_sql = " AND p.category_id=?" if cat else ""
+        cat_args = [cat] if cat else []
+        with db.connect() as conn:
+            if not q:
+                rows = conn.execute(
+                    """SELECT p.id, p.name, p.sku, p.price, p.qty, p.tracked, p.min_qty, p.image, c.name category
+                       FROM products p LEFT JOIN categories c ON c.id=p.category_id
+                       WHERE p.active=1""" + cat_sql + """ ORDER BY p.name LIMIT ?""", (*cat_args, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT DISTINCT p.id, p.name, p.sku, p.price, p.qty, p.tracked, p.min_qty, p.image, c.name category
+                       FROM products p LEFT JOIN categories c ON c.id=p.category_id
+                       WHERE p.active=1""" + cat_sql + """ AND (p.name LIKE ? OR p.sku LIKE ? OR EXISTS(
+                           SELECT 1 FROM serials s WHERE s.product_id=p.id AND s.serial LIKE ? AND s.status='in_stock'))
+                       ORDER BY p.name LIMIT ?""",
+                    (*cat_args, f"%{q}%", f"%{q}%", f"%{q}%", limit),
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    def product_adjust(self, id, qty_change, reason="تعديل يدوي"):
+        u = self._perm("inventory_edit")
+        pid, delta = _int(id), _int(qty_change)
+        if delta == 0:
+            raise ApiError("تغيير الكمية صفري")
+        with db.connect() as conn:
+            p = conn.execute("SELECT qty FROM products WHERE id=? AND active=1", (pid,)).fetchone()
+            if not p:
+                raise ApiError("المنتج غير موجود")
+            newq = p["qty"] + delta
+            if newq < 0:
+                raise ApiError(f"لا يمكن تخفيض المخزون إلى سالب (المتوفر {p['qty']})")
+            conn.execute("UPDATE products SET qty=? WHERE id=?", (newq, pid))
+            conn.execute(
+                "INSERT INTO stock_movements(created_at, user_id, product_id, qty_change, qty_after, reason, ref) VALUES(?,?,?,?,?,?,?)",
+                (db.now(), u["id"], pid, delta, newq, reason or "تعديل يدوي", None),
+            )
+            return {"qty": newq}
+
+    def serials(self, product_id):
+        self._user()
+        with db.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM serials WHERE product_id=? ORDER BY id DESC", (_int(product_id),)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def serial_add(self, product_id, serial):
+        self._perm("inventory_edit")
+        serial = (serial or "").strip()
+        if not serial:
+            raise ApiError("الرقم التسلسلي مطلوب")
+        with db.connect() as conn:
+            p = conn.execute("SELECT id FROM products WHERE id=? AND active=1", (_int(product_id),)).fetchone()
+            if not p:
+                raise ApiError("المنتج غير موجود")
+            try:
+                self._add_serials(conn, _int(product_id), [serial])
+            except sqlite3.IntegrityError:
+                raise ApiError("الرقم التسلسلي مسجل مسبقاً")
+            return True
+

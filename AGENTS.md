@@ -54,7 +54,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (115 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (137 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -67,9 +67,17 @@ Detailed technical specifications are modularized in the `docs/` directory:
 project001/
 ├── app/
 │   ├── main.py          # Entry point: pywebview window setup & branding
-│   ├── api.py           # Backend Api class (77 methods dispatched via bridge)
-│   ├── db.py            # SQLite schema (19 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (115 checks)
+│   ├── api.py           # Facade Api class composing 7 domain mixins (plus re-exports)
+│   ├── api_common.py    # Shared state, money/format helpers, PDF/WhatsApp Win32 & ledger helpers
+│   ├── api_auth.py      # AuthSettingsMixin: login, users, permissions, profile & settings/backups
+│   ├── api_inventory.py # InventoryMixin: categories, products, serials & stock adjustments
+│   ├── api_customers.py # CustomersMixin: customer CRM, debt summary, ledger history & vouchers
+│   ├── api_sales.py     # SalesMixin: shifts, POS checkout, returns, modifications & WhatsApp invoice
+│   ├── api_quotes.py    # QuotesMixin: B2B quotations, A4 invoices & conversion to sales
+│   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
+│   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
+│   ├── db.py            # SQLite schema (20 tables), connection wrapper, seed, migration & backups
+│   └── selfcheck.py     # Comprehensive automated regression suite (137 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN & force-PIN security)
 │   ├── desktop.html     # TechZone OS hybrid desktop shell (dock, start menu, iframes)
@@ -132,12 +140,43 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain 115/115 passing tests in `python app/selfcheck.py`.
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 137 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-15 — Phase B & Phase C (Isolated Worktree): API Domain Modularization, Customer Ledger & Cached Balances
+- **Isolated Branch/Worktree**: Continued on branch `feat/phase-a-performance` in `../project001-worker/` keeping `main` and production DB untouched.
+- **Phase B — Backend API Modularization & WhatsApp Reliability (`app/api*.py`)**:
+  1. Split `app/api.py` (~3,100 lines) into focused domain mixins while preserving the exact `Api` public surface (78 contracted methods verified): `app/api_common.py`, `app/api_auth.py` (`AuthSettingsMixin`), `app/api_inventory.py` (`InventoryMixin`), `app/api_customers.py` (`CustomersMixin`), `app/api_sales.py` (`SalesMixin`), `app/api_quotes.py` (`QuotesMixin`), `app/api_services.py` (`ServicesMixin`), and `app/api_reports.py` (`ReportsMixin`), with `app/api.py` acting as a thin facade + re-export module.
+  2. Added `pdf_dir` to `whatsapp_send_invoice` and `whatsapp_send_quote` return payloads for direct local PDF folder access.
+- **Phase C — Customer Accounting Ledger (`customer_ledger`) & Cached Debt Columns (`app/db.py`, `app/api_common.py`, `app/api_customers.py`, `app/api_sales.py`, `app/api_quotes.py`)**:
+  1. **Schema & Auto-Migration (`app/db.py`)**: Added cached summary columns (`total_purchases`, `credit_total`, `paid_total`, `debt`) on `customers`, created `customer_ledger` table (`credit_sale`, `voucher`, `return_credit`, `adjustment`, `installment_charge`, `installment_payment`) with performance indexes (`idx_customers_debt`, `idx_ledger_cust_id`, `idx_ledger_sale`, `idx_ledger_voucher`), and added one-time `_migrate_customer_ledger()` backfill.
+  2. **Transactional Ledger Sync**: Updated `sale_create`, `_convert_quote_to_sale_in_tx`, `sale_discount`, `sale_modify_from_cart`, `sale_return`, `customer_payment_create`, and `customer_payment_delete` to append immutable ledger rows (`_append_ledger_entry` / `_sync_sale_ledger_delta`) and refresh cached customer totals (`_refresh_customer_cache`) inside the same SQLite transaction.
+  3. **Fast O(1) Reads**: Updated `customers_list`, `customers_search`, and `customer_history` to read cached customer balances and pre-computed `customer_ledger` rows directly (with legacy fallback).
+- **Verification & Stress Benchmarks (`app/selfcheck.py`)**:
+  - Expanded `app/selfcheck.py` with Phase C ledger & migration checks (`137/137` checks passed).
+  - Stress-tested `../project001-worker/data/shop.db` (3,000 customers, 30,002 sales): historical ledger backfill completed in `223.9ms` (13,500 ledger rows); `customers_list(50)` `1.31ms`, `customers_list(debt_only=True)` `1.43ms`, `customers_search` `0.91ms`, indebted `customer_history` `1.75ms`, and `used()` `1.19ms`.
+
+### 2026-11-15 — Fix: Used Devices Purchase (`buy_used.html`) Scroll Freeze, Add Crash & Edit Support
+- **Issues**:
+  1. `<main>` in `web/buy_used.html` had `lg:h-[calc(100vh-4rem)] overflow-hidden` without `min-h-0` or bounded grid rows (`lg:grid-rows-[minmax(0,1fr)]`), freezing page scrolling and clipping the bottom form fields/button (`إتمام الشراء`) and table.
+  2. Seller autocomplete called `api('customers_search', { q, limit: 8 })`, failing because `Api.customers_search` did not accept `limit`.
+  3. No edit capability existed for recorded used device purchases.
+- **Fixes**:
+  1. Added `limit=20` parameter (clamped `1..100`) to `Api.customers_search()` and added `Api.used_update()` (with linked `products` & `serials` synchronization) in `app/api.py`.
+  2. Rebuilt `web/buy_used.html` flex/grid scroll hierarchy (`min-h-0`, `lg:grid-rows-[minmax(0,1fr)]`, `shrink-0` cards, responsive scroll), added row edit (`تعديل`) workflow + cancel banner, and submit button lock state; recompiled `web/app.css`.
+  3. Added regression checks in `app/selfcheck.py` (all 125/125 checks passing).
+
+### 2026-11-15 — Phase A (Isolated Worktree): Customers Performance, DB PRAGMAs/Indexes & Delete Protection
+- **Isolated Branch/Worktree**: Executed on branch `feat/phase-a-performance` in `../project001-worker/` keeping `main` untouched.
+- **SQL Set-Based Customer Debt Aggregation (`app/api.py`)**: Replaced the N+1 Python loop in `customers_list()` and `customers_search()` with a shared SQL CTE (`_customers_enriched_cte`) computing totals, `debt_only` filtering, and `LIMIT/OFFSET` directly in SQLite (reducing 3,000-customer/30,000-sale benchmark from ~12.4s to <100ms, and fixing missing `total_purchases` in `customers_search()`).
+- **Customer Accounting Protection (`app/api.py`)**: Updated `customers_delete()` to refuse deleting customers with unpaid debt or existing sales/payment vouchers (preventing silent `customer_payments` cascade loss and orphaned debt).
+- **SQLite Tuning & Performance Indexes (`app/db.py`)**: Enabled `synchronous=NORMAL`, `temp_store=MEMORY`, `cache_size=-16000` per connection, moved `journal_mode=WAL` to one-time initialization, and added `_PERFORMANCE_INDEXES` (`customers(name, phone)`, `sales(customer_phone)`, partial `sales(customer_name) WHERE customer_id IS NULL`, `sales(doc_type, status)`, `payments(method, sale_id)`, `products(active, name)`, `products(sku)`).
+- **UI Search Debounce (`web/customers.html`)**: Added 200ms debounce on search input and avoided redundant `customers_list` calls when `summary` is already loaded.
+- **Verification (`app/selfcheck.py`)**: Added checks 113–117 covering `debt_only`, `customers_delete` guard, and 1,000+ customer speed test; all 120/120 checks pass.
 
 ### 2026-11-15 — Fix: WhatsApp A4 PDF Layout Now Matches Preview (WYSIWYG)
 - **Issue**: `renderA4DocumentToJpeg()` in `web/app.js` re-drew the invoice by hand on a Canvas (different fonts, spacing, columns), so the WhatsApp PDF differed from the HTML preview.

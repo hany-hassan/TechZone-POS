@@ -9,10 +9,10 @@
 <link href="app.css" rel="stylesheet"/>
 <script>if(localStorage.getItem('tz-theme')==='dark')document.documentElement.classList.add('dark');</script>
 </head>
-<body id="shell" class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 min-h-screen flex flex-col md:flex-row">
-<div class="flex-1 flex flex-col min-w-0">
+<body id="shell" class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 h-screen overflow-hidden flex flex-col">
+<div class="flex-1 min-h-0 flex flex-col min-w-0">
 <!-- Top Header -->
-<header class="bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-slate-800 h-16 flex items-center px-6 shadow-sm z-10 sticky top-0">
+<header class="bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-slate-800 h-16 flex items-center px-6 shadow-sm z-10 shrink-0">
 <div class="flex items-center gap-4 w-full">
 <div class="flex items-center gap-3">
 <div class="bg-primary/10 p-2 rounded-lg text-primary">
@@ -37,12 +37,12 @@
 </div>
 </header>
 <!-- Main Content Area -->
-<main class="flex-grow p-4 md:p-6 lg:h-[calc(100vh-4rem)] overflow-hidden">
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
+<main class="flex-1 min-h-0 p-4 md:p-6 overflow-y-auto lg:overflow-hidden">
+<div class="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)] gap-6 lg:h-full min-h-0">
 <!-- RIGHT COLUMN: Purchase Form (Intake) -->
-<div class="lg:col-span-4 xl:col-span-3 h-full flex flex-col gap-4 overflow-y-auto pr-1 pb-20 lg:pb-0">
+<div id="used-form-col" class="lg:col-span-4 xl:col-span-3 min-h-0 lg:h-full flex flex-col gap-4 lg:overflow-y-auto pr-1 pb-6">
 <!-- Section 1: Seller Info (مربوط بسجل العملاء: عميل جديد / مسجل) -->
-<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 shrink-0">
 <div class="flex items-center justify-between mb-4">
   <h2 class="text-base font-bold flex items-center gap-2 text-primary">
     <span class="material-icons text-sm">person</span>
@@ -70,7 +70,7 @@
 </div>
 </div>
 <!-- Section 2: Device Details -->
-<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 shrink-0">
 <h2 class="text-base font-bold mb-4 flex items-center gap-2 text-primary">
 <span class="material-icons text-sm">smartphone</span>
 تفاصيل الجهاز
@@ -114,7 +114,7 @@
 </div>
 </div>
 <!-- Section 3: Condition & Price -->
-<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 flex-grow flex flex-col">
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 shrink-0 flex flex-col">
 <h2 class="text-base font-bold mb-4 flex items-center gap-2 text-primary">
 <span class="material-icons text-sm">verified</span>
 الحالة والسعر
@@ -154,17 +154,21 @@
 <span class="absolute left-4 top-4 text-slate-400 font-bold font-display" id="cur">ج.م</span>
 </div>
 </div>
-<button id="btn-buy" class="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 group">
-<span>إتمام الشراء</span>
+<div id="edit-banner" class="hidden mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-center justify-between text-xs font-bold text-amber-800 dark:text-amber-300">
+  <span id="edit-banner-text">تعديل عملية</span>
+  <button id="btn-cancel-edit" type="button" class="text-red-600 hover:underline">إلغاء</button>
+</div>
+<button id="btn-buy" type="button" class="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 group">
+<span id="btn-buy-label">إتمام الشراء</span>
 <span class="material-icons group-hover:-translate-x-1 transition-transform">arrow_back</span>
 </button>
 </div>
 </div>
 </div>
 <!-- LEFT COLUMN: Recent Transactions Table -->
-<div class="lg:col-span-8 xl:col-span-9 h-full flex flex-col gap-4">
+<div class="lg:col-span-8 xl:col-span-9 min-h-0 lg:h-full flex flex-col gap-4">
 <!-- Filters / Search Row -->
-<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="shrink-0 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
 <div class="relative w-full sm:max-w-md">
 <span class="material-icons absolute right-3 top-2.5 text-slate-400">search</span>
 <input id="q" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pr-10 pl-4 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" placeholder="بحث برقم العملية، اسم البائع، أو السيريال..." type="text"/>
@@ -172,15 +176,15 @@
 <div class="flex items-center gap-2 w-full sm:w-auto" id="stat-mini"></div>
 </div>
 <!-- Table Container -->
-<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex-grow overflow-hidden flex flex-col">
-<div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex-1 min-h-[320px] lg:min-h-0 overflow-hidden flex flex-col">
+<div class="shrink-0 p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
 <h3 class="font-bold text-slate-800 dark:text-white flex items-center gap-2">
 <span class="w-2 h-6 bg-primary rounded-full"></span>
 العمليات الأخيرة
 </h3>
 <span class="bg-primary/10 text-primary text-xs font-display font-bold px-2 py-1 rounded-full" id="count"></span>
 </div>
-<div class="overflow-auto flex-grow">
+<div class="overflow-auto flex-1 min-h-0">
 <table class="w-full text-right">
 <thead class="bg-slate-50 dark:bg-slate-800/50 sticky top-0 z-10">
 <tr>
@@ -191,6 +195,7 @@
 <th class="p-4 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">الرقم التسلسلي</th>
 <th class="p-4 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">الحالة</th>
 <th class="p-4 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">السعر</th>
+<th class="p-4 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap text-center">إجراءات</th>
 </tr>
 </thead>
 <tbody class="divide-y divide-slate-100 dark:divide-slate-800" id="rows"></tbody>
@@ -198,31 +203,104 @@
 </div>
 </div>
 <!-- Stats Cards (Quick Overview) -->
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-4" id="cards"></div>
+<div class="shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-4" id="cards"></div>
 </div>
 </div>
 </main>
 </div>
 <script src="app.js"></script>
 <script>
+let USED_ROWS = [];
+let EDIT_ID = null;
+
+function setSelectValue(id, val) {
+  const sel = document.getElementById(id);
+  if (!sel || !val) return;
+  const opts = Array.from(sel.options);
+  if (!opts.some((o) => o.value === val || o.textContent === val)) {
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = val;
+    sel.appendChild(opt);
+  }
+  sel.value = val;
+}
+
+function resetUsedForm() {
+  EDIT_ID = null;
+  ['f-name', 'f-phone', 'f-idno', 'f-model', 'f-serial', 'f-notes', 'f-price', 'f-store', 'f-resale'].forEach((f) => {
+    document.getElementById(f).value = '';
+  });
+  const invEl = document.getElementById('f-inv');
+  invEl.checked = true;
+  invEl.disabled = false;
+  const defCond = document.querySelector('input[name=condition][value="جيد جداً"]');
+  if (defCond) defCond.checked = true;
+  document.getElementById('edit-banner').classList.add('hidden');
+  document.getElementById('btn-buy-label').textContent = 'إتمام الشراء';
+  const badge = document.getElementById('u-cust-badge');
+  if (badge) {
+    badge.textContent = 'عميل جديد / مسجل';
+    badge.className = 'text-[11px] px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold';
+  }
+}
+
+function startEditUsed(id) {
+  const x = USED_ROWS.find((row) => row.id === id);
+  if (!x) return;
+  EDIT_ID = x.id;
+  document.getElementById('f-name').value = x.seller_name || '';
+  document.getElementById('f-phone').value = x.seller_phone || '';
+  document.getElementById('f-idno').value = x.seller_id_no || '';
+  setSelectValue('f-type', x.device_type || 'هاتف ذكي');
+  setSelectValue('f-brand', x.brand || 'أخرى');
+  document.getElementById('f-model').value = x.model || '';
+  document.getElementById('f-serial').value = x.serial || '';
+  document.getElementById('f-notes').value = x.notes || '';
+  document.getElementById('f-store').value = x.storage || '';
+  document.getElementById('f-price').value = x.buy_price ? (Number(x.buy_price) / 100).toFixed(2) : '';
+  document.getElementById('f-resale').value = x.resale_price ? (Number(x.resale_price) / 100).toFixed(2) : '';
+  const condInput = Array.from(document.querySelectorAll('input[name=condition]')).find((el) => el.value === x.condition);
+  if (condInput) condInput.checked = true;
+  const invEl = document.getElementById('f-inv');
+  invEl.checked = !!x.product_id;
+  invEl.disabled = true;
+  document.getElementById('edit-banner-text').textContent = `تعديل عملية ${x.ref}`;
+  document.getElementById('edit-banner').classList.remove('hidden');
+  document.getElementById('btn-buy-label').textContent = 'حفظ التعديلات';
+  const formCol = document.getElementById('used-form-col');
+  if (formCol) formCol.scrollTo({ top: 0, behavior: 'smooth' });
+  document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 async function load(q) {
   const r = (await guard(() => api('used', { q: q || null, limit: 60 }))) || { rows: [], total: 0 };
+  USED_ROWS = r.rows || [];
   document.getElementById('count').textContent = 'الكل: ' + n(r.total);
-  document.getElementById('rows').innerHTML = r.rows.length ? r.rows.map((x) => `
+  document.getElementById('rows').innerHTML = USED_ROWS.length ? USED_ROWS.map((x) => `
     <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-      <td class="p-4 font-display text-sm font-medium text-slate-900 dark:text-white">${esc(x.ref)}</td>
-      <td class="p-4 text-sm text-slate-500 font-display"><div class="flex flex-col"><span>${x.created_at.slice(0, 10)}</span><span class="text-xs opacity-70">${x.created_at.slice(11, 16)}</span></div></td>
+      <td class="p-4 font-display text-sm font-medium text-slate-900 dark:text-white whitespace-nowrap">${esc(x.ref)}</td>
+      <td class="p-4 text-sm text-slate-500 font-display whitespace-nowrap"><div class="flex flex-col"><span>${(x.created_at || '').slice(0, 10)}</span><span class="text-xs opacity-70">${(x.created_at || '').slice(11, 16)}</span></div></td>
       <td class="p-4 text-sm text-slate-700 dark:text-slate-300"><div class="flex items-center gap-2">
-        <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-500">${esc((x.seller_name || '؟').slice(0, 1))}</div>
+        <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">${esc((x.seller_name || '؟').slice(0, 1))}</div>
         <div><p class="font-medium">${esc(x.seller_name)}</p><p class="text-xs text-slate-500 font-display">${esc(x.seller_phone || '')}</p></div>
       </div></td>
       <td class="p-4 text-sm text-slate-700 dark:text-slate-300"><div class="flex items-center gap-2">
         <span class="material-icons text-slate-400 text-sm">phone_iphone</span><span>${esc((x.brand && x.brand !== 'أخرى' ? x.brand + ' ' : '') + x.model)}</span>
       </div></td>
-      <td class="p-4 text-sm text-slate-500 font-display">${esc(x.serial || '—')}</td>
-      <td class="p-4"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">${esc(x.condition || '—')}</span></td>
-      <td class="p-4 font-display font-bold text-slate-900 dark:text-white">${fmt(x.buy_price)} ${CURRENCY}</td>
-    </tr>`).join('') : '<tr><td colspan="7" class="p-8 text-center text-slate-400">لا توجد عمليات</td></tr>';
+      <td class="p-4 text-sm text-slate-500 font-display whitespace-nowrap">${esc(x.serial || '—')}</td>
+      <td class="p-4 whitespace-nowrap"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">${esc(x.condition || '—')}</span></td>
+      <td class="p-4 font-display font-bold text-slate-900 dark:text-white whitespace-nowrap">${fmt(x.buy_price)} ${CURRENCY}</td>
+      <td class="p-4 text-center whitespace-nowrap">
+        <button type="button" data-edit-id="${x.id}" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 text-xs font-bold transition-colors">
+          <span class="material-icons text-sm">edit</span>
+          <span>تعديل</span>
+        </button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="8" class="p-8 text-center text-slate-400">لا توجد عمليات</td></tr>';
+  document.querySelectorAll('#rows [data-edit-id]').forEach((btn) => {
+    btn.addEventListener('click', () => startEditUsed(+btn.dataset.editId));
+  });
   const s = (await guard(() => api('used_stats'))) || {};
   document.getElementById('cards').innerHTML = `
     <div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
@@ -240,28 +318,47 @@ async function load(q) {
 }
 
 document.getElementById('q').addEventListener('input', (e) => { clearTimeout(window._t); window._t = setTimeout(() => load(e.target.value), 300); });
+document.getElementById('btn-cancel-edit').addEventListener('click', resetUsedForm);
 
 document.getElementById('btn-buy').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-buy');
   const cond = document.querySelector('input[name=condition]:checked');
-  const r = await guard(() => api('used_create', {
-    seller_name: document.getElementById('f-name').value, seller_phone: document.getElementById('f-phone').value,
-    seller_id_no: document.getElementById('f-idno').value, device_type: document.getElementById('f-type').value,
-    brand: document.getElementById('f-brand').value, model: document.getElementById('f-model').value,
-    serial: document.getElementById('f-serial').value, condition: cond ? cond.value : null,
-    notes: document.getElementById('f-notes').value || null, buy_price: toAmount(document.getElementById('f-price').value),
+  const payload = {
+    seller_name: document.getElementById('f-name').value,
+    seller_phone: document.getElementById('f-phone').value,
+    seller_id_no: document.getElementById('f-idno').value,
+    device_type: document.getElementById('f-type').value,
+    brand: document.getElementById('f-brand').value,
+    model: document.getElementById('f-model').value,
+    serial: document.getElementById('f-serial').value,
+    condition: cond ? cond.value : null,
+    notes: document.getElementById('f-notes').value || null,
+    buy_price: toAmount(document.getElementById('f-price').value),
     storage: document.getElementById('f-store').value || null,
     resale_price: toAmount(document.getElementById('f-resale').value) || null,
-    to_inventory: document.getElementById('f-inv').checked,
-  }));
-  if (r) {
-    toast('تم الشراء وحفظ بيانات البائع في سجل العملاء — ' + r.ref);
-    ['f-name', 'f-phone', 'f-idno', 'f-model', 'f-serial', 'f-notes', 'f-price', 'f-store', 'f-resale'].forEach((f) => document.getElementById(f).value = '');
-    const badge = document.getElementById('u-cust-badge');
-    if (badge) {
-      badge.textContent = 'عميل جديد / مسجل';
-      badge.className = 'text-[11px] px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold';
+  };
+  btn.disabled = true;
+  btn.classList.add('opacity-60', 'pointer-events-none');
+  try {
+    let r;
+    if (EDIT_ID) {
+      r = await guard(() => api('used_update', Object.assign({ id: EDIT_ID }, payload)));
+      if (r) {
+        toast('تم تحديث بيانات العملية — ' + r.ref);
+        resetUsedForm();
+        load(document.getElementById('q').value);
+      }
+    } else {
+      r = await guard(() => api('used_create', Object.assign({ to_inventory: document.getElementById('f-inv').checked }, payload)));
+      if (r) {
+        toast('تم الشراء وحفظ بيانات البائع في سجل العملاء — ' + r.ref);
+        resetUsedForm();
+        load(document.getElementById('q').value);
+      }
     }
-    load(document.getElementById('q').value);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('opacity-60', 'pointer-events-none');
   }
 });
 
