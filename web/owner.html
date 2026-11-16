@@ -742,42 +742,11 @@
       `).join('');
 
       $('profiles-grid').querySelectorAll('[data-pprev]').forEach((b) => {
-        b.addEventListener('click', async () => {
-          const diff = await guard(() => api('profile_apply', { key: b.dataset.pprev, dry_run: true }));
-          if (!diff) return;
-          const box = $('profile-preview-box');
-          box.classList.remove('hidden');
-          box.innerHTML = `
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <h4 class="font-bold text-sm text-primary">معاينة التغييرات عند تطبيق: ${esc(diff.label)}</h4>
-              <button type="button" id="btn-confirm-prof-apply" class="px-4 py-1.5 rounded-xl bg-primary text-white text-xs font-bold">تأكيد وتطبيق الآن</button>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
-              <div><span class="font-bold text-emerald-600">سيتم تفعيل:</span> ${diff.to_enable.length ? diff.to_enable.map((x) => esc(x.title)).join('، ') : 'لا يوجد'}</div>
-              <div><span class="font-bold text-amber-600">سيتم تعطيل:</span> ${diff.to_disable.length ? diff.to_disable.map((x) => esc(x.title)).join('، ') : 'لا يوجد'}</div>
-              <div><span class="font-bold text-blue-600">تغييرات الأسماء:</span> ${diff.title_changes.length ? diff.title_changes.map((x) => `${esc(x.from)} ← ${esc(x.to)}`).join('، ') : 'لا يوجد'}</div>
-              <div><span class="font-bold text-purple-600">البيانات التجريبية:</span> ${diff.demo_count || 0} صنف في ${diff.demo_categories || 0} فئة</div>
-            </div>
-            <div class="flex flex-wrap gap-4 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs font-bold">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input id="chk-apply-demo" type="checkbox" checked class="w-4 h-4 accent-blue-600" />
-                <span>تفعيل الأصناف والفئات التجريبية لهذا النشاط</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input id="chk-exclusive-demo" type="checkbox" class="w-4 h-4 accent-blue-600" />
-                <span>إخفاء باقي المنتجات مؤقتاً لعرض منتجات هذا النشاط فقط</span>
-              </label>
-            </div>`;
-          $('btn-confirm-prof-apply').addEventListener('click', () => {
-            const applyDemo = $('chk-apply-demo') ? $('chk-apply-demo').checked : true;
-            const exclDemo = $('chk-exclusive-demo') ? $('chk-exclusive-demo').checked : false;
-            applyProfileNow(diff.profile, applyDemo, exclDemo);
-          });
-        });
+        b.addEventListener('click', () => openProfileApplyPreview(b.dataset.pprev));
       });
 
       $('profiles-grid').querySelectorAll('[data-papply]').forEach((b) => {
-        b.addEventListener('click', () => applyProfileNow(b.dataset.papply, true, false));
+        b.addEventListener('click', () => openProfileApplyPreview(b.dataset.papply));
       });
       $('profiles-grid').querySelectorAll('[data-pedit]').forEach((b) => {
         b.addEventListener('click', () => openProfileModal(b.dataset.pedit));
@@ -791,6 +760,141 @@
             await loadProfiles();
           }
         });
+      });
+    }
+
+    async function openProfileApplyPreview(profileKey) {
+      const diff = await guard(() => api('profile_apply', { key: profileKey, dry_run: true }));
+      if (!diff) return;
+      const box = $('profile-preview-box');
+      box.classList.remove('hidden');
+      box.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h4 class="font-bold text-sm text-primary">تجهيز وتطبيق قالب النشاط: ${esc(diff.label)}</h4>
+          <button type="button" id="btn-confirm-prof-apply" class="px-5 py-2 rounded-xl bg-primary hover:bg-primary-dark text-white text-xs font-bold shadow-sm">
+            تأكيد وتنفيذ الآن
+          </button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+          <div><span class="font-bold text-emerald-600">سيتم تفعيل:</span> ${diff.to_enable.length ? diff.to_enable.map((x) => esc(x.title)).join('، ') : 'لا يوجد'}</div>
+          <div><span class="font-bold text-amber-600">سيتم تعطيل:</span> ${diff.to_disable.length ? diff.to_disable.map((x) => esc(x.title)).join('، ') : 'لا يوجد'}</div>
+          <div><span class="font-bold text-blue-600">تغييرات الأسماء:</span> ${diff.title_changes.length ? diff.title_changes.map((x) => `${esc(x.from)} ← ${esc(x.to)}`).join('، ') : 'لا يوجد'}</div>
+          <div><span class="font-bold text-purple-600">البيانات التجريبية:</span> ${diff.demo_count || 0} صنف في ${diff.demo_categories || 0} فئة</div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-700 space-y-3 text-xs">
+          <div class="font-bold text-slate-800 dark:text-white">1) اختر طريقة التطبيق على قاعدة البيانات:</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <label class="p-3 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer flex items-start gap-2 hover:border-primary">
+              <input type="radio" name="prof-db-mode" value="inplace" checked class="mt-0.5 accent-blue-600" />
+              <div>
+                <div class="font-bold">تطبيق على القاعدة الحالية</div>
+                <div class="text-[11px] text-slate-500">يعدّل الأقسام والمسميات مع الإبقاء على الفواتير والعملاء الحاليين.</div>
+              </div>
+            </label>
+            <label class="p-3 rounded-xl border border-primary/40 bg-primary/5 cursor-pointer flex items-start gap-2 hover:border-primary">
+              <input type="radio" name="prof-db-mode" value="fresh" class="mt-0.5 accent-blue-600" />
+              <div>
+                <div class="font-bold text-primary">إنشاء قاعدة بيانات جديدة ونظيفة لهذا النشاط</div>
+                <div class="text-[11px] text-slate-500">يحفظ نسخة احتياطية كاملة من القاعدة الحالية أولاً، ويبدأ بقاعدة جديدة بها المستخدمون فقط + ما تحدده.</div>
+              </div>
+            </label>
+          </div>
+
+          <div id="inplace-demo-opts" class="flex flex-wrap gap-4 pt-2 border-t border-slate-100 dark:border-slate-800 font-bold">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="chk-apply-demo" type="checkbox" checked class="w-4 h-4 accent-blue-600" />
+              <span>تفعيل البيانات التجريبية لهذا النشاط (${diff.demo_count || 0} صنف)</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="chk-exclusive-demo" type="checkbox" class="w-4 h-4 accent-blue-600" />
+              <span>إخفاء المنتجات والفئات الأخرى مؤقتاً لعرض هذا النشاط فقط</span>
+            </label>
+          </div>
+
+          <div id="fresh-db-opts" class="hidden pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+            <div class="font-bold text-slate-800 dark:text-white">2) هل تحتاج نقل أي بيانات من القاعدة الحالية إلى القاعدة الجديدة؟</div>
+            <div class="flex flex-wrap gap-4 font-bold">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="fresh-carry-yn" value="no" checked class="accent-blue-600" />
+                <span>لا — قاعدة فارغة نظيفة (المستخدمون + إعدادات النشاط + البيانات التجريبية فقط)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="fresh-carry-yn" value="yes" class="accent-blue-600" />
+                <span>نعم — اختر البيانات المطلوب نقلها للقاعدة الجديدة</span>
+              </label>
+            </div>
+            <div id="fresh-carry-checks" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="carry-products" type="checkbox" checked class="w-4 h-4 accent-blue-600" />
+                <span>المنتجات والفئات والأرقام التسلسلية الحالية</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="carry-customers" type="checkbox" class="w-4 h-4 accent-blue-600" />
+                <span>العملاء وأرصدتهم الحالية</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="carry-sales" type="checkbox" class="w-4 h-4 accent-blue-600" />
+                <span>الفواتير والمبيعات والورديات (يفعّل المنتجات والعملاء)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="carry-repairs" type="checkbox" class="w-4 h-4 accent-blue-600" />
+                <span>تذاكر الصيانة والأجهزة المستعملة</span>
+              </label>
+            </div>
+            <div class="flex flex-wrap gap-4 pt-1 font-bold">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="chk-fresh-demo" type="checkbox" checked class="w-4 h-4 accent-blue-600" />
+                <span>إضافة البيانات التجريبية لهذا النشاط في القاعدة الجديدة</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="chk-reset-store" type="checkbox" class="w-4 h-4 accent-blue-600" />
+                <span>تصفير اسم وبيانات المتجر للافتراضي</span>
+              </label>
+            </div>
+          </div>
+        </div>`;
+
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      box.querySelectorAll('input[name="prof-db-mode"]').forEach((r) => {
+        r.addEventListener('change', () => {
+          const isFresh = box.querySelector('input[name="prof-db-mode"]:checked').value === 'fresh';
+          $('inplace-demo-opts').classList.toggle('hidden', isFresh);
+          $('fresh-db-opts').classList.toggle('hidden', !isFresh);
+        });
+      });
+      box.querySelectorAll('input[name="fresh-carry-yn"]').forEach((r) => {
+        r.addEventListener('change', () => {
+          const isYes = box.querySelector('input[name="fresh-carry-yn"]:checked').value === 'yes';
+          $('fresh-carry-checks').classList.toggle('hidden', !isYes);
+        });
+      });
+      $('carry-sales').addEventListener('change', (e) => {
+        if (e.target.checked) {
+          $('carry-products').checked = true;
+          $('carry-customers').checked = true;
+        }
+      });
+
+      $('btn-confirm-prof-apply').addEventListener('click', () => {
+        const isFresh = box.querySelector('input[name="prof-db-mode"]:checked').value === 'fresh';
+        if (!isFresh) {
+          const applyDemo = $('chk-apply-demo').checked;
+          const exclDemo = $('chk-exclusive-demo').checked;
+          applyProfileNow(diff.profile, applyDemo, exclDemo, false, null, false);
+        } else {
+          const isYes = box.querySelector('input[name="fresh-carry-yn"]:checked').value === 'yes';
+          const carryOver = isYes ? {
+            products: $('carry-products').checked,
+            customers: $('carry-customers').checked,
+            sales: $('carry-sales').checked,
+            repairs: $('carry-repairs').checked,
+          } : { products: false, customers: false, sales: false, repairs: false };
+          const applyDemo = $('chk-fresh-demo').checked;
+          const resetStore = $('chk-reset-store').checked;
+          applyProfileNow(diff.profile, applyDemo, false, true, carryOver, resetStore);
+        }
       });
     }
 
@@ -878,14 +982,27 @@
       $('modal-profile-form').classList.remove('flex');
     }
 
-    async function applyProfileNow(key, applyDemo = true, exclusiveDemo = false) {
-      if (!confirm('تطبيق قالب النشاط المختار؟ لن تُحذف أي فواتير أو عملاء سابقين.')) return;
-      const res = await guard(() => api('profile_apply', { key, dry_run: false, apply_demo: applyDemo, exclusive_demo: exclusiveDemo }));
+    async function applyProfileNow(key, applyDemo = true, exclusiveDemo = false, freshDb = false, carryOver = null, resetStoreInfo = false) {
+      const msg = freshDb
+        ? 'سيتم حفظ نسخة احتياطية كاملة من القاعدة الحالية ثم إنشاء قاعدة بيانات جديدة ونظيفة لهذا النشاط. هل تريد المتابعة؟'
+        : 'تطبيق قالب النشاط المختار على القاعدة الحالية؟ لن تُحذف أي فواتير أو عملاء سابقين.';
+      if (!confirm(msg)) return;
+      const res = await guard(() => api('profile_apply', {
+        key,
+        dry_run: false,
+        apply_demo: applyDemo,
+        exclusive_demo: exclusiveDemo,
+        fresh_db: freshDb,
+        carry_over: carryOver,
+        reset_store_info: resetStoreInfo,
+      }));
       if (res && res.applied) {
-        const extra = res.demo_seeded ? ` وتفعيل ${res.demo_seeded} صنفاً تجريبياً` : '';
-        toast(`تم تطبيق نشاط «${res.label}»${extra} بنجاح`);
+        const extra = res.demo_seeded ? ` (${res.demo_seeded} صنف تجريبي)` : '';
+        const bkpNote = res.backup_file ? ` · تم حفظ نسخة احتياطية: ${res.backup_file}` : '';
+        toast(`تم ${res.fresh_db ? 'إنشاء القاعدة الجديدة وتطبيق' : 'تطبيق'} نشاط «${res.label}»${extra}${bkpNote}`, 'success');
         await loadProfiles();
         await loadModules();
+        await loadAuditLog();
       }
     }
 

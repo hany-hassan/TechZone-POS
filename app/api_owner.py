@@ -7,6 +7,7 @@ import secrets
 import time
 
 import db
+import fresh_db as fresh_db_mod
 from api_common import ApiError, OWNER_SESSION_TTL, _STATE, _int, _money
 from modules_map import MODULE_REQUIRES
 from profiles import BUSINESS_PROFILES, DEFAULT_BUSINESS_PROFILES, DEFAULT_LABELS, DEFAULT_RETAIL_CATS, DEFAULT_RETAIL_SKUS, LABEL_KEYS
@@ -863,8 +864,17 @@ class OwnerMixin:
             applied_count += 1
         return applied_count
 
-    def profile_apply(self, key, dry_run=True, apply_demo=True, exclusive_demo=False):
-        """معاينة أو تطبيق ملف نشاط تجاري (الأقسام + المسميات + البيانات التجريبية) دون فقد بيانات."""
+    def profile_apply(
+        self,
+        key,
+        dry_run=True,
+        apply_demo=True,
+        exclusive_demo=False,
+        fresh_db=False,
+        carry_over=None,
+        reset_store_info=False,
+    ):
+        """معاينة أو تطبيق ملف نشاط تجاري (على القاعدة الحالية أو بإنشاء قاعدة جديدة نظيفة مع حفظ نسخة احتياطية)."""
         self._owner()
         key = str(key or "").strip()
         with db.connect() as conn:
@@ -911,66 +921,101 @@ class OwnerMixin:
                     "demo_categories": len(demo_cats),
                     "apply_demo": bool(apply_demo),
                     "exclusive_demo": bool(exclusive_demo),
+                    "fresh_db": bool(fresh_db),
                 }
 
-            self._owner_backup_once()
-            ts = db.now()
-            for m in rows:
-                if not m["is_builtin"]:
-                    continue
-                next_en = 1 if ((m["key"] in target_set) or bool(m["is_core"])) else 0
-                next_title = prof_titles.get(m["key"], default_titles.get(m["key"], m["title"]))
+            if not fresh_db:
+                self._owner_backup_once()
+                ts = db.now()
+                for m in rows:
+                    if not m["is_builtin"]:
+                        continue
+                    next_en = 1 if ((m["key"] in target_set) or bool(m["is_core"])) else 0
+                    next_title = prof_titles.get(m["key"], default_titles.get(m["key"], m["title"]))
+                    conn.execute(
+                        "UPDATE modules SET enabled=?, title=?, updated_at=? WHERE key=?",
+                        (next_en, next_title, ts, m["key"]),
+                    )
+
+                conn.execute("DELETE FROM ui_labels")
+                for lk, lv in (prof.get("labels") or {}).items():
+                    if lk in LABEL_KEYS and str(lv).strip():
+                        conn.execute("INSERT INTO ui_labels(key, value) VALUES(?,?)", (lk, str(lv).strip()[:40]))
+
+                demo_seeded = 0
+                if apply_demo:
+                    demo_seeded = self._apply_profile_demo_catalog(conn, key, demo_catalog, exclusive_demo=bool(exclusive_demo))
+
                 conn.execute(
-                    "UPDATE modules SET enabled=?, title=?, updated_at=? WHERE key=?",
-                    (next_en, next_title, ts, m["key"]),
+                    "INSERT INTO settings(key, value) VALUES('hide_empty_categories', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    ("1" if (apply_demo and exclusive_demo) else "0",),
                 )
 
-            conn.execute("DELETE FROM ui_labels")
-            for lk, lv in (prof.get("labels") or {}).items():
-                if lk in LABEL_KEYS and str(lv).strip():
-                    conn.execute("INSERT INTO ui_labels(key, value) VALUES(?,?)", (lk, str(lv).strip()[:40]))
-
-            demo_seeded = 0
-            if apply_demo:
-                demo_seeded = self._apply_profile_demo_catalog(conn, key, demo_catalog, exclusive_demo=bool(exclusive_demo))
-
-            st = self._settings(conn)
-            ver = _int(st.get("structure_version", "1"), 1) + 1
-            conn.execute(
-                "INSERT INTO settings(key, value) VALUES('business_profile', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (key,),
-            )
-            conn.execute(
-                "INSERT INTO settings(key, value) VALUES('structure_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (str(ver),),
-            )
-            cur_sp = st.get("default_start_page") or "pos"
-            if cur_sp != "desktop" and cur_sp not in target_set:
+                st = self._settings(conn)
+                ver = _int(st.get("structure_version", "1"), 1) + 1
                 conn.execute(
-                    "INSERT INTO settings(key, value) VALUES('default_start_page', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                    (prof.get("default_start_page") or "pos",),
+                    "INSERT INTO settings(key, value) VALUES('business_profile', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (key,),
                 )
+                conn.execute(
+                    "INSERT INTO settings(key, value) VALUES('structure_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (str(ver),),
+                )
+                cur_sp = st.get("default_start_page") or "pos"
+                if cur_sp != "desktop" and cur_sp not in target_set:
+                    conn.execute(
+                        "INSERT INTO settings(key, value) VALUES('default_start_page', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                        (prof.get("default_start_page") or "pos",),
+                    )
 
-            self._audit(
-                conn,
-                "profile_apply",
-                key,
-                {"enabled": len(target_set), "disabled": len(to_disable), "demo_seeded": demo_seeded},
-            )
-            conn.commit()
-            self._modules_cache = None
-            self._settings_cache = None
-            return {
-                "dry_run": False,
-                "applied": True,
-                "profile": key,
-                "label": prof["label"],
-                "to_enable": to_enable,
-                "to_disable": to_disable,
-                "title_changes": title_changes,
-                "labels": dict(prof.get("labels") or {}),
-                "demo_seeded": demo_seeded,
-            }
+                self._audit(
+                    conn,
+                    "profile_apply",
+                    key,
+                    {"enabled": len(target_set), "disabled": len(to_disable), "demo_seeded": demo_seeded, "exclusive_demo": bool(exclusive_demo)},
+                )
+                conn.commit()
+                self._modules_cache = None
+                self._settings_cache = None
+                return {
+                    "dry_run": False,
+                    "applied": True,
+                    "fresh_db": False,
+                    "profile": key,
+                    "label": prof["label"],
+                    "to_enable": to_enable,
+                    "to_disable": to_disable,
+                    "title_changes": title_changes,
+                    "labels": dict(prof.get("labels") or {}),
+                    "demo_seeded": demo_seeded,
+                }
+
+        # إغلاق اتصال القراءة ثم بناء القاعدة الجديدة النظيفة واستبدالها بأمان
+        fresh_res = fresh_db_mod.build_fresh_profile_db(
+            profile=prof,
+            apply_demo_fn=self._apply_profile_demo_catalog,
+            apply_demo=bool(apply_demo),
+            carry_over=carry_over,
+            reset_store_info=bool(reset_store_info),
+        )
+        self._modules_cache = None
+        self._settings_cache = None
+        if _STATE.get("owner"):
+            _STATE["owner"]["backed_up"] = True
+        return {
+            "dry_run": False,
+            "applied": True,
+            "fresh_db": True,
+            "backup_file": fresh_res.get("backup_file"),
+            "carried": fresh_res.get("carried"),
+            "profile": key,
+            "label": prof["label"],
+            "to_enable": to_enable,
+            "to_disable": to_disable,
+            "title_changes": title_changes,
+            "labels": dict(prof.get("labels") or {}),
+            "demo_seeded": fresh_res.get("demo_seeded", 0),
+        }
 
     def labels_save(self, labels):
         """حفظ مسميات الواجهة المخصصة مع التحقق من المفاتيح المسموحة والطول."""

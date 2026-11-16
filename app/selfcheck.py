@@ -1119,6 +1119,69 @@ check("labels_save validates keys/length and updates ui_config labels",
       and call(a, "labels_save", {"labels": {"product_singular": ""}})["ok"]
       and "product_singular" not in call(a, "ui_config")["data"]["labels"])
 call(a, "module_delete", {"key": _custom_keep})
+
+# اختبار exclusive_demo في إخفاء الفئات الفارغة + اختبار fresh_db مع نقل انتقائي للبيانات وبدونه
+call(a, "categories_save", {"name": "فئة فارغة اختبارية"})
+_excl_apply = call(a, "profile_apply", {"key": "pharmacy", "dry_run": False, "apply_demo": True, "exclusive_demo": True})
+_excl_cats = [c["name"] for c in call(a, "categories")["data"]]
+check("exclusive_demo hides empty non-profile categories too",
+      _excl_apply["ok"] and "فئة فارغة اختبارية" not in _excl_cats and "مسكنات وخافض حرارة" in _excl_cats)
+call(a, "profile_apply", {"key": "retail_electronics", "dry_run": False, "apply_demo": True, "exclusive_demo": False})
+
+# اختبار إنشاء قاعدة جديدة نظيفة مع نقل العملاء فقط أولاً (قبل المسح الكامل)
+_fresh_cust = call(a, "profile_apply", {
+    "key": "pharmacy",
+    "dry_run": False,
+    "apply_demo": True,
+    "fresh_db": True,
+    "carry_over": {"products": False, "customers": True, "sales": False, "repairs": False},
+})
+with db.connect() as _fc:
+    _fc_fk = _fc.execute("PRAGMA foreign_key_check").fetchall()
+    _fc_custs = _fc.execute("SELECT COUNT(*) c FROM customers").fetchone()["c"]
+    _fc_sales = _fc.execute("SELECT COUNT(*) c FROM sales").fetchone()["c"]
+    _fc_prods = _fc.execute("SELECT COUNT(*) c FROM products").fetchone()["c"]
+    _fc_users = _fc.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
+check("fresh_db with selective customer carry-over keeps users & customers/debt, wipes sales & seeds demo only",
+      _fresh_cust["ok"]
+      and _fresh_cust["data"]["fresh_db"]
+      and _fresh_cust["data"]["backup_file"]
+      and "before_fresh_profile_db" in _fresh_cust["data"]["backup_file"]
+      and not _fc_fk
+      and _fc_users >= 2
+      and _fc_custs > 0
+      and _fc_sales == 0
+      and _fc_prods == 11)
+
+# اختبار إنشاء قاعدة جديدة فارغة تماماً (المستخدمون + البيانات التجريبية للنشاط فقط)
+_fresh_empty = call(a, "profile_apply", {
+    "key": "restaurant",
+    "dry_run": False,
+    "apply_demo": True,
+    "fresh_db": True,
+    "carry_over": {"products": False, "customers": False, "sales": False, "repairs": False},
+    "reset_store_info": True,
+})
+with db.connect() as _fe:
+    _fe_fk = _fe.execute("PRAGMA foreign_key_check").fetchall()
+    _fe_custs = _fe.execute("SELECT COUNT(*) c FROM customers").fetchone()["c"]
+    _fe_sales = _fe.execute("SELECT COUNT(*) c FROM sales").fetchone()["c"]
+    _fe_repairs = _fe.execute("SELECT COUNT(*) c FROM repairs").fetchone()["c"]
+    _fe_cats = _fe.execute("SELECT COUNT(*) c FROM categories").fetchone()["c"]
+    _fe_prods = _fe.execute("SELECT COUNT(*) c FROM products").fetchone()["c"]
+    _fe_users = _fe.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
+    _fe_own = _fe.execute("SELECT COUNT(*) c FROM owner_auth").fetchone()["c"]
+check("fresh_db empty keeps users & owner_auth only + restaurant demo catalog with zero FK errors",
+      _fresh_empty["ok"]
+      and not _fe_fk
+      and _fe_users >= 2
+      and _fe_own == 1
+      and _fe_custs == 0
+      and _fe_sales == 0
+      and _fe_repairs == 0
+      and _fe_cats == 6
+      and _fe_prods == 11)
+
 call(a, "owner_logout")
 
 # 13f) التحقق من واجهات وضع المالك وإغلاق الجلسة عند إغلاق النافذة — المرحلة 5

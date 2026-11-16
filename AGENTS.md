@@ -55,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (192 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (195 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -74,6 +74,7 @@ project001/
 │   ├── api_owner.py     # OwnerMixin: owner auth, module registry, profiles, labels & audit log
 │   ├── modules_map.py   # API_MODULE_MAP, CORE_METHODS & MODULE_REQUIRES server guard map
 │   ├── profiles.py      # DEFAULT_BUSINESS_PROFILES (with demo_catalog) & DEFAULT_LABELS/LABEL_KEYS
+│   ├── fresh_db.py      # Clean per-profile DB builder with selective data carry-over & safety backup
 │   ├── api_inventory.py # InventoryMixin: categories, products, serials & stock adjustments
 │   ├── api_customers.py # CustomersMixin: customer CRM, debt summary, ledger history & vouchers
 │   ├── api_installments.py # InstallmentsMixin: installment contracts, schedules, collections, alerts & WhatsApp reminders
@@ -82,7 +83,7 @@ project001/
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
 │   ├── db.py            # SQLite schema (28 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (192 checks)
+│   └── selfcheck.py     # Comprehensive automated regression suite (195 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
@@ -149,12 +150,21 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 192 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 195 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-16 — Owner Control Enhancement (Isolated Worktree): Fresh Clean DB per Profile & Empty-Category Fix
+- **Fresh Profile Database Builder (`app/fresh_db.py`, `app/api_owner.py`)**:
+  1. Added `build_fresh_profile_db()` and `fresh_db` / `carry_over` / `reset_store_info` options to `profile_apply()`.
+  2. Always takes a full `before_fresh_profile_db` SQLite backup before replacing the live DB atomically via SQLite Online Backup API after running `PRAGMA foreign_key_check`.
+  3. Always preserves `users`, `owner_auth`, `owner_audit_log`, `business_profiles`, `settings`, and target `modules`/`ui_labels`; optionally carries over selected operational groups (`products`, `customers` with clean `OPEN-BAL` adjustment rows when sales are omitted, `sales`, `repairs`), or creates a clean DB with only users + profile demo catalog.
+- **Categories Visibility Fix (`app/api_inventory.py`)**: Updated `InventoryMixin.categories()` to hide empty non-profile categories (`HAVING COUNT(p.id) > 0`) when `hide_empty_categories='1'` (`exclusive_demo`), resetting cleanly when disabled or when a new category is created.
+- **Owner UI (`web/owner.html`, `web/app.css`)**: Upgraded profile preview/apply panel (`#profile-preview-box`) with DB mode selector (in-place vs. fresh clean DB) and selective carry-over checklist; rebuilt `web/app.css`.
+- **Verification (`app/selfcheck.py`)**: Added 3 checks covering `exclusive_demo` category hiding, selective customer carry-over `fresh_db`, and clean empty `fresh_db` (`195/195` passing, `contract ok (107 names)`).
 
 ### 2026-11-16 — Owner Control Enhancement (Isolated Worktree): Editable Business Profiles CRUD & Per-Profile Demo Catalogs
 - **Database Schema (`app/db.py`, `app/profiles.py`, `app/api_inventory.py`)**:

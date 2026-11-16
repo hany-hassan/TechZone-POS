@@ -35,12 +35,14 @@ class InventoryMixin:
     def categories(self):
         self._user()
         with db.connect() as conn:
+            hide_empty = self._settings(conn).get("hide_empty_categories") == "1"
+            having = "HAVING COUNT(p.id) > 0" if hide_empty else ""
             rows = conn.execute(
-                """SELECT c.id, c.name, COUNT(p.id) n FROM categories c
+                f"""SELECT c.id, c.name, COUNT(p.id) n FROM categories c
                    LEFT JOIN products p ON p.category_id=c.id AND p.active=1
                    WHERE c.demo_profile IS NULL
                       OR EXISTS (SELECT 1 FROM products p2 WHERE p2.category_id=c.id AND p2.active=1)
-                   GROUP BY c.id ORDER BY c.name"""
+                   GROUP BY c.id {having} ORDER BY c.name"""
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -54,6 +56,11 @@ class InventoryMixin:
                 cur = conn.execute("INSERT INTO categories(name) VALUES(?)", (name,))
             except sqlite3.IntegrityError:
                 raise ApiError("توجد فئة بهذا الاسم مسبقاً")
+            conn.execute(
+                "INSERT INTO settings(key, value) VALUES('hide_empty_categories', '0') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+            )
+            self._settings_cache = None
             return {"id": cur.lastrowid}
 
     def categories_delete(self, id):
