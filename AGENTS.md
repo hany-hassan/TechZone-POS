@@ -24,6 +24,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | [`docs/PRD.md`](docs/PRD.md) | Product requirements, personas, scope, and page functional specs | Arabic |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phased roadmap, quality gates, and milestone checklists | Arabic |
 | [`docs/IMPLEMENTATION-PLAN.md`](docs/IMPLEMENTATION-PLAN.md) | Step-by-step technical plan for security, shop features & refactoring | Arabic |
+| [`docs/OWNER-CONTROL-PLAN.md`](docs/OWNER-CONTROL-PLAN.md) | Owner mode, module registry, business profiles & recovery key implementation plan | English |
 | [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md) | Pending architectural questions and design decisions | Arabic |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System architecture, IPC bridge, sequence flows, and directory tree | English |
 | [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 19 tables schema, minor-unit money rules, and 16-permission matrix | English |
@@ -54,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (158 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (169 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -70,6 +71,7 @@ project001/
 │   ├── api.py           # Facade Api class composing 8 domain mixins (plus re-exports)
 │   ├── api_common.py    # Shared state, money/format helpers, phone normalization, PDF/WhatsApp Win32 & ledger helpers
 │   ├── api_auth.py      # AuthSettingsMixin: login, users, permissions, profile & settings/backups
+│   ├── api_owner.py     # OwnerMixin: owner-mode auth, recovery key, admin PIN reset & audit log
 │   ├── api_inventory.py # InventoryMixin: categories, products, serials & stock adjustments
 │   ├── api_customers.py # CustomersMixin: customer CRM, debt summary, ledger history & vouchers
 │   ├── api_installments.py # InstallmentsMixin: installment contracts, schedules, collections, alerts & WhatsApp reminders
@@ -77,10 +79,11 @@ project001/
 │   ├── api_quotes.py    # QuotesMixin: B2B quotations, A4 invoices & conversion to sales
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
-│   ├── db.py            # SQLite schema (23 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (158 checks)
+│   ├── db.py            # SQLite schema (25 tables), connection wrapper, seed, migration & backups
+│   └── selfcheck.py     # Comprehensive automated regression suite (169 checks)
 ├── web/
-│   ├── index.html       # Smart login screen (auto role/user detection by PIN & force-PIN security)
+│   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
+│   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
 │   ├── desktop.html     # TechZone OS hybrid desktop shell (dock, start menu, iframes)
 │   ├── pos.html         # High-speed retail POS cashier (with global hardware barcode listener)
 │   ├── sales_quotes.html# Official B2B A4 sales invoices & price quotations
@@ -144,12 +147,23 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 158 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 169 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-16 — Owner Control Phase 1 (Isolated Worktree): Owner Auth, Recovery Key & Admin PIN Reset
+- **Isolated Branch/Worktree**: Executed on branch `feat/phase-a-performance` in `../project001-worker/` per `docs/OWNER-CONTROL-PLAN.md`.
+- **Database Schema (`app/db.py`)**: Added `owner_auth` and `owner_audit_log` tables (additive schema + `_ensure_schema_columns`), plus `hash_secret()` PBKDF2-SHA256 helper.
+- **Backend Owner Session & Mixin (`app/api_common.py`, `app/api_auth.py`, `app/api_owner.py`, `app/api.py`)**:
+  1. Added independent `_STATE["owner"]` session with 10-minute sliding idle timeout (`OWNER_SESSION_TTL = 600`), cleared on `logout()` and `owner_logout()`.
+  2. Implemented `OwnerMixin`: `owner_status`, `owner_setup` (admin-only first run, returns one-time 20-char recovery key), `owner_login` (5-attempt / 15-min persistent DB lockout), `owner_logout`, `owner_change_passphrase`, `owner_recover` (rotates recovery key), `owner_reset_admin_pin` (accepts passphrase or recovery key, enforces PIN strength & uniqueness), and `owner_audit_list`.
+- **Frontend (`web/owner.html`, `web/index.html`, `web/desktop.html`)**:
+  1. Created `web/owner.html` (first-run setup wizard, one-time recovery key reveal, owner login + lockout countdown, recovery flow, passphrase change, and audit log viewer).
+  2. Added 2-second long-press entry on store logo/name in `web/index.html` and Start Menu header in `web/desktop.html`, plus "نسيت رمز المدير؟" modal in `web/index.html`.
+- **Verification (`app/selfcheck.py`)**: Added 11 Phase 1 checks; `169/169` checks pass (`contract ok (93 names)`).
 
 ### 2026-11-15 — Phase D (Isolated Worktree): Installments Management System (نظام الأقساط)
 - **Isolated Branch/Worktree**: Executed on branch `feat/phase-a-performance` in `../project001-worker/` keeping `main` and production DB untouched.

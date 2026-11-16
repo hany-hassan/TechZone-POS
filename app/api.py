@@ -21,6 +21,7 @@ from api_auth import AuthSettingsMixin
 from api_customers import CustomersMixin
 from api_installments import InstallmentsMixin
 from api_inventory import InventoryMixin
+from api_owner import OwnerMixin
 from api_quotes import QuotesMixin
 from api_reports import ReportsMixin
 from api_sales import SalesMixin
@@ -29,6 +30,7 @@ from api_services import ServicesMixin
 
 class Api(
     AuthSettingsMixin,
+    OwnerMixin,
     InventoryMixin,
     CustomersMixin,
     InstallmentsMixin,

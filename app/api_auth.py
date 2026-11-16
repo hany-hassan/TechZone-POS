@@ -468,6 +468,7 @@ class AuthSettingsMixin:
 
     def logout(self):
         _STATE["user"] = None
+        _STATE["owner"] = None
         return True
 
     # ---------------------------------------------------------- إعدادات

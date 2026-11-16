@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>وضع المالك الرئيسي — إدارة الهيكلة</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="icon" type="image/png" href="icon.png" />
+  <link href="app.css" rel="stylesheet" />
+  <script>if (localStorage.getItem('tz-theme') === 'dark') document.documentElement.classList.add('dark');</script>
+  <style>
+    .owner-tab-btn.active {
+      background: var(--tz-accent, #137fec);
+      color: #ffffff;
+      box-shadow: 0 8px 20px -4px rgba(19, 127, 236, 0.45);
+    }
+    .rec-key-box {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      letter-spacing: 0.12em;
+      direction: ltr;
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 font-display min-h-screen p-4 md:p-6">
+  <div class="max-w-5xl mx-auto flex flex-col gap-5">
+    <!-- Top Header -->
+    <header class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-4 md:p-5 shadow-sm flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/25 shrink-0">
+          <span class="material-icons-round text-2xl">admin_panel_settings</span>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-xl font-bold text-slate-900 dark:text-white">وضع المالك الرئيسي (Owner Control)</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">التحكم الهيكلي في الأقسام، نوع النشاط التجاري، والمسميات — محمي بعبارة مرور مستقلة</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span id="owner-timer-badge" class="hidden px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold font-num"></span>
+        <button id="btn-owner-logout" type="button" class="hidden px-3.5 py-2 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-600 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
+          <span class="material-icons-round text-base">lock</span>
+          <span>إغلاق وضع المالك</span>
+        </button>
+        <a id="btn-back-home" href="index.html" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold flex items-center gap-1.5 hover:border-primary transition-colors">
+          <span class="material-icons-round text-base">arrow_forward</span>
+          <span>العودة للبرنامج</span>
+        </a>
+        <button onclick="toggleTheme()" type="button" class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold hover:border-primary transition-colors" title="تبديل المظهر">
+          <span class="material-icons-round text-base text-amber-500 dark:hidden">dark_mode</span>
+          <span class="material-icons-round text-base text-sky-400 hidden dark:inline">light_mode</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- View 1: Setup Wizard (Not Configured) -->
+    <section id="view-setup" class="hidden bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-6 md:p-8 shadow-sm max-w-xl mx-auto w-full">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+          <span class="material-icons-round text-2xl">verified_user</span>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-slate-900 dark:text-white">إعداد وضع المالك لأول مرة</h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400">أنشئ عبارة مرور خاصة بصاحب البرنامج لا يعرفها الموظفون أو مدير المحل</p>
+        </div>
+      </div>
+
+      <div id="setup-need-admin" class="hidden p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-bold leading-relaxed mb-4">
+        يجب تسجيل الدخول بحساب <strong>مدير النظام (Admin)</strong> أولاً لتتمكن من تفعيل وضع المالك لأول مرة.
+        <div class="mt-3">
+          <a href="index.html" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 text-white font-bold">الانتقال لتسجيل الدخول</a>
+        </div>
+      </div>
+
+      <form id="form-setup" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">عبارة مرور المالك (8 أحرف على الأقل)</label>
+          <input id="setup-pass" type="password" minlength="8" maxlength="128" required autocomplete="new-password"
+            class="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm focus:outline-none focus:border-primary"
+            placeholder="مثال: MyShop#Owner2026" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">تأكيد عبارة المرور</label>
+          <input id="setup-pass2" type="password" minlength="8" maxlength="128" required autocomplete="new-password"
+            class="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm focus:outline-none focus:border-primary"
+            placeholder="أعد كتابة عبارة المرور" />
+        </div>
+        <button type="submit" class="w-full py-3 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-sm shadow-lg shadow-primary/25 flex items-center justify-center gap-2">
+          <span class="material-icons-round text-lg">key</span>
+          <span>تفعيل وضع المالك وإصدار مفتاح الاسترداد</span>
+        </button>
+      </form>
+    </section>
+
+    <!-- View 1b: One-Time Recovery Key Reveal -->
+    <section id="view-recovery-reveal" class="hidden bg-white dark:bg-surface-dark rounded-2xl border-2 border-amber-400 dark:border-amber-600 p-6 md:p-8 shadow-lg max-w-xl mx-auto w-full">
+      <div class="flex items-center gap-3 mb-3 text-amber-600 dark:text-amber-400">
+        <span class="material-icons-round text-3xl">warning</span>
+        <h2 class="text-lg font-bold">احفظ مفتاح الاسترداد الآن — يظهر مرة واحدة فقط!</h2>
+      </div>
+      <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
+        هذا المفتاح هو الوسيلة الوحيدة لاستعادة عبارة مرور المالك أو تصفير رمز المدير إذا نسيتهما. لا يُخزن نصاً داخل البرنامج ولن يظهر مجدداً.
+      </p>
+      <div class="p-4 rounded-xl bg-slate-900 text-emerald-400 text-center font-bold text-lg rec-key-box select-all border border-slate-700 mb-4" id="reveal-key-text"></div>
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button id="btn-copy-rec-key" type="button" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold flex items-center justify-center gap-1.5">
+          <span class="material-icons-round text-base">content_copy</span>
+          <span>نسخ المفتاح</span>
+        </button>
+      </div>
+      <label class="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 mb-4 cursor-pointer">
+        <input id="chk-rec-saved" type="checkbox" class="w-4 h-4 accent-blue-600" />
+        <span>أؤكد أنني حفظت مفتاح الاسترداد في مكان آمن خارج الجهاز</span>
+      </label>
+      <button id="btn-continue-after-setup" type="button" disabled class="w-full py-3 rounded-xl bg-primary text-white font-bold text-sm opacity-50 cursor-not-allowed transition-all">
+        متابعة إلى لوحة تحكم المالك
+      </button>
+    </section>
+
+    <!-- View 2: Owner Login & Recovery -->
+    <section id="view-login" class="hidden bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-6 md:p-8 shadow-sm max-w-md mx-auto w-full">
+      <div id="login-panel">
+        <div class="text-center mb-5">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-3">
+            <span class="material-icons-round text-3xl">lock</span>
+          </div>
+          <h2 class="text-lg font-bold text-slate-900 dark:text-white">دخول المالك الرئيسي</h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">أدخل عبارة مرور المالك لفتح إعدادات الهيكلة والأقسام</p>
+        </div>
+        <div id="owner-lock-box" class="hidden mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold"></div>
+        <form id="form-owner-login" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">عبارة مرور المالك</label>
+            <input id="login-pass" type="password" required autocomplete="current-password"
+              class="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm focus:outline-none focus:border-primary"
+              placeholder="••••••••" />
+          </div>
+          <button id="btn-owner-signin" type="submit" class="w-full py-3 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-sm shadow-lg shadow-primary/25">
+            فتح لوحة المالك
+          </button>
+        </form>
+        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-center">
+          <button id="btn-show-recover" type="button" class="text-xs font-bold text-primary hover:underline">
+            نسيت عبارة مرور المالك؟ الاستعادة بمفتاح الاسترداد
+          </button>
+        </div>
+      </div>
+
+      <div id="recover-panel" class="hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-bold text-slate-900 dark:text-white">استعادة عبارة مرور المالك</h2>
+          <button id="btn-back-login" type="button" class="text-xs font-bold text-slate-500 hover:text-primary">رجوع</button>
+        </div>
+        <form id="form-owner-recover" class="space-y-3.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">مفتاح الاسترداد (XXXXX-XXXXX-XXXXX-XXXXX)</label>
+            <input id="rec-key-inp" type="text" required dir="ltr"
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm rec-key-box uppercase focus:outline-none focus:border-primary"
+              placeholder="XXXXX-XXXXX-XXXXX-XXXXX" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">عبارة المرور الجديدة (8 أحرف على الأقل)</label>
+            <input id="rec-new-pass" type="password" minlength="8" maxlength="128" required
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm focus:outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">تأكيد عبارة المرور الجديدة</label>
+            <input id="rec-new-pass2" type="password" minlength="8" maxlength="128" required
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm focus:outline-none focus:border-primary" />
+          </div>
+          <button type="submit" class="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm">
+            تعيين عبارة مرور جديدة وتوليد مفتاح استرداد جديد
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- View 3: Owner Dashboard -->
+    <section id="view-dashboard" class="hidden flex flex-col gap-5">
+      <!-- Tabs -->
+      <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-3 shadow-sm flex flex-wrap gap-2">
+        <button type="button" data-otab="security" class="owner-tab-btn active px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+          <span class="material-icons-round text-base">shield</span>
+          <span>الأمان وكلمة السر</span>
+        </button>
+        <button type="button" data-otab="audit" class="owner-tab-btn px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+          <span class="material-icons-round text-base">history</span>
+          <span>سجل التدقيق</span>
+        </button>
+      </div>
+
+      <!-- Tab: Security -->
+      <div id="opane-security" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+          <h3 class="font-bold text-base mb-1 flex items-center gap-2">
+            <span class="material-icons-round text-primary">password</span>
+            <span>تغيير عبارة مرور المالك</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">حدّث عبارة مرور وضع المالك بشكل دوري.</p>
+          <form id="form-change-pass" class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold mb-1">عبارة المرور الحالية</label>
+              <input id="chg-old" type="password" required class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold mb-1">عبارة المرور الجديدة (8 أحرف على الأقل)</label>
+              <input id="chg-new" type="password" minlength="8" maxlength="128" required class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold mb-1">تأكيد عبارة المرور الجديدة</label>
+              <input id="chg-new2" type="password" minlength="8" maxlength="128" required class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm" />
+            </div>
+            <button type="submit" class="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white text-xs font-bold">
+              حفظ عبارة المرور الجديدة
+            </button>
+          </form>
+        </div>
+
+        <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm flex flex-col gap-3">
+          <h3 class="font-bold text-base flex items-center gap-2 text-amber-600 dark:text-amber-400">
+            <span class="material-icons-round">info</span>
+            <span>تنبيهات الأمان والاسترداد</span>
+          </h3>
+          <ul class="text-xs text-slate-600 dark:text-slate-300 space-y-2 list-disc pr-4 leading-relaxed">
+            <li>تنتهي جلسة المالك تلقائياً بعد 10 دقائق من الخمول أو عند تسجيل الخروج.</li>
+            <li>في حال نسيان رمز دخول مدير المحل (Admin)، يمكن تصفيره من شاشة الدخول عبر رابط «نسيت رمز المدير؟» باستخدام عبارة مرور المالك أو مفتاح الاسترداد.</li>
+            <li>احتفظ بنسخة ورقية أو خارجية من مفتاح الاسترداد، ولا تشاركه مع موظفي المحل.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Tab: Audit Log -->
+      <div id="opane-audit" class="hidden bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-base flex items-center gap-2">
+            <span class="material-icons-round text-primary">fact_check</span>
+            <span>سجل تغييرات المالك الرئيسي</span>
+          </h3>
+          <button id="btn-refresh-audit" type="button" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold flex items-center gap-1">
+            <span class="material-icons-round text-sm">refresh</span>
+            <span>تحديث</span>
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-right">
+            <thead>
+              <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-500">
+                <th class="py-2 px-3">التاريخ والوقت</th>
+                <th class="py-2 px-3">الإجراء</th>
+                <th class="py-2 px-3">الهدف</th>
+                <th class="py-2 px-3">التفاصيل</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let OWNER_TIMER_HANDLE = null;
+    let OWNER_LOCK_TIMER = null;
+
+    function showView(id) {
+      ['view-setup', 'view-recovery-reveal', 'view-login', 'view-dashboard'].forEach((v) => {
+        const el = $(v);
+        if (el) el.classList.toggle('hidden', v !== id);
+      });
+    }
+
+    function startOwnerSessionCountdown(secondsLeft) {
+      if (OWNER_TIMER_HANDLE) clearInterval(OWNER_TIMER_HANDLE);
+      const badge = $('owner-timer-badge');
+      const logoutBtn = $('btn-owner-logout');
+      if (!secondsLeft || secondsLeft <= 0) {
+        badge.classList.add('hidden');
+        logoutBtn.classList.add('hidden');
+        return;
+      }
+      badge.classList.remove('hidden');
+      logoutBtn.classList.remove('hidden');
+      let rem = Math.floor(secondsLeft);
+      const render = () => {
+        const m = Math.floor(rem / 60);
+        const s = rem % 60;
+        badge.textContent = `جلسة المالك: ${m}:${String(s).padStart(2, '0')}`;
+        if (rem <= 0) {
+          clearInterval(OWNER_TIMER_HANDLE);
+          OWNER_TIMER_HANDLE = null;
+          toast('انتهت جلسة المالك تلقائياً لعدم النشاط', 'warn');
+          initOwnerPage();
+        }
+        rem -= 1;
+      };
+      render();
+      OWNER_TIMER_HANDLE = setInterval(render, 1000);
+    }
+
+    function showOwnerLock(msg) {
+      const box = $('owner-lock-box');
+      if (!box) return;
+      const m = String(msg || '').match(/\[LOCKED:(\d+)\]/);
+      if (!m) {
+        box.textContent = msg;
+        box.classList.remove('hidden');
+        return;
+      }
+      if (OWNER_LOCK_TIMER) clearInterval(OWNER_LOCK_TIMER);
+      const end = Date.now() + parseInt(m[1], 10) * 1000;
+      $('btn-owner-signin').disabled = true;
+      box.classList.remove('hidden');
+      const tick = () => {
+        const rem = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+        const min = Math.floor(rem / 60);
+        const sec = rem % 60;
+        box.textContent = `تم إيقاف المحاولات مؤقتاً. المتبقي: ${min}:${String(sec).padStart(2, '0')}`;
+        if (rem <= 0) {
+          clearInterval(OWNER_LOCK_TIMER);
+          OWNER_LOCK_TIMER = null;
+          box.classList.add('hidden');
+          $('btn-owner-signin').disabled = false;
+        }
+      };
+      tick();
+      OWNER_LOCK_TIMER = setInterval(tick, 1000);
+    }
+
+    function revealRecoveryKey(key) {
+      $('reveal-key-text').textContent = key;
+      $('chk-rec-saved').checked = false;
+      const btn = $('btn-continue-after-setup');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      showView('view-recovery-reveal');
+    }
+
+    async function loadAuditLog() {
+      const rows = await guard(() => api('owner_audit_list', { limit: 100 }));
+      if (!rows) return;
+      const tbody = $('audit-tbody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-slate-400">لا توجد أحداث مسجلة بعد</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => `
+        <tr>
+          <td class="py-2 px-3 font-num whitespace-nowrap">${esc(r.ts)}</td>
+          <td class="py-2 px-3 font-bold">${esc(r.action)}</td>
+          <td class="py-2 px-3">${esc(r.target || '—')}</td>
+          <td class="py-2 px-3 text-slate-500 dark:text-slate-400 font-num">${esc(JSON.stringify(r.details || {}))}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function initOwnerPage() {
+      try {
+        const sess = await api('session');
+        if (sess && sess.user) {
+          $('btn-back-home').href = 'desktop.html';
+        } else {
+          $('btn-back-home').href = 'index.html';
+        }
+        const st = await api('owner_status');
+        if (!st.configured) {
+          startOwnerSessionCountdown(0);
+          const isAdmin = !!(sess && sess.user && sess.user.role === 'admin');
+          $('setup-need-admin').classList.toggle('hidden', isAdmin);
+          $('form-setup').classList.toggle('hidden', !isAdmin);
+          showView('view-setup');
+          return;
+        }
+        if (st.active) {
+          startOwnerSessionCountdown(st.seconds_left);
+          showView('view-dashboard');
+          await loadAuditLog();
+          return;
+        }
+        startOwnerSessionCountdown(0);
+        showView('view-login');
+        if (st.locked_until && st.locked_until > Date.now() / 1000) {
+          showOwnerLock(`[LOCKED:${Math.ceil(st.locked_until - Date.now() / 1000)}]`);
+        } else {
+          $('owner-lock-box').classList.add('hidden');
+          $('btn-owner-signin').disabled = false;
+        }
+      } catch (e) {
+        toast(e.message || 'تعذر تحميل حالة وضع المالك', 'error');
+      }
+    }
+
+    document.querySelectorAll('[data-otab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.otab;
+        document.querySelectorAll('[data-otab]').forEach((b) => b.classList.toggle('active', b === btn));
+        ['security', 'audit'].forEach((p) => {
+          const el = $('opane-' + p);
+          if (el) el.classList.toggle('hidden', p !== tab);
+        });
+        if (tab === 'audit') loadAuditLog();
+      });
+    });
+
+    $('form-setup').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const p1 = $('setup-pass').value.trim();
+      const p2 = $('setup-pass2').value.trim();
+      if (p1.length < 8) { toast('عبارة المرور يجب أن تكون 8 أحرف على الأقل', 'error'); return; }
+      if (p1 !== p2) { toast('عبارتا المرور غير متطابقتين', 'error'); return; }
+      const res = await guard(() => api('owner_setup', { passphrase: p1 }));
+      if (res && res.recovery_key) {
+        toast('تم تفعيل وضع المالك بنجاح', 'success');
+        revealRecoveryKey(res.recovery_key);
+      }
+    });
+
+    $('chk-rec-saved').addEventListener('change', (e) => {
+      const btn = $('btn-continue-after-setup');
+      btn.disabled = !e.target.checked;
+      btn.classList.toggle('opacity-50', !e.target.checked);
+      btn.classList.toggle('cursor-not-allowed', !e.target.checked);
+    });
+
+    $('btn-copy-rec-key').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText($('reveal-key-text').textContent.trim());
+        toast('تم نسخ مفتاح الاسترداد إلى الحافظة', 'success');
+      } catch (e) {
+        toast('حدد المفتاح وانسخه يدوياً', 'warn');
+      }
+    });
+
+    $('btn-continue-after-setup').addEventListener('click', () => initOwnerPage());
+
+    $('form-owner-login').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const p = $('login-pass').value;
+      try {
+        const res = await api('owner_login', { passphrase: p });
+        $('login-pass').value = '';
+        if (res && res.active) {
+          toast('تم فتح وضع المالك', 'success');
+          initOwnerPage();
+        }
+      } catch (err) {
+        showOwnerLock(err.message || 'عبارة المرور غير صحيحة');
+      }
+    });
+
+    $('btn-show-recover').addEventListener('click', () => {
+      $('login-panel').classList.add('hidden');
+      $('recover-panel').classList.remove('hidden');
+    });
+    $('btn-back-login').addEventListener('click', () => {
+      $('recover-panel').classList.add('hidden');
+      $('login-panel').classList.remove('hidden');
+    });
+
+    $('form-owner-recover').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const rk = $('rec-key-inp').value.trim();
+      const p1 = $('rec-new-pass').value.trim();
+      const p2 = $('rec-new-pass2').value.trim();
+      if (p1.length < 8) { toast('عبارة المرور الجديدة يجب أن تكون 8 أحرف على الأقل', 'error'); return; }
+      if (p1 !== p2) { toast('عبارتا المرور غير متطابقتين', 'error'); return; }
+      const res = await guard(() => api('owner_recover', { recovery_key: rk, new_passphrase: p1 }));
+      if (res && res.recovery_key) {
+        $('rec-key-inp').value = '';
+        $('rec-new-pass').value = '';
+        $('rec-new-pass2').value = '';
+        $('recover-panel').classList.add('hidden');
+        $('login-panel').classList.remove('hidden');
+        toast('تمت استعادة عبارة المرور وإصدار مفتاح استرداد جديد', 'success');
+        revealRecoveryKey(res.recovery_key);
+      }
+    });
+
+    $('form-change-pass').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const oldP = $('chg-old').value;
+      const p1 = $('chg-new').value.trim();
+      const p2 = $('chg-new2').value.trim();
+      if (p1.length < 8) { toast('عبارة المرور الجديدة يجب أن تكون 8 أحرف على الأقل', 'error'); return; }
+      if (p1 !== p2) { toast('عبارتا المرور غير متطابقتين', 'error'); return; }
+      const ok = await guard(() => api('owner_change_passphrase', { old_passphrase: oldP, new_passphrase: p1 }));
+      if (ok) {
+        $('chg-old').value = '';
+        $('chg-new').value = '';
+        $('chg-new2').value = '';
+        toast('تم تغيير عبارة مرور المالك بنجاح', 'success');
+        loadAuditLog();
+      }
+    });
+
+    $('btn-owner-logout').addEventListener('click', async () => {
+      await guard(() => api('owner_logout'));
+      toast('تم إغلاق جلسة المالك', 'success');
+      initOwnerPage();
+    });
+
+    $('btn-refresh-audit').addEventListener('click', loadAuditLog);
+
+    initOwnerPage();
+  </script>
+</body>
+</html>

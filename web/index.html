@@ -204,6 +204,7 @@
         <div
           class="bg-slate-50 dark:bg-slate-900/50 p-3 flex justify-between items-center text-xs text-slate-400 border-t border-slate-100 dark:border-slate-800">
           <span id="login-mode-badge" class="font-arabic">وضع الدخول: الرمز السري المباشر</span>
+          <button id="btn-forgot-admin-pin" type="button" class="text-primary hover:underline font-bold">نسيت رمز المدير؟</button>
           <span class="flex items-center gap-1">
             <span class="w-2 h-2 rounded-full bg-green-500"></span>
             متصل بالنظام المحلي
@@ -255,6 +256,51 @@
           <span>حفظ الرمز السري والدخول للنظام</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Reset Admin PIN via Owner Secret Modal -->
+  <div id="modal-reset-admin-pin" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-md w-full border border-slate-200 dark:border-slate-700 overflow-hidden text-right">
+      <div class="p-5 bg-primary/10 border-b border-primary/20 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center shrink-0">
+            <span class="material-icons-round text-xl">lock_reset</span>
+          </div>
+          <div>
+            <h3 class="font-bold text-base text-slate-900 dark:text-white">استعادة رمز مدير النظام</h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">باستخدام عبارة مرور المالك أو مفتاح الاسترداد</p>
+          </div>
+        </div>
+        <button id="btn-close-reset-admin" type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>
+      <form id="form-reset-admin-pin" class="p-5 space-y-3.5">
+        <div id="reset-admin-err" class="hidden p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold"></div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">عبارة مرور المالك أو مفتاح الاسترداد:</label>
+          <input id="inp-owner-secret-reset" type="password" required autocomplete="off"
+            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+            placeholder="أدخل عبارة مرور المالك أو مفتاح الاسترداد" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">رمز المدير الجديد (4 إلى 8 أرقام):</label>
+          <input id="inp-new-admin-pin" type="password" maxlength="24" required
+            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-center text-lg font-numeric tracking-widest focus:ring-2 focus:ring-primary focus:outline-none"
+            placeholder="••••" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">تأكيد رمز المدير الجديد:</label>
+          <input id="inp-confirm-admin-pin" type="password" maxlength="24" required
+            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-center text-lg font-numeric tracking-widest focus:ring-2 focus:ring-primary focus:outline-none"
+            placeholder="••••" />
+        </div>
+        <button type="submit" class="w-full py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20">
+          <span class="material-icons-round text-lg">check_circle</span>
+          <span>تعيين رمز المدير الجديد</span>
+        </button>
+      </form>
     </div>
   </div>
   <script src="app.js"></script>
@@ -638,6 +684,62 @@
       }
       applyLoginModeUI();
     })();
+
+    // دخول وضع المالك الرئيسي بالضغط المطوّل (ثانيتين) على شعار أو اسم المحل
+    (function bindOwnerLongPress() {
+      let timer = null;
+      const startHold = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { location.href = 'owner.html'; }, 2000);
+      };
+      const cancelHold = () => { clearTimeout(timer); timer = null; };
+      ['login-logo-box', 'login-store-name', 'login-mobile-logo-box', 'login-mobile-store-name'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('pointerdown', startHold);
+        el.addEventListener('pointerup', cancelHold);
+        el.addEventListener('pointerleave', cancelHold);
+        el.addEventListener('pointercancel', cancelHold);
+      });
+    })();
+
+    // تصفير رمز المدير عبر عبارة مرور المالك أو مفتاح الاسترداد
+    document.getElementById('btn-forgot-admin-pin').addEventListener('click', () => {
+      const m = document.getElementById('modal-reset-admin-pin');
+      document.getElementById('reset-admin-err').classList.add('hidden');
+      document.getElementById('inp-owner-secret-reset').value = '';
+      document.getElementById('inp-new-admin-pin').value = '';
+      document.getElementById('inp-confirm-admin-pin').value = '';
+      m.classList.remove('hidden');
+      m.classList.add('flex');
+      setTimeout(() => document.getElementById('inp-owner-secret-reset').focus(), 80);
+    });
+    document.getElementById('btn-close-reset-admin').addEventListener('click', () => {
+      const m = document.getElementById('modal-reset-admin-pin');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    });
+    document.getElementById('form-reset-admin-pin').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBox = document.getElementById('reset-admin-err');
+      const showErr = (msg) => { errBox.textContent = msg; errBox.classList.remove('hidden'); };
+      errBox.classList.add('hidden');
+      const secret = document.getElementById('inp-owner-secret-reset').value.trim();
+      const p1 = document.getElementById('inp-new-admin-pin').value.trim();
+      const p2 = document.getElementById('inp-confirm-admin-pin').value.trim();
+      if (!secret) { showErr('يرجى إدخال عبارة مرور المالك أو مفتاح الاسترداد'); return; }
+      if (p1.length < 4) { showErr('الرمز الجديد يجب أن يتكون من 4 خانات على الأقل'); return; }
+      if (p1 !== p2) { showErr('الرمزان غير متطابقين'); return; }
+      try {
+        await api('owner_reset_admin_pin', { secret, new_pin: p1 });
+        toast('تم تحديث رمز مدير النظام بنجاح — يمكنك الدخول الآن', 'success');
+        const m = document.getElementById('modal-reset-admin-pin');
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+      } catch (err) {
+        showErr(err.message || 'تعذر تصفير رمز المدير');
+      }
+    });
   </script>
 </body>
 

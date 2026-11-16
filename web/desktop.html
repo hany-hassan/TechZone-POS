@@ -808,7 +808,7 @@
     <!-- ===== قائمة ابدأ (Windows 11 Start Menu) ===== -->
     <div id="os-start-menu" class="hidden">
       <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
+        <div id="start-owner-trigger" class="flex items-center gap-2 cursor-pointer select-none" title="اضغط مطولاً لمدة ثانيتين لفتح وضع المالك">
           <div class="w-8 h-8 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center overflow-hidden shrink-0">
             <img src="icon.png" alt="TechZone" class="w-5 h-5 object-contain"/>
           </div>
@@ -1819,6 +1819,21 @@ document.getElementById('start-logout-btn').addEventListener('click', async () =
   await guard(() => api('logout'));
   location.href = 'index.html';
 });
+
+(function bindStartOwnerLongPress() {
+  const el = document.getElementById('start-owner-trigger');
+  if (!el) return;
+  let timer = null;
+  const startHold = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { location.href = 'owner.html'; }, 2000);
+  };
+  const cancelHold = () => { clearTimeout(timer); timer = null; };
+  el.addEventListener('pointerdown', startHold);
+  el.addEventListener('pointerup', cancelHold);
+  el.addEventListener('pointerleave', cancelHold);
+  el.addEventListener('pointercancel', cancelHold);
+})();
 
 document.addEventListener('click', (e) => {
   const sm = document.getElementById('os-start-menu');

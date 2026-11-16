@@ -13,7 +13,10 @@ from decimal import Decimal, ROUND_HALF_UP
 import db
 
 # حالة الجلسة (مستخدم واحد، نافذة واحدة) — الدور والصلاحيات تُقرأ من هنا وليس من JS
-_STATE = {"user": None}
+_STATE = {"user": None, "owner": None}
+
+# مدة خمول جلسة المالك الرئيسي بالثواني (10 دقائق)
+OWNER_SESSION_TTL = 600
 
 # حماية من هجمات التخمين (brute-force) على تسجيل الدخول
 _LOGIN_ATTEMPTS = {}  # key -> {"count": int, "locked_until": float}
@@ -685,6 +688,33 @@ class _BaseApiMixin:
         if u["role"] != "admin":
             raise ApiError("ممنوع: للمدير فقط")
         return u
+
+    def _owner_is_active(self) -> bool:
+        own = _STATE.get("owner")
+        if not own:
+            return False
+        if float(own.get("until", 0) or 0) <= time.time():
+            _STATE["owner"] = None
+            return False
+        return True
+
+    def _owner(self):
+        if not self._owner_is_active():
+            raise ApiError("وضع المالك الرئيسي غير نشط أو انتهت الجلسة — يرجى تسجيل الدخول")
+        _STATE["owner"]["until"] = time.time() + OWNER_SESSION_TTL
+        return _STATE["owner"]
+
+    def _owner_backup_once(self) -> None:
+        own = _STATE.get("owner")
+        if own and not own.get("backed_up"):
+            db.backup_database("before_structure_change")
+            own["backed_up"] = True
+
+    def _audit(self, conn, action: str, target: str | None = None, details: dict | None = None) -> None:
+        conn.execute(
+            "INSERT INTO owner_audit_log(ts, action, target, details) VALUES(?,?,?,?)",
+            (db.now(), str(action), target, json.dumps(details or {}, ensure_ascii=False)),
+        )
 
     def _settings(self, conn):
         cache = getattr(self, "_settings_cache", None)

@@ -432,6 +432,23 @@ CREATE TABLE IF NOT EXISTS installment_payments (
   ref_no TEXT,
   notes TEXT
 );
+CREATE TABLE IF NOT EXISTS owner_auth (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  pass_hash BLOB NOT NULL,
+  pass_salt BLOB NOT NULL,
+  recovery_hash BLOB NOT NULL,
+  recovery_salt BLOB NOT NULL,
+  fail_state TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS owner_audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT,
+  details TEXT NOT NULL DEFAULT '{}'
+);
 """
 
 
@@ -481,6 +498,11 @@ def now() -> str:
 
 def hash_pin(pin: str, salt: bytes) -> bytes:
     return hashlib.pbkdf2_hmac("sha256", pin.encode("utf-8"), salt, 200_000)
+
+
+def hash_secret(secret: str, salt: bytes) -> bytes:
+    """تجزئة عبارة مرور المالك أو مفتاح الاسترداد باستخدام PBKDF2-SHA256 (200 ألف دورة)."""
+    return hashlib.pbkdf2_hmac("sha256", secret.encode("utf-8"), salt, 200_000)
 
 
 def parse_user_perms(role: str, raw_perms: str | None) -> dict:
@@ -865,6 +887,27 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
               method TEXT NOT NULL DEFAULT 'cash' CHECK (method IN ('cash','wallet')),
               ref_no TEXT,
               notes TEXT
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS owner_auth (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              pass_hash BLOB NOT NULL,
+              pass_salt BLOB NOT NULL,
+              recovery_hash BLOB NOT NULL,
+              recovery_salt BLOB NOT NULL,
+              fail_state TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS owner_audit_log (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              ts TEXT NOT NULL,
+              action TEXT NOT NULL,
+              target TEXT,
+              details TEXT NOT NULL DEFAULT '{}'
             )"""
         )
 

@@ -881,6 +881,56 @@ inst_html_text = (ROOT / "web" / "installments.html").read_text(encoding="utf-8"
 check("installments.html exists with create/detail/pay modals",
       "id=\"create-modal\"" in inst_html_text and "id=\"detail-modal\"" in inst_html_text and "id=\"pay-modal\"" in inst_html_text)
 
+# 13b) وضع المالك الرئيسي — المرحلة 1 (المصادقة، القفل، مفتاح الاسترداد، وتصفير رمز المدير)
+call(a, "login", {"username": "cashier", "pin": "1111"})
+check("owner_setup rejected for cashier", not call(a, "owner_setup", {"passphrase": "OwnerSecret#2026"})["ok"])
+check("owner_setup rejects short passphrase", (call(a, "login", {"username": "admin", "pin": "1234"})["ok"] and not call(a, "owner_setup", {"passphrase": "short"})["ok"]))
+ow_setup = call(a, "owner_setup", {"passphrase": "OwnerSecret#2026"})
+rec_key_1 = ow_setup.get("data", {}).get("recovery_key", "") if ow_setup["ok"] else ""
+check("owner_setup succeeds for admin & returns one-time recovery key",
+      ow_setup["ok"] and len(rec_key_1) >= 20 and call(a, "owner_status")["data"]["active"])
+check("owner_setup cannot run twice", not call(a, "owner_setup", {"passphrase": "AnotherSecret#2026"})["ok"])
+check("owner logout clears owner session & admin cannot call owner-only methods",
+      call(a, "owner_logout")["ok"] and not call(a, "owner_audit_list", {})["ok"] and not call(a, "owner_change_passphrase", {"old_passphrase": "OwnerSecret#2026", "new_passphrase": "NewSecret#2026"})["ok"])
+check("logout clears owner session too",
+      call(a, "owner_login", {"passphrase": "OwnerSecret#2026"})["ok"] and call(a, "logout")["ok"] and not call(a, "owner_status")["data"]["active"])
+# اختبار القفل بعد 5 محاولات خاطئة واستمراره عبر مثيل جديد
+for _ in range(4):
+    call(a, "owner_login", {"passphrase": "WrongOwnerSecret"})
+lock_resp = call(a, "owner_login", {"passphrase": "WrongOwnerSecret"})
+a_reloaded = api_mod.Api()
+lock_persist = call(a_reloaded, "owner_login", {"passphrase": "OwnerSecret#2026"})
+check("owner lockout triggers on 5th wrong attempt & persists across reconnect",
+      (not lock_resp["ok"]) and "[LOCKED:" in lock_resp["error"] and (not lock_persist["ok"]) and "[LOCKED:" in lock_persist["error"])
+# مسح القفل لاختبار الاسترداد وتصفير رمز المدير
+with db.connect() as _oc:
+    _oc.execute("UPDATE owner_auth SET fail_state='{\"count\":0,\"locked_until\":0}' WHERE id=1")
+ow_rec = call(a, "owner_recover", {"recovery_key": rec_key_1, "new_passphrase": "RecoveredOwner#2026"})
+rec_key_2 = ow_rec.get("data", {}).get("recovery_key", "") if ow_rec["ok"] else ""
+check("owner_recover rotates recovery key & invalidates old key",
+      ow_rec["ok"] and rec_key_2 and rec_key_2 != rec_key_1 and not call(a, "owner_recover", {"recovery_key": rec_key_1, "new_passphrase": "Xyz123456"})["ok"])
+# اختبار انتهاء صلاحية جلسة المالك بعد المهلة
+import api_common as _api_common_mod
+_orig_time_fn = _api_common_mod.time.time
+try:
+    _api_common_mod._STATE["owner"] = {"until": _orig_time_fn() + 10, "backed_up": False}
+    _api_common_mod.time.time = lambda: _orig_time_fn() + 120
+    check("owner session expires after idle timeout", not call(a, "owner_audit_list", {})["ok"])
+finally:
+    _api_common_mod.time.time = _orig_time_fn
+# تصفير رمز المدير بعبارة المرور وبمفتاح الاسترداد + التحقق من عدم كشف التجزئات
+rst_weak = call(a, "owner_reset_admin_pin", {"secret": "RecoveredOwner#2026", "new_pin": "1234"})
+rst_pass = call(a, "owner_reset_admin_pin", {"secret": "RecoveredOwner#2026", "new_pin": "7531"})
+rst_rec = call(a, "owner_reset_admin_pin", {"secret": rec_key_2, "new_pin": "8642"})
+check("owner_reset_admin_pin enforces PIN strength & works with passphrase and recovery key",
+      (not rst_weak["ok"]) and rst_pass["ok"] and rst_rec["ok"] and call(a, "login", {"username": "admin", "pin": "8642"})["ok"])
+call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
+aud_rows = call(a, "owner_audit_list", {"limit": 20})
+_raw_dump = repr(aud_rows) + repr(call(a, "owner_status"))
+check("audit log records owner actions & secrets never leak in responses",
+      aud_rows["ok"] and len(aud_rows["data"]) >= 4 and "RecoveredOwner#2026" not in _raw_dump and "pass_hash" not in _raw_dump and "recovery_hash" not in _raw_dump)
+call(a, "owner_logout")
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:
