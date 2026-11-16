@@ -1623,6 +1623,7 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
     const ph = document.getElementById(phoneId);
     const sug = document.getElementById(sugId);
     inp.addEventListener('input', async () => {
+      if (!isModuleEnabled('customers')) { sug.classList.add('hidden'); return; }
       const q = inp.value.trim();
       if (q.length < 1) { sug.classList.add('hidden'); return; }
       const res = await guard(() => api('customers_search', { q }));

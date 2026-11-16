@@ -48,13 +48,17 @@ class AuthSettingsMixin:
                 locked_until = float(info.get("locked_until", 0.0) or 0.0)
             except Exception:
                 locked_until = 0.0
+            enabled_keys = self._enabled_module_keys(conn)
+            def_sp = st.get("default_start_page") or "pos"
+            if def_sp != "desktop" and def_sp not in enabled_keys:
+                def_sp = self._first_enabled_module(conn)
             return {
                 "store_name": (st.get("store_name") or "تك زون للإلكترونيات").strip() or "تك زون للإلكترونيات",
                 "store_address": st.get("store_address") or "",
                 "store_phone": st.get("store_phone") or "",
                 "receipt_logo": st.get("receipt_logo") or "",
                 "login_mode": st.get("login_mode") or "pin_only",
-                "default_start_page": st.get("default_start_page") or "pos",
+                "default_start_page": def_sp,
                 "default_start_mode": st.get("default_start_mode") or "window",
                 "os_default_theme": st.get("os_default_theme") or "dark",
                 "login_locked_until": locked_until,
@@ -107,10 +111,10 @@ class AuthSettingsMixin:
         """حفظ تفضيلات العرض والفتح الخاصة بالمستخدم الحالي في قاعدة البيانات بشكل دائم لكل مستخدم."""
         u = self._user()
         uid = u["id"]
-        valid_pages = {"", "pos", "sales_quotes", "inventory", "customers", "repair", "history", "buy_used", "reports", "settings", "receipt", "desktop"}
         valid_modes = {"", "window", "maximized", "direct"}
         valid_themes = {"", "light", "dark"}
         with db.connect() as conn:
+            valid_pages = {"", "desktop"} | self._enabled_module_keys(conn)
             if reset_theme:
                 conn.execute(
                     "UPDATE users SET wallpaper=NULL, custom_bg=NULL, accent_color=NULL, theme_mode=NULL WHERE id=?",
@@ -252,7 +256,11 @@ class AuthSettingsMixin:
             st = self._settings(conn)
             updated = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
             _STATE["user"] = self._row_to_user_dict(updated)
-            _STATE["user"]["effective_start_page"] = _STATE["user"].get("start_page") or st.get("default_start_page") or "pos"
+            eff_sp = _STATE["user"].get("start_page") or st.get("default_start_page") or "pos"
+            enabled_keys = self._enabled_module_keys(conn)
+            if eff_sp != "desktop" and eff_sp not in enabled_keys:
+                eff_sp = self._first_enabled_module(conn)
+            _STATE["user"]["effective_start_page"] = eff_sp
             _STATE["user"]["effective_start_mode"] = _STATE["user"].get("start_mode") or st.get("default_start_mode") or "window"
             _STATE["user"]["force_change_pin"] = bool(
                 updated["role"] == "admin" and hmac.compare_digest(db.hash_pin("1234", updated["pin_salt"]), updated["pin_hash"])
@@ -274,11 +282,8 @@ class AuthSettingsMixin:
         else:
             pin = None
 
-        valid_pages = {"", "pos", "sales_quotes", "inventory", "customers", "repair", "history", "buy_used", "reports", "settings", "receipt", "desktop"}
         valid_modes = {"", "window", "maximized", "direct"}
-        sp_val = str(start_page).strip() if start_page is not None else None
-        if sp_val is not None and sp_val not in valid_pages:
-            sp_val = None
+        sp_raw = str(start_page).strip() if start_page is not None else None
         sm_val = str(start_mode).strip() if start_mode is not None else None
         if sm_val is not None and sm_val not in valid_modes:
             sm_val = None
@@ -291,6 +296,8 @@ class AuthSettingsMixin:
         perms_json = json.dumps(perms_dict, ensure_ascii=False)
 
         with db.connect() as conn:
+            valid_pages = {"", "desktop"} | self._enabled_module_keys(conn)
+            sp_val = sp_raw if (sp_raw is not None and sp_raw in valid_pages) else None
             # التأكد من عدم تكرار الرمز السري بين المستخدمين لتمييز كل مستخدم تلقائياً من الرمز السري فقط
             if pin:
                 target_uid = _int(id) if id else 0
@@ -444,7 +451,11 @@ class AuthSettingsMixin:
             self._settings_cache = None
             _STATE["user"] = self._row_to_user_dict(row)
             out = dict(_STATE["user"])
-            out["effective_start_page"] = out.get("start_page") or st.get("default_start_page") or "pos"
+            eff_sp = out.get("start_page") or st.get("default_start_page") or "pos"
+            enabled_keys = self._enabled_module_keys(conn)
+            if eff_sp != "desktop" and eff_sp not in enabled_keys:
+                eff_sp = self._first_enabled_module(conn)
+            out["effective_start_page"] = eff_sp
             out["effective_start_mode"] = out.get("start_mode") or st.get("default_start_mode") or "window"
             # فحص أمني: هل الحساب الإداري ما زال يستخدم الرمز السري الافتراضي 1234؟
             if row["role"] == "admin" and hmac.compare_digest(db.hash_pin("1234", row["pin_salt"]), row["pin_hash"]):
@@ -461,7 +472,11 @@ class AuthSettingsMixin:
                 row = conn.execute("SELECT * FROM users WHERE id=?", (_STATE["user"]["id"],)).fetchone()
                 if row:
                     _STATE["user"] = self._row_to_user_dict(row)
-                    _STATE["user"]["effective_start_page"] = _STATE["user"].get("start_page") or st.get("default_start_page") or "pos"
+                    eff_sp = _STATE["user"].get("start_page") or st.get("default_start_page") or "pos"
+                    enabled_keys = self._enabled_module_keys(conn)
+                    if eff_sp != "desktop" and eff_sp not in enabled_keys:
+                        eff_sp = self._first_enabled_module(conn)
+                    _STATE["user"]["effective_start_page"] = eff_sp
                     _STATE["user"]["effective_start_mode"] = _STATE["user"].get("start_mode") or st.get("default_start_mode") or "window"
                     _STATE["user"]["force_change_pin"] = bool(row["role"] == "admin" and hmac.compare_digest(db.hash_pin("1234", row["pin_salt"]), row["pin_hash"]))
         return {"user": _STATE["user"]}
@@ -489,9 +504,9 @@ class AuthSettingsMixin:
                     "template_a4_config", "template_pos_config", "pos_categories_config"}
         show = {"tax_enabled", "receipt_show_logo", "receipt_show_barcode", "receipt_show_tax", "receipt_show_payments", "whatsapp_send_enabled"}
         valid_login_modes = {"pin_only", "select_user_pin", "username_password"}
-        valid_start_pages = {"pos", "sales_quotes", "inventory", "customers", "repair", "history", "buy_used", "reports", "settings", "receipt", "desktop"}
         valid_start_modes = {"window", "maximized", "direct"}
         with db.connect() as conn:
+            valid_start_pages = {"desktop"} | self._enabled_module_keys(conn)
             for k, v in kv.items():
                 if k not in allowed or v is None:
                     continue

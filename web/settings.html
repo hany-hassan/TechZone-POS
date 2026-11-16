@@ -894,6 +894,12 @@ $('btn-st-add-pm').addEventListener('click', async () => {
 
 /* ==================== 2) تبويب إعدادات تسجيل الدخول والفتح الافتراضي ==================== */
 function fillLoginTab() {
+  if (window.UI_CONFIG && Array.isArray(window.UI_CONFIG.modules) && window.UI_CONFIG.modules.length) {
+    const sel = $('cfg-default-start-page');
+    sel.innerHTML =
+      window.UI_CONFIG.modules.map((m) => `<option value="${esc(m.key)}">${esc(m.title)}</option>`).join('') +
+      '<option value="desktop">سطح المكتب فقط (بدون فتح أي نافذة تلقائياً)</option>';
+  }
   const mode = SETTINGS.login_mode || 'pin_only';
   const radio = document.querySelector(`input[name="cfg-login-mode"][value="${mode}"]`);
   if (radio) radio.checked = true;

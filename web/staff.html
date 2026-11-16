@@ -383,6 +383,14 @@ document.getElementById('u-save').addEventListener('click', async () => {
 
 (async () => {
   if (!(await pageInit('staff', { perm: 'settings_manage' }))) return;
+  if (window.UI_CONFIG && Array.isArray(window.UI_CONFIG.modules) && window.UI_CONFIG.modules.length) {
+    const sel = document.getElementById('u-start-page');
+    sel.innerHTML =
+      '<option value="">اتباع الافتراضي الذي يحدده الأدمن</option>' +
+      window.UI_CONFIG.modules.map((m) => `<option value="${esc(m.key)}">${esc(m.title)}</option>`).join('') +
+      '<option value="desktop">سطح المكتب فقط بدون نافذة تلقائية</option>';
+    window.UI_CONFIG.modules.forEach((m) => { START_PAGE_LABELS[m.key] = m.title; });
+  }
   renderPermsGrid(null);
   await loadUsers();
 })();

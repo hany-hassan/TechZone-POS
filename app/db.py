@@ -102,6 +102,22 @@ DEFAULT_POS_TEMPLATE = {
     "installment_prefix": "INS-",
 }
 
+DEFAULT_MODULES = (
+    ("pos", "نقاط البيع (الكاشير)", "point_of_sale", "linear-gradient(135deg,#2563eb,#0ea5e9)", "pos.html", [], 10, 0),
+    ("sales_quotes", "المبيعات وعروض الأسعار", "description", "linear-gradient(135deg,#0284c7,#6366f1)", "sales_quotes.html", [], 20, 0),
+    ("customers", "العملاء والمديونيات", "groups", "linear-gradient(135deg,#7c3aed,#a855f7)", "customers.html", ["customers_view", "customers_edit"], 30, 0),
+    ("installments", "نظام الأقساط", "event_repeat", "linear-gradient(135deg,#0ea5e9,#0369a1)", "installments.html", ["installments_view", "installments_manage"], 40, 0),
+    ("inventory", "المخزون والمنتجات", "inventory_2", "linear-gradient(135deg,#059669,#10b981)", "inventory.html", ["inventory_view", "inventory_edit"], 50, 0),
+    ("history", "سجل المبيعات والمرتجعات", "receipt_long", "linear-gradient(135deg,#ea580c,#f97316)", "history.html", [], 60, 0),
+    ("repair", "مركز الصيانة", "build", "linear-gradient(135deg,#d97706,#f59e0b)", "repair.html", ["repair_view", "repair_edit"], 70, 0),
+    ("buy_used", "شراء أجهزة مستعملة", "phonelink_setup", "linear-gradient(135deg,#0d9488,#14b8a6)", "buy_used.html", ["used_manage"], 80, 0),
+    ("reports", "التقارير والتحليلات", "bar_chart", "linear-gradient(135deg,#4f46e5,#6366f1)", "reports.html", ["reports_view"], 90, 0),
+    ("staff", "الموظفون والصلاحيات", "manage_accounts", "linear-gradient(135deg,#0284c7,#2563eb)", "staff.html", ["settings_manage"], 100, 0),
+    ("settings", "إعدادات النظام", "settings", "linear-gradient(135deg,#0f172a,#3b82f6)", "settings.html", ["settings_manage"], 110, 1),
+    ("profile", "ملفي الشخصي وإعداداتي", "account_circle", "linear-gradient(135deg,#8b5cf6,#ec4899)", "profile.html", [], 120, 1),
+    ("receipt", "معاينة وطباعة الإيصال", "print", "linear-gradient(135deg,#475569,#64748b)", "receipt.html", [], 130, 1),
+)
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -448,6 +464,22 @@ CREATE TABLE IF NOT EXISTS owner_audit_log (
   action TEXT NOT NULL,
   target TEXT,
   details TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS modules (
+  key TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  icon TEXT NOT NULL,
+  color TEXT NOT NULL,
+  url TEXT NOT NULL,
+  params TEXT NOT NULL DEFAULT '',
+  perm_keys TEXT NOT NULL DEFAULT '[]',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  is_core INTEGER NOT NULL DEFAULT 0,
+  is_builtin INTEGER NOT NULL DEFAULT 1,
+  clone_of TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 """
 
@@ -910,6 +942,25 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
               details TEXT NOT NULL DEFAULT '{}'
             )"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS modules (
+              key TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              icon TEXT NOT NULL,
+              color TEXT NOT NULL,
+              url TEXT NOT NULL,
+              params TEXT NOT NULL DEFAULT '',
+              perm_keys TEXT NOT NULL DEFAULT '[]',
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              enabled INTEGER NOT NULL DEFAULT 1,
+              is_core INTEGER NOT NULL DEFAULT 0,
+              is_builtin INTEGER NOT NULL DEFAULT 1,
+              clone_of TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )"""
+        )
+        seed_modules_if_empty(conn)
 
         te = conn.execute("SELECT value FROM settings WHERE key='tax_enabled'").fetchone()
         if not te:
@@ -938,6 +989,8 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
         pm_cfg = conn.execute("SELECT value FROM settings WHERE key='custom_payment_methods'").fetchone()
         if not pm_cfg:
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('custom_payment_methods', ?)", (json.dumps(DEFAULT_PAYMENT_METHODS, ensure_ascii=False),))
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('business_profile', 'retail_electronics')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('structure_version', '1')")
         conn.commit()
     except Exception as e:
         print(f"Schema upgrade error: {e}")
@@ -1151,9 +1204,27 @@ def _migrate_customer_ledger(conn: sqlite3.Connection) -> None:
         print(f"Ledger migration error: {e}")
 
 
+def seed_modules_if_empty(conn: sqlite3.Connection) -> None:
+    """زرع الأقسام الافتراضية الـ 13 عند خلو جدول modules فقط (قابل لإعادة التشغيل بأمان)."""
+    if conn.execute("SELECT COUNT(*) c FROM modules").fetchone()["c"] > 0:
+        return
+    t = now()
+    rows = [
+        (key, title, icon, color, url, "", json.dumps(perms, ensure_ascii=False), order, 1, is_core, 1, None, t, t)
+        for key, title, icon, color, url, perms, order, is_core in DEFAULT_MODULES
+    ]
+    conn.executemany(
+        """INSERT INTO modules
+           (key, title, icon, color, url, params, perm_keys, sort_order, enabled, is_core, is_builtin, clone_of, created_at, updated_at)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        rows,
+    )
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     _seed(conn)
+    seed_modules_if_empty(conn)
     conn.commit()
 
 

@@ -931,6 +931,60 @@ check("audit log records owner actions & secrets never leak in responses",
       aud_rows["ok"] and len(aud_rows["data"]) >= 4 and "RecoveredOwner#2026" not in _raw_dump and "pass_hash" not in _raw_dump and "recovery_hash" not in _raw_dump)
 call(a, "owner_logout")
 
+# 13c) سجل الأقسام والحارس الخادمي — المرحلة 2
+import modules_map as _mmap
+_public_api_methods = {n for n in dir(api_mod.Api) if not n.startswith("_") and callable(getattr(api_mod.Api, n)) and n != "call"}
+_unclassified = _public_api_methods - (set(_mmap.API_MODULE_MAP.keys()) | set(_mmap.CORE_METHODS))
+check(f"every public Api method is classified in modules_map ({len(_public_api_methods)} methods)", not _unclassified)
+if _unclassified:
+    print("UNCLASSIFIED METHODS:", _unclassified)
+
+call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
+m_all = call(a, "modules_all")
+check("modules_all returns 13 seeded builtin modules", m_all["ok"] and len(m_all["data"]) == 13)
+check("core modules (settings/profile/receipt) cannot be disabled",
+      (not call(a, "module_toggle", {"key": "settings", "enabled": False})["ok"])
+      and (not call(a, "module_toggle", {"key": "profile", "enabled": False})["ok"])
+      and (not call(a, "module_toggle", {"key": "receipt", "enabled": False})["ok"]))
+check("dependent module toggle refused (inventory while pos/repair/quotes/installments active)",
+      not call(a, "module_toggle", {"key": "inventory", "enabled": False})["ok"])
+for _dep_mod in ("pos", "sales_quotes", "installments", "repair"):
+    assert call(a, "module_toggle", {"key": _dep_mod, "enabled": False})["ok"]
+tog_inv_off = call(a, "module_toggle", {"key": "inventory", "enabled": False})
+ui_off = call(a, "ui_config")
+check("disabling inventory blocks products_search/product_save even for admin while core works",
+      tog_inv_off["ok"]
+      and (not call(a, "products_search", {"q": ""})["ok"])
+      and (not call(a, "product_save", {"sku": "BLK-1", "name": "Blocked"})["ok"])
+      and call(a, "session")["ok"]
+      and call(a, "settings")["ok"]
+      and ui_off["ok"]
+      and not any(m["key"] == "inventory" for m in ui_off["data"]["modules"]))
+check("disabled module rejected as default_start_page in settings_save",
+      not call(a, "settings_save", {"default_start_page": "inventory"})["ok"])
+# إعادة التفعيل عبر modules_reset_defaults واستعادة الترتيب
+rst_mods = call(a, "modules_reset_defaults", {})
+reord = call(a, "module_reorder", {"keys": ["inventory", "pos"]})
+check("re-enable & reorder restore ui_config and inventory API access",
+      rst_mods["ok"]
+      and reord["ok"]
+      and reord["data"][0]["key"] == "inventory"
+      and call(a, "products_search", {"q": ""})["ok"])
+call(a, "modules_reset_defaults", {})
+# اختبار الترحيل غير المدمر على قاعدة بيانات موجودة مسبقاً دون جدول modules
+with db.connect() as _mc:
+    _mc.execute("DROP TABLE modules")
+    _mc.commit()
+db._INITIALIZED_DBS.discard(os.environ["SHOP_DB"])
+with db.connect() as _mc2:
+    _c1 = _mc2.execute("SELECT COUNT(*) c FROM modules").fetchone()["c"]
+    db.seed_modules_if_empty(_mc2)
+    _c2 = _mc2.execute("SELECT COUNT(*) c FROM modules").fetchone()["c"]
+    _p_cnt = _mc2.execute("SELECT COUNT(*) c FROM products").fetchone()["c"]
+check("idempotent module migration preserves existing data and seeds 13 modules once",
+      _c1 == 13 and _c2 == 13 and _p_cnt > 0)
+call(a, "owner_logout")
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:

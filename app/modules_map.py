@@ -1,0 +1,137 @@
+"""خريطة ربط دوال الـ API بأقسام النظام + قواعد التبعية بين الأقسام (الحارس الخادمي)."""
+
+# الدوال الأساسية المسموحة دائماً بغض النظر عن حالة الأقسام الاختيارية
+CORE_METHODS = {
+    # الجلسة والمصادقة وتفضيلات المستخدم
+    "login",
+    "login_config",
+    "logout",
+    "session",
+    "profile_save",
+    "user_pref_save",
+    "users",
+    # الإعدادات والنسخ الاحتياطي والقوالب (settings قسم أساسي)
+    "settings",
+    "settings_save",
+    "templates_get",
+    "templates_save",
+    "payment_methods_get",
+    "payment_methods_save",
+    "db_backup",
+    "backups_list",
+    "db_restore",
+    # الإيصال وقراءة الفاتورة الواحدة (receipt قسم أساسي)
+    "receipt_text",
+    "sale",
+    # واجهة النظام ووضع المالك الرئيسي
+    "ui_config",
+    "owner_status",
+    "owner_setup",
+    "owner_login",
+    "owner_logout",
+    "owner_change_passphrase",
+    "owner_recover",
+    "owner_reset_admin_pin",
+    "owner_audit_list",
+    "modules_all",
+    "module_toggle",
+    "module_save",
+    "module_clone",
+    "module_delete",
+    "module_reorder",
+    "modules_reset_defaults",
+    "profiles_list",
+    "profile_apply",
+    "labels_save",
+}
+
+# ربط كل دالة غير أساسية بمفتاح القسم المسؤول عنها في جدول modules
+API_MODULE_MAP = {
+    # نقاط البيع (pos)
+    "sale_create": "pos",
+    "sale_modify_from_cart": "pos",
+    "pos_categories_config_save": "pos",
+    "shift": "pos",
+    "shift_open": "pos",
+    "shift_close": "pos",
+    "shift_summary": "pos",
+    "whatsapp_send_invoice": "pos",
+    # المبيعات وعروض الأسعار (sales_quotes)
+    "quotations": "sales_quotes",
+    "quotation": "sales_quotes",
+    "quotation_save": "sales_quotes",
+    "quotation_cancel": "sales_quotes",
+    "quotation_delete": "sales_quotes",
+    "quotation_convert_to_sale": "sales_quotes",
+    "whatsapp_send_quote": "sales_quotes",
+    # المخزون والمنتجات (inventory)
+    "categories": "inventory",
+    "categories_save": "inventory",
+    "categories_update": "inventory",
+    "categories_delete": "inventory",
+    "products": "inventory",
+    "products_search": "inventory",
+    "product": "inventory",
+    "product_save": "inventory",
+    "product_delete": "inventory",
+    "product_adjust": "inventory",
+    "serials": "inventory",
+    "serial_add": "inventory",
+    "stock_stats": "inventory",
+    # العملاء والمديونيات (customers)
+    "customers_list": "customers",
+    "customers_search": "customers",
+    "customer": "customers",
+    "customers_save": "customers",
+    "customers_delete": "customers",
+    "customer_history": "customers",
+    "customer_payment_create": "customers",
+    "customer_payment_delete": "customers",
+    # نظام الأقساط (installments)
+    "installments_list": "installments",
+    "installment_alerts": "installments",
+    "installment_detail": "installments",
+    "installment_eligible_sales": "installments",
+    "installment_create": "installments",
+    "installment_pay": "installments",
+    "installment_cancel": "installments",
+    "installment_whatsapp_reminder": "installments",
+    # سجل المبيعات والمرتجعات (history)
+    "sales": "history",
+    "sales_stats": "history",
+    "sale_discount": "history",
+    "sale_return": "history",
+    "history_suggestions": "history",
+    # مركز الصيانة (repair)
+    "repairs": "repair",
+    "repair": "repair",
+    "repair_create": "repair",
+    "repair_update": "repair",
+    "repair_set_status": "repair",
+    "repair_add_part": "repair",
+    "repair_delete": "repair",
+    # شراء أجهزة مستعملة (buy_used)
+    "used": "buy_used",
+    "used_create": "buy_used",
+    "used_update": "buy_used",
+    "used_stats": "buy_used",
+    # التقارير والتحليلات (reports)
+    "report_daily": "reports",
+    "report_monthly": "reports",
+    "report_profit": "reports",
+    "report_top": "reports",
+    "report_low": "reports",
+    "report_movements": "reports",
+    "shifts": "reports",
+    # الموظفون والصلاحيات (staff)
+    "user_save": "staff",
+    "user_delete": "staff",
+}
+
+# تبعيات الأقسام: مفتاح القسم -> الأقسام التي يجب أن تظل مفعلة لكي يعمل
+MODULE_REQUIRES = {
+    "pos": ["inventory"],
+    "sales_quotes": ["inventory"],
+    "installments": ["customers", "inventory"],
+    "repair": ["inventory"],
+}

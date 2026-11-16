@@ -55,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (169 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (177 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -71,7 +71,8 @@ project001/
 │   ├── api.py           # Facade Api class composing 8 domain mixins (plus re-exports)
 │   ├── api_common.py    # Shared state, money/format helpers, phone normalization, PDF/WhatsApp Win32 & ledger helpers
 │   ├── api_auth.py      # AuthSettingsMixin: login, users, permissions, profile & settings/backups
-│   ├── api_owner.py     # OwnerMixin: owner-mode auth, recovery key, admin PIN reset & audit log
+│   ├── api_owner.py     # OwnerMixin: owner auth, module registry, profiles, labels & audit log
+│   ├── modules_map.py   # API_MODULE_MAP, CORE_METHODS & MODULE_REQUIRES server guard map
 │   ├── api_inventory.py # InventoryMixin: categories, products, serials & stock adjustments
 │   ├── api_customers.py # CustomersMixin: customer CRM, debt summary, ledger history & vouchers
 │   ├── api_installments.py # InstallmentsMixin: installment contracts, schedules, collections, alerts & WhatsApp reminders
@@ -79,8 +80,8 @@ project001/
 │   ├── api_quotes.py    # QuotesMixin: B2B quotations, A4 invoices & conversion to sales
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
-│   ├── db.py            # SQLite schema (25 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (169 checks)
+│   ├── db.py            # SQLite schema (26 tables), connection wrapper, seed, migration & backups
+│   └── selfcheck.py     # Comprehensive automated regression suite (177 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
@@ -147,12 +148,26 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 169 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 177 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-16 — Owner Control Phase 2 (Isolated Worktree): Module Registry & Server-Side Guard
+- **Database Schema & Seeding (`app/db.py`)**: Added `modules` table (`DEFAULT_MODULES` for all 13 built-in sections; `settings`, `profile`, `receipt` marked `is_core=1`), idempotent `seed_modules_if_empty()`, and `business_profile` / `structure_version` settings.
+- **Server-Side Guard (`app/modules_map.py`, `app/api.py`, `app/api_common.py`)**:
+  1. Created `modules_map.py` classifying all 100 public `Api` methods into `API_MODULE_MAP` or `CORE_METHODS`, plus `MODULE_REQUIRES` dependency rules.
+  2. Added pre-dispatch guard in `Api.call()` blocking disabled module methods even for `admin`.
+- **Owner Module API & Dynamic Start Pages (`app/api_owner.py`, `app/api_auth.py`)**:
+  1. Added `ui_config`, `modules_all`, `module_toggle` (enforces core protection & dependency checks + automatic pre-change backup), `module_reorder`, and `modules_reset_defaults`.
+  2. Replaced hardcoded start-page sets in `api_auth.py` with dynamic enabled-module validation and safe fallback.
+- **Frontend Dynamic Registry (`web/app.js`, `web/desktop.html`, `web/owner.html`, `web/pos.html`, `web/settings.html`, `web/profile.html`, `web/staff.html`)**:
+  1. `app.js` loads `ui_config`, builds `NAV` dynamically, and enforces direct-page open guard in `pageInit()`.
+  2. `desktop.html` derives `PERMITTED_APPS` from `UI_CONFIG.modules`, guards widgets when modules are disabled, and falls back cleanly.
+  3. Added "الأقسام والهيكلة" tab to `web/owner.html` (toggle, up/down reorder, factory reset) and dynamic start-page dropdowns in `settings.html`, `profile.html`, and `staff.html`.
+- **Verification (`app/selfcheck.py`)**: Added 8 Phase 2 checks including `modules_map` completeness check; `177/177` checks pass (`contract ok (98 names)`).
 
 ### 2026-11-16 — Owner Control Phase 1 (Isolated Worktree): Owner Auth, Recovery Key & Admin PIN Reset
 - **Isolated Branch/Worktree**: Executed on branch `feat/phase-a-performance` in `../project001-worker/` per `docs/OWNER-CONTROL-PLAN.md`.

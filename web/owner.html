@@ -177,7 +177,11 @@
     <section id="view-dashboard" class="hidden flex flex-col gap-5">
       <!-- Tabs -->
       <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-3 shadow-sm flex flex-wrap gap-2">
-        <button type="button" data-otab="security" class="owner-tab-btn active px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+        <button type="button" data-otab="modules" class="owner-tab-btn active px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+          <span class="material-icons-round text-base">apps</span>
+          <span>الأقسام والهيكلة</span>
+        </button>
+        <button type="button" data-otab="security" class="owner-tab-btn px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
           <span class="material-icons-round text-base">shield</span>
           <span>الأمان وكلمة السر</span>
         </button>
@@ -187,8 +191,28 @@
         </button>
       </div>
 
+      <!-- Tab: Modules -->
+      <div id="opane-modules" class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="font-bold text-base flex items-center gap-2">
+              <span class="material-icons-round text-primary">view_module</span>
+              <span>إدارة أقسام النظام</span>
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">تفعيل/تعطيل أي قسم اختياري وإعادة ترتيبه. الأقسام الأساسية محمية من التعطيل.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="btn-reset-modules" type="button" class="px-3.5 py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
+              <span class="material-icons-round text-base">restart_alt</span>
+              <span>استعادة الأقسام الافتراضية</span>
+            </button>
+          </div>
+        </div>
+        <div id="modules-list" class="divide-y divide-slate-100 dark:divide-slate-800"></div>
+      </div>
+
       <!-- Tab: Security -->
-      <div id="opane-security" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div id="opane-security" class="hidden grid grid-cols-1 md:grid-cols-2 gap-5">
         <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
           <h3 class="font-bold text-base mb-1 flex items-center gap-2">
             <span class="material-icons-round text-primary">password</span>
@@ -335,6 +359,72 @@
       showView('view-recovery-reveal');
     }
 
+    let ALL_MODULES = [];
+
+    async function loadModules() {
+      const rows = await guard(() => api('modules_all'));
+      if (!rows) return;
+      ALL_MODULES = rows;
+      const box = $('modules-list');
+      box.innerHTML = rows.map((m, idx) => `
+        <div class="py-3 flex flex-wrap items-center justify-between gap-3 ${m.enabled ? '' : 'opacity-60'}">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm" style="background:${esc(m.color)}">
+              <span class="material-icons-round">${esc(m.icon)}</span>
+            </div>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-bold text-sm text-slate-900 dark:text-white">${esc(m.title)}</span>
+                <span class="text-[11px] px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 font-num">${esc(m.key)}</span>
+                ${m.is_core ? '<span class="text-[10px] px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold">أساسي</span>' : ''}
+                ${!m.is_builtin ? '<span class="text-[10px] px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold">نسخة مخصصة</span>' : ''}
+              </div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 font-num truncate">${esc(m.full_url || m.url)}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" data-mup="${esc(m.key)}" ${idx === 0 ? 'disabled' : ''} class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-primary disabled:opacity-30" title="تحريك لأعلى">
+              <span class="material-icons-round text-base">arrow_upward</span>
+            </button>
+            <button type="button" data-mdn="${esc(m.key)}" ${idx === rows.length - 1 ? 'disabled' : ''} class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-primary disabled:opacity-30" title="تحريك لأسفل">
+              <span class="material-icons-round text-base">arrow_downward</span>
+            </button>
+            <button type="button" data-mtog="${esc(m.key)}" data-men="${m.enabled ? '1' : '0'}" ${m.is_core ? 'disabled' : ''}
+              class="px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${m.is_core ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed' : (m.enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-primary hover:text-white')}">
+              ${m.is_core ? 'مُفعّل دائماً' : (m.enabled ? 'مُفعّل (اضغط للتعطيل)' : 'معطّل (اضغط للتفعيل)')}
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      box.querySelectorAll('[data-mtog]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const key = btn.dataset.mtog;
+          const next = btn.dataset.men !== '1';
+          const res = await guard(() => api('module_toggle', { key, enabled: next }));
+          if (res) {
+            toast(next ? `تم تفعيل «${res.title}»` : `تم تعطيل «${res.title}»`);
+            await loadModules();
+          }
+        });
+      });
+
+      const moveMod = async (key, dir) => {
+        const keys = ALL_MODULES.map((x) => x.key);
+        const i = keys.indexOf(key);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= keys.length) return;
+        [keys[i], keys[j]] = [keys[j], keys[i]];
+        const res = await guard(() => api('module_reorder', { keys }));
+        if (res) {
+          toast('تم تحديث ترتيب الأقسام');
+          await loadModules();
+        }
+      };
+      box.querySelectorAll('[data-mup]').forEach((b) => b.addEventListener('click', () => moveMod(b.dataset.mup, -1)));
+      box.querySelectorAll('[data-mdn]').forEach((b) => b.addEventListener('click', () => moveMod(b.dataset.mdn, 1)));
+    }
+
     async function loadAuditLog() {
       const rows = await guard(() => api('owner_audit_list', { limit: 100 }));
       if (!rows) return;
@@ -373,6 +463,7 @@
         if (st.active) {
           startOwnerSessionCountdown(st.seconds_left);
           showView('view-dashboard');
+          await loadModules();
           await loadAuditLog();
           return;
         }
@@ -393,12 +484,22 @@
       btn.addEventListener('click', () => {
         const tab = btn.dataset.otab;
         document.querySelectorAll('[data-otab]').forEach((b) => b.classList.toggle('active', b === btn));
-        ['security', 'audit'].forEach((p) => {
+        ['modules', 'security', 'audit'].forEach((p) => {
           const el = $('opane-' + p);
           if (el) el.classList.toggle('hidden', p !== tab);
         });
+        if (tab === 'modules') loadModules();
         if (tab === 'audit') loadAuditLog();
       });
+    });
+
+    $('btn-reset-modules').addEventListener('click', async () => {
+      if (!confirm('استعادة جميع الأقسام الافتراضية الـ 13 إلى إعداداتها الأصلية وتفعيلها؟')) return;
+      const res = await guard(() => api('modules_reset_defaults', { purge_custom: false }));
+      if (res) {
+        toast('تمت استعادة الأقسام الافتراضية بنجاح');
+        await loadModules();
+      }
     });
 
     $('form-setup').addEventListener('submit', async (e) => {

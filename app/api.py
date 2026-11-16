@@ -26,6 +26,7 @@ from api_quotes import QuotesMixin
 from api_reports import ReportsMixin
 from api_sales import SalesMixin
 from api_services import ServicesMixin
+from modules_map import API_MODULE_MAP
 
 
 class Api(
@@ -53,6 +54,9 @@ class Api(
         try:
             if name not in self._methods:
                 raise ApiError("نداء غير معروف")
+            mod = API_MODULE_MAP.get(name)
+            if mod and not self._module_enabled(mod):
+                raise ApiError("هذا القسم غير مُفعّل من مدير النظام الرئيسي")
             fn = getattr(self, name)
             if payload is None:
                 data = fn()

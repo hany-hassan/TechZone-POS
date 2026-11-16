@@ -795,7 +795,7 @@
             <div id="w-repairs" class="font-num font-bold text-sm text-purple-600 dark:text-purple-300 mt-0.5">0</div>
           </div>
         </div>
-        <button onclick="TZOS.openApp('pos')" class="w-full mt-3 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-primary/30 transition-all">
+        <button id="w-open-pos-btn" onclick="TZOS.openApp('pos')" class="w-full mt-3 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-primary/30 transition-all">
           <span class="material-icons-round text-base">point_of_sale</span>
           <span>فتح نافذة نقاط البيع (الكاشير)</span>
         </button>
@@ -1028,6 +1028,7 @@ const ACCENT_PRESETS = [
 const WINDOWS = {};
 let TOP_Z = 30;
 let ACTIVE_WIN_ID = null;
+let ACTIVE_APPS = [...OS_APPS];
 let PERMITTED_APPS = [];
 let CURRENT_WP = 'win11-bloom';
 let CURRENT_CUSTOM_BG = null;
@@ -1068,7 +1069,7 @@ const TZOS = {
       this.openWallpaperModal();
       return;
     }
-    const app = PERMITTED_APPS.find((a) => a.id === appId) || OS_APPS.find((a) => a.id === appId);
+    const app = PERMITTED_APPS.find((a) => a.id === appId) || ACTIVE_APPS.find((a) => a.id === appId);
     if (!app) return;
     if (app.perm && !hasPerm(app.perm)) {
       toast('ليست لديك صلاحية لفتح هذا القسم', 'warn');
@@ -1107,7 +1108,7 @@ const TZOS = {
     winEl.style.top = defTop + 'px';
     winEl.dataset.winId = appId;
 
-    const targetUrl = customUrl || app.url;
+    const targetUrl = customUrl || app.full_url || app.url;
     winEl.innerHTML = `
       <div class="tz-win-titlebar" data-drag-bar>
         <div class="flex items-center gap-2.5 min-w-0">
@@ -1204,10 +1205,10 @@ const TZOS = {
       return;
     }
     const clean = href.split('?')[0];
-    const match = OS_APPS.find((a) => a.url === clean);
+    const match = ACTIVE_APPS.find((a) => a.url === clean);
     if (match) {
       this.openApp(match.id, href);
-    } else if (href.startsWith('customer_details.html')) {
+    } else if (href.startsWith('customer_details.html') && isModuleEnabled('customers')) {
       this.openApp('customers', href);
     }
   },
@@ -1679,30 +1680,43 @@ const TZOS = {
   },
 
   async refreshWidgets() {
-    try {
-      const sh = await api('shift');
-      if (sh) {
-        const dot = document.getElementById('os-shift-dot');
-        const txt = document.getElementById('os-shift-text');
-        if (sh.shift) {
-          dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
-          txt.textContent = `وردية مفتوحة (${fmtDT(sh.shift.opened_at).slice(11, 16)})`;
-        } else {
-          dot.className = 'w-2 h-2 rounded-full bg-red-500';
-          txt.textContent = 'الوردية مغلقة — اضغط للفتح';
+    if (isModuleEnabled('pos')) {
+      try {
+        const sh = await api('shift');
+        if (sh) {
+          const dot = document.getElementById('os-shift-dot');
+          const txt = document.getElementById('os-shift-text');
+          if (sh.shift) {
+            dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+            txt.textContent = `وردية مفتوحة (${fmtDT(sh.shift.opened_at).slice(11, 16)})`;
+          } else {
+            dot.className = 'w-2 h-2 rounded-full bg-red-500';
+            txt.textContent = 'الوردية مغلقة — اضغط للفتح';
+          }
+          document.getElementById('w-sales-today').textContent = money((sh.today && sh.today.total) || 0);
+          document.getElementById('w-sales-cnt').textContent = n((sh.today && sh.today.count) || 0);
         }
-        document.getElementById('w-sales-today').textContent = money((sh.today && sh.today.total) || 0);
-        document.getElementById('w-sales-cnt').textContent = n((sh.today && sh.today.count) || 0);
-      }
-      const st = await api('stock_stats');
-      if (st) {
-        document.getElementById('w-low-stock').textContent = n((st.low || 0) + (st.out || 0));
-      }
-      const ss = await api('sales_stats', {});
-      if (ss && ss.repairs) {
-        document.getElementById('w-repairs').textContent = n(ss.repairs.active || 0);
-      }
-    } catch (e) {}
+      } catch (e) {}
+    } else {
+      const txt = document.getElementById('os-shift-text');
+      if (txt) txt.textContent = 'نظام نقاط البيع غير مفعل';
+    }
+    if (isModuleEnabled('inventory')) {
+      try {
+        const st = await api('stock_stats');
+        if (st) {
+          document.getElementById('w-low-stock').textContent = n((st.low || 0) + (st.out || 0));
+        }
+      } catch (e) {}
+    }
+    if (isModuleEnabled('history')) {
+      try {
+        const ss = await api('sales_stats', {});
+        if (ss && ss.repairs) {
+          document.getElementById('w-repairs').textContent = n(ss.repairs.active || 0);
+        }
+      } catch (e) {}
+    }
   },
 
   printHtml(htmlContent, mode = 'thermal') {
@@ -1897,7 +1911,12 @@ document.getElementById('os-workspace').addEventListener('contextmenu', (e) => {
     try { ICON_LAYOUT = typeof rawLayout === 'string' ? JSON.parse(rawLayout) : rawLayout; } catch (e) { ICON_LAYOUT = {}; }
   }
 
-  PERMITTED_APPS = OS_APPS.filter((a) => !a.perm || hasPerm(a.perm, user));
+  ACTIVE_APPS = (window.UI_CONFIG && Array.isArray(window.UI_CONFIG.modules) && window.UI_CONFIG.modules.length)
+    ? window.UI_CONFIG.modules
+    : OS_APPS;
+  PERMITTED_APPS = ACTIVE_APPS.filter((a) => !a.perm || hasPerm(a.perm, user));
+  const posBtn = document.getElementById('w-open-pos-btn');
+  if (posBtn) posBtn.classList.toggle('hidden', !PERMITTED_APPS.some((a) => a.id === 'pos'));
   TZOS.renderDesktopIcons();
   TZOS.renderStartMenu('');
   TZOS.renderTaskbar();
@@ -1908,8 +1927,8 @@ document.getElementById('os-workspace').addEventListener('contextmenu', (e) => {
   const targetApp = urlApp || user.effective_start_page || user.start_page || SETTINGS.default_start_page || 'pos';
   const targetMode = user.effective_start_mode || user.start_mode || SETTINGS.default_start_mode || 'window';
   if (targetApp && targetApp !== 'desktop' && targetApp !== 'none') {
-    const allowedTarget = PERMITTED_APPS.some((a) => a.id === targetApp) ? targetApp : 'pos';
-    TZOS.openApp(allowedTarget, null, targetMode === 'maximized');
+    const allowedTarget = PERMITTED_APPS.some((a) => a.id === targetApp) ? targetApp : (PERMITTED_APPS[0] ? PERMITTED_APPS[0].id : null);
+    if (allowedTarget) TZOS.openApp(allowedTarget, null, targetMode === 'maximized');
   }
 })();
 </script>

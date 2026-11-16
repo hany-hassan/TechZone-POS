@@ -288,8 +288,12 @@ function populateProfileUI(user) {
   $('pf-new-pin').value = '';
   drawAvatarPreview(PENDING_AVATAR !== undefined ? PENDING_AVATAR : (user.avatar || ''), user.name);
 
-  const allowedPages = ALL_START_PAGES.filter((p) => !p.perm || hasPerm(p.perm, user));
-  const defPageLbl = START_PAGE_NAMES[SETTINGS.default_start_page || 'pos'] || 'نقاط البيع';
+  const dynamicPages = (window.UI_CONFIG && Array.isArray(window.UI_CONFIG.modules) && window.UI_CONFIG.modules.length)
+    ? [...window.UI_CONFIG.modules.map((m) => ({ id: m.key, label: m.title, perm: m.perm })), { id: 'desktop', label: 'سطح المكتب فقط (بدون فتح نافذة تلقائياً)' }]
+    : ALL_START_PAGES;
+  const pageNames = Object.fromEntries(dynamicPages.map((p) => [p.id, p.label]));
+  const allowedPages = dynamicPages.filter((p) => !p.perm || hasPerm(p.perm, user));
+  const defPageLbl = pageNames[SETTINGS.default_start_page || 'pos'] || START_PAGE_NAMES[SETTINGS.default_start_page || 'pos'] || 'نقاط البيع';
   $('pf-start-page').innerHTML =
     `<option value="">اتباع الافتراضي المحدد من الأدمن (${esc(defPageLbl)})</option>` +
     allowedPages.map((p) => `<option value="${p.id}">${esc(p.label)}</option>`).join('');

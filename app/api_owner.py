@@ -7,6 +7,7 @@ import time
 
 import db
 from api_common import ApiError, OWNER_SESSION_TTL, _STATE, _int
+from modules_map import MODULE_REQUIRES
 
 OWNER_LOCK_MAX_ATTEMPTS = 5
 OWNER_LOCK_SECONDS = 15 * 60
@@ -285,3 +286,137 @@ class OwnerMixin:
                     d["details"] = {}
                 out.append(d)
             return out
+
+    # ---------------------------------------------------------- سجل الأقسام (Phase 2)
+    def _serialize_module(self, m: dict) -> dict:
+        perms = m.get("perm_keys") or []
+        perm_val = None if not perms else (perms[0] if len(perms) == 1 else list(perms))
+        params = (m.get("params") or "").strip()
+        url = m["url"]
+        full_url = f"{url}?{params}" if params else url
+        return {
+            "id": m["key"],
+            "key": m["key"],
+            "title": m["title"],
+            "icon": m["icon"],
+            "color": m["color"],
+            "url": url,
+            "params": params,
+            "full_url": full_url,
+            "perm": perm_val,
+            "perm_keys": list(perms),
+            "sort_order": int(m.get("sort_order", 0) or 0),
+            "enabled": bool(m.get("enabled", True)),
+            "is_core": bool(m.get("is_core", False)),
+            "is_builtin": bool(m.get("is_builtin", True)),
+            "clone_of": m.get("clone_of"),
+        }
+
+    def ui_config(self):
+        """إعدادات الواجهة والأقسام المفعلة والمسميات للتحميل عند التشغيل."""
+        with db.connect() as conn:
+            st = self._settings(conn)
+            rows = self._modules_rows(conn)
+            enabled = [self._serialize_module(m) for m in rows if m["enabled"]]
+            return {
+                "modules": enabled,
+                "labels": {},
+                "profile": st.get("business_profile") or "retail_electronics",
+            }
+
+    def modules_all(self):
+        """عرض كافة الأقسام (المفعلة والمعطلة) في لوحة تحكم المالك."""
+        self._owner()
+        with db.connect() as conn:
+            self._modules_cache = None
+            return [self._serialize_module(m) for m in self._modules_rows(conn)]
+
+    def module_toggle(self, key, enabled):
+        """تفعيل أو تعطيل قسم مع حماية الأقسام الأساسية وفحص التبعيات."""
+        self._owner()
+        key = str(key or "").strip()
+        en = bool(enabled)
+        with db.connect() as conn:
+            self._modules_cache = None
+            rows = self._modules_rows(conn)
+            by_key = {m["key"]: m for m in rows}
+            target = by_key.get(key)
+            if not target:
+                raise ApiError("القسم غير موجود")
+            if not en and target["is_core"]:
+                raise ApiError("لا يمكن تعطيل قسم أساسي من النظام")
+            if not en and target["is_builtin"]:
+                dependents = [
+                    m["title"]
+                    for m in rows
+                    if m["enabled"] and m["is_builtin"] and m["key"] != key and key in MODULE_REQUIRES.get(m["key"], [])
+                ]
+                if dependents:
+                    raise ApiError(f"لا يمكن تعطيل «{target['title']}» لأن الأقسام التالية تعتمد عليه: {'، '.join(dependents)}")
+            if en and target["is_builtin"]:
+                missing_deps = [
+                    by_key[d]["title"]
+                    for d in MODULE_REQUIRES.get(key, [])
+                    if d in by_key and not by_key[d]["enabled"]
+                ]
+                if missing_deps:
+                    raise ApiError(f"يجب تفعيل الأقسام المطلوبة أولاً: {'، '.join(missing_deps)}")
+
+            self._owner_backup_once()
+            conn.execute(
+                "UPDATE modules SET enabled=?, updated_at=? WHERE key=?",
+                (1 if en else 0, db.now(), key),
+            )
+            self._audit(conn, "module_toggle", key, {"enabled": en})
+            conn.commit()
+            self._modules_cache = None
+            return self._serialize_module(next(m for m in self._modules_rows(conn) if m["key"] == key))
+
+    def module_reorder(self, keys):
+        """إعادة ترتيب ظهور الأقسام حسب المصفوفة الممررة."""
+        self._owner()
+        if not isinstance(keys, list):
+            raise ApiError("صيغة الترتيب غير صالحة")
+        clean_keys = [str(k).strip() for k in keys if str(k).strip()]
+        with db.connect() as conn:
+            self._modules_cache = None
+            existing = [m["key"] for m in self._modules_rows(conn)]
+            existing_set = set(existing)
+            ordered = [k for k in clean_keys if k in existing_set]
+            seen = set(ordered)
+            for k in existing:
+                if k not in seen:
+                    ordered.append(k)
+            self._owner_backup_once()
+            ts = db.now()
+            for idx, k in enumerate(ordered, start=1):
+                conn.execute("UPDATE modules SET sort_order=?, updated_at=? WHERE key=?", (idx * 10, ts, k))
+            self._audit(conn, "module_reorder", None, {"order": ordered})
+            conn.commit()
+            self._modules_cache = None
+            return [self._serialize_module(m) for m in self._modules_rows(conn)]
+
+    def modules_reset_defaults(self, purge_custom=False):
+        """استعادة الأقسام الافتراضية الـ 13 لحالتها الأصلية."""
+        self._owner()
+        self._owner_backup_once()
+        ts = db.now()
+        with db.connect() as conn:
+            for key, title, icon, color, url, perms, order, is_core in db.DEFAULT_MODULES:
+                conn.execute(
+                    """INSERT INTO modules
+                       (key, title, icon, color, url, params, perm_keys, sort_order, enabled, is_core, is_builtin, clone_of, created_at, updated_at)
+                       VALUES(?,?,?,?,?,?,?,?,1,?,1,NULL,?,?)
+                       ON CONFLICT(key) DO UPDATE SET
+                         title=excluded.title, icon=excluded.icon, color=excluded.color,
+                         url=excluded.url, params=excluded.params, perm_keys=excluded.perm_keys,
+                         sort_order=excluded.sort_order, enabled=1, is_core=excluded.is_core,
+                         is_builtin=1, clone_of=NULL, updated_at=excluded.updated_at""",
+                    (key, title, icon, color, url, "", json.dumps(perms, ensure_ascii=False), order, is_core, ts, ts),
+                )
+            if purge_custom:
+                conn.execute("DELETE FROM modules WHERE is_builtin=0")
+            self._audit(conn, "modules_reset_defaults", None, {"purge_custom": bool(purge_custom)})
+            conn.commit()
+            self._modules_cache = None
+            return [self._serialize_module(m) for m in self._modules_rows(conn)]

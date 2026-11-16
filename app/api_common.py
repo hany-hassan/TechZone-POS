@@ -723,6 +723,45 @@ class _BaseApiMixin:
             self._settings_cache = cache
         return cache
 
+    def _modules_rows(self, conn=None) -> list[dict]:
+        cache = getattr(self, "_modules_cache", None)
+        if cache is None:
+            if conn is None:
+                with db.connect() as c:
+                    rows = c.execute("SELECT * FROM modules ORDER BY sort_order ASC, key ASC").fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM modules ORDER BY sort_order ASC, key ASC").fetchall()
+            parsed = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    p = json.loads(d.get("perm_keys") or "[]")
+                    d["perm_keys"] = p if isinstance(p, list) else []
+                except Exception:
+                    d["perm_keys"] = []
+                d["enabled"] = bool(d.get("enabled", 1))
+                d["is_core"] = bool(d.get("is_core", 0))
+                d["is_builtin"] = bool(d.get("is_builtin", 1))
+                parsed.append(d)
+            self._modules_cache = parsed
+            cache = parsed
+        return cache
+
+    def _module_enabled(self, key: str) -> bool:
+        for m in self._modules_rows():
+            if m["key"] == key:
+                return bool(m["enabled"])
+        return False
+
+    def _enabled_module_keys(self, conn=None) -> set[str]:
+        return {m["key"] for m in self._modules_rows(conn) if m["enabled"]}
+
+    def _first_enabled_module(self, conn=None) -> str:
+        for m in self._modules_rows(conn):
+            if m["enabled"]:
+                return m["key"]
+        return "desktop"
+
     def _open_shift(self, conn, user_id):
         return conn.execute(
             "SELECT * FROM shifts WHERE user_id=? AND closed_at IS NULL ORDER BY id DESC LIMIT 1",

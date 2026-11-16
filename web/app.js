@@ -256,7 +256,29 @@ async function guard(fn) {
 }
 
 /* ===== شريط التنقل الموحد (يتكيف مع صلاحيات المستخدم وبيئة نظام التشغيل) ===== */
-const NAV = [
+window.UI_CONFIG = null;
+
+async function loadUiConfig(force = false) {
+  if (!force && window.UI_CONFIG && Array.isArray(window.UI_CONFIG.modules)) {
+    return window.UI_CONFIG;
+  }
+  try {
+    const cfg = await api('ui_config');
+    if (cfg && Array.isArray(cfg.modules)) {
+      window.UI_CONFIG = cfg;
+      return cfg;
+    }
+  } catch (e) {}
+  return window.UI_CONFIG;
+}
+
+function isModuleEnabled(key) {
+  if (!key || key === 'desktop' || key === 'index' || key === 'owner') return true;
+  if (!window.UI_CONFIG || !Array.isArray(window.UI_CONFIG.modules)) return true;
+  return window.UI_CONFIG.modules.some((m) => m.key === key || m.id === key || m.url === `${key}.html`);
+}
+
+const DEFAULT_NAV = [
   { page: 'desktop', href: 'desktop.html', icon: 'desktop_windows', label: 'سطح المكتب (النظام)' },
   { page: 'pos', href: 'pos.html', icon: 'point_of_sale', label: 'نقاط البيع' },
   { page: 'sales_quotes', href: 'sales_quotes.html', icon: 'description', label: 'المبيعات وعروض الأسعار' },
@@ -273,6 +295,24 @@ const NAV = [
   { page: 'profile', href: 'profile.html', icon: 'account_circle', label: 'ملفي الشخصي وإعداداتي' },
   { page: 'index', href: 'index.html', icon: 'switch_account', label: 'تبديل المستخدم' },
 ];
+const NAV = DEFAULT_NAV;
+
+function getNavItems() {
+  if (window.UI_CONFIG && Array.isArray(window.UI_CONFIG.modules) && window.UI_CONFIG.modules.length) {
+    return [
+      { page: 'desktop', href: 'desktop.html', icon: 'desktop_windows', label: 'سطح المكتب (النظام)' },
+      ...window.UI_CONFIG.modules.map((m) => ({
+        page: m.key || m.id,
+        href: m.full_url || m.url,
+        icon: m.icon,
+        label: m.title,
+        perm: m.perm,
+      })),
+      { page: 'index', href: 'index.html', icon: 'switch_account', label: 'تبديل المستخدم' },
+    ];
+  }
+  return DEFAULT_NAV;
+}
 
 function _setupOsWindowInterceptors() {
   if (window._tzOsIntercepted) return;
@@ -308,7 +348,7 @@ function renderSidebar(current, user) {
 
   const host = document.getElementById('shell');
   if (!host || host.querySelector('aside.tz-nav')) return;
-  const items = NAV.filter((x) => !x.perm || hasPerm(x.perm, user))
+  const items = getNavItems().filter((x) => !x.perm || hasPerm(x.perm, user))
     .map((x) => {
       const active = x.page === current;
       const isOsBtn = x.page === 'desktop';
@@ -411,6 +451,7 @@ async function pageInit(current, opts) {
     }
   }
   try { SETTINGS = await api('settings'); } catch (e) { SETTINGS = {}; }
+  await loadUiConfig();
   CURRENCY = SETTINGS.currency || 'ج.م';
   applyWhatsappVisibility();
   const savedLocalTheme = localStorage.getItem('tz-theme');
@@ -418,7 +459,24 @@ async function pageInit(current, opts) {
   applyThemeEverywhere(prefTheme === 'dark');
   const activeAccent = user.accent_color || SETTINGS.os_default_accent || '#137fec';
   applyAccentColorEverywhere(activeAccent);
-  const nav = NAV.find((x) => x.page === current);
+  if (current && current !== 'desktop' && current !== 'index' && !isModuleEnabled(current)) {
+    document.body.innerHTML = `
+      <div class="min-h-screen w-full flex items-center justify-center p-6 bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100">
+        <div class="max-w-md w-full bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center shadow-lg">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4">
+            <span class="material-icons-round text-3xl">block</span>
+          </div>
+          <h2 class="text-lg font-bold mb-2">القسم غير مُفعّل</h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mb-5">هذا القسم معطل حالياً من إعدادات المالك الرئيسي للبرنامج.</p>
+          <a href="desktop.html" class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-white text-xs font-bold">
+            <span class="material-icons-round text-base">desktop_windows</span>
+            <span>العودة لسطح المكتب</span>
+          </a>
+        </div>
+      </div>`;
+    return null;
+  }
+  const nav = getNavItems().find((x) => x.page === current);
   syncTitle(nav ? nav.label : '');
   document.body.dataset.role = user.role;
   renderSidebar(current, user);
