@@ -27,10 +27,10 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | [`docs/OWNER-CONTROL-PLAN.md`](docs/OWNER-CONTROL-PLAN.md) | Owner mode, module registry, business profiles & recovery key implementation plan | English |
 | [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md) | Pending architectural questions and design decisions | Arabic |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System architecture, IPC bridge, sequence flows, and directory tree | English |
-| [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 19 tables schema, minor-unit money rules, and 16-permission matrix | English |
+| [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 28 tables schema, minor-unit money rules, and 18-permission matrix | English |
 | [`docs/STACK.md`](docs/STACK.md) | Pinned runtime stack, versions, and upgrade policies | English |
 | [`docs/CODING-STANDARDS.md`](docs/CODING-STANDARDS.md) | Coding style, SQL guidelines, money formatting, and RTL conventions | English |
-| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (115 checks), test gates, and manual QA | English |
+| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (195 checks), test gates, and manual QA | English |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, PBKDF2 hashing, lockout rules, and Egyptian PDPL | English |
 | [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | TechZone OS color tokens, Arabic typography, layout, and invoice specs | English |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Standalone .exe compilation (PyInstaller), backup routines, and setup | English |
@@ -156,6 +156,14 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 ---
 
 ## 8. Changelog
+
+### 2026-11-16 — Documentation Sync, 20-Screen Preview Pack & Layout Polish (`main`)
+- **UI & Tooling (`web/buy_used.html`, `web/owner.html`, `tools/take_screenshots.py`)**:
+  1. Fixed standalone flex shell on `web/buy_used.html` (`flex flex-col md:flex-row`) so the sidebar and main workspace render side by side on desktop screens.
+  2. Added `?tab=` URL query initialization support in `web/owner.html` (`modules`, `profiles`, `labels`, `security`, `audit`).
+  3. Updated `tools/take_screenshots.py` to seed an isolated temporary `SHOP_DB` (including installments, repairs, used device purchase, quotation, backup snapshot, and active Owner Mode session) and captured 20 up-to-date preview PNGs in `screenshots/` (`01`..`20`).
+- **Documentation Sync (`README.md`, `CLAUDE.md`, `AGENTS.md`, `docs/*.md`)**: Updated `README.md` (all 20 sections + screenshots + 18 accurate permissions + architecture + backups + installments + Owner Mode/business profiles) and aligned `CLAUDE.md`, `docs/README.md`, `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/DATA-MODEL.md`, `docs/SECURITY.md`, `docs/TESTING.md`, `docs/DEPLOYMENT.md`, `docs/IMPLEMENTATION-PLAN.md`, and `docs/ROADMAP.md` with current counts (28 tables, 18 permissions, 17 pages, 8 mixins, 195 selfcheck checks).
+- **Verification (`app/selfcheck.py`)**: Ran `python app/selfcheck.py` after final edits (`195/195` checks passing, `contract ok (107 names)`).
 
 ### 2026-11-16 — Owner Control Enhancement (Isolated Worktree): Fresh Clean DB per Profile & Empty-Category Fix
 - **Fresh Profile Database Builder (`app/fresh_db.py`, `app/api_owner.py`)**:

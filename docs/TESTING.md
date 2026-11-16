@@ -1,8 +1,8 @@
 # TechZone Testing Strategy
 
-## Current: `selfcheck.py` (114 Assertions)
+## Current: `selfcheck.py` (195 Assertions)
 
-TechZone ships with a single integration-level test suite in `app/selfcheck.py`. It validates the database schema, API functions, business-logic constraints, and data integrity in one pass.
+TechZone ships with a single integration-level test suite in `app/selfcheck.py`. It validates the database schema, API functions, permission boundaries, business logic, owner controls, and static frontend-to-backend contracts in one pass.
 
 ### Running the Tests
 
@@ -13,7 +13,7 @@ python app/selfcheck.py
 A successful run prints each check with a ✓ and ends with:
 
 ```
-ALL 114 CHECKS PASSED
+ALL 195 CHECKS PASSED
 ```
 
 Any failure raises `AssertionError` with a descriptive message identifying the broken invariant.
@@ -22,26 +22,27 @@ Any failure raises `AssertionError` with a descriptive message identifying the b
 
 | Area | Example checks |
 |---|---|
-| **DB schema** | All 19 tables exist; required columns present; foreign keys valid |
-| **Settings** | Default seed values populated (store name, currency, VAT rate, login mode, invoice templates) |
+| **DB schema** | All 28 tables exist; required columns & indices present; foreign keys valid |
+| **Settings** | Default seed values populated (store name, currency, VAT rate, login mode, invoice templates, `business_profile`) |
 | **Users & auth** | Admin account exists; PIN hashing and salt are non-empty; role values are `admin` or `cashier` |
 | **Default PIN Security** | Admin login with default `1234` flags `force_change_pin=True`; `profile_save` with `pin` alias updates PIN and clears flag |
-| **Permissions** | All 16 permission keys recognized; admin has full access; cashier permissions respect the stored JSON; cashier blocked from backup and restore |
+| **Owner Control & Structure** | Independent `owner_auth` passphrase setup, 5-attempt lockout, 10-min session expiry, recovery key rotation, admin PIN reset, audit logging, module registry CRUD/cloning, and `Api.call()` server-side disabled-module guard (`modules_map.py`) |
+| **Business Profiles & Fresh DB** | Built-in & custom profile CRUD (`business_profiles`), editable `demo_catalog` switching, custom `ui_labels` overrides, `exclusive_demo` category visibility, and atomic `build_fresh_profile_db` selective carry-over / clean rebuild |
+| **Permissions** | All 18 permission keys recognized (`installments_view`/`installments_manage` included); admin has full access; cashier permissions respect stored JSON; cashier blocked from backup and restore |
 | **Database Backups & Restore** | `db_backup` creates valid zero-lock snapshot; `backups_list` enumerates snapshots; `db_restore` performs safe rollback with pre-restore safety snapshot |
 | **Hardware & POS** | `pos.html` global barcode keydown listener (<85ms burst) registered in DOM |
 | **Products & inventory** | SKU uniqueness; price/cost stored as integer minor units; `tracked` flag controls serial enforcement |
 | **Sales flow** | Sale creation decrements stock; payment totals match sale total; returns restore quantities |
 | **Quotations** | Quote creation, item linkage, status transitions |
-| **Customers & payments** | Customer creation; balance tracking; `customer_payments` linked correctly |
-| **Repairs** | Ticket creation; part linkage; status values valid |
-| **Used device purchases** | Purchase record creation and field validation |
-| **Shifts** | Shift open/close; cash counting fields; association with user; automatic shift-close backup trigger |
+| **Customers & installments** | Customer creation; unified `customer_ledger` debt tracking; `customer_payments` vouchers; installment plan scheduling, partial/full collection, cancellation, and alerts |
+| **Repairs & used devices** | Ticket creation; part linkage; valid statuses; used device purchases |
+| **Shifts** | Shift open/close; cash/wallet/installment counters; association with user; automatic shift-close backup trigger |
 | **PDF generation** | Invoice and receipt PDF functions return valid bytes (PDF 1.4 header check) |
-| **API dispatcher** | `call(name, payload)` routes to correct functions; contract check ensures all frontend `api()` calls exist on `Api` |
+| **API dispatcher** | `call(name, payload)` routes to correct methods; contract check ensures all frontend `api()` calls (`107` names) exist on `Api` and all `Api` methods are classified in `modules_map.py` |
 
 ### Running selfcheck After Every Change
 
-Every code or schema change **must** pass all 114 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
+Every code or schema change **must** pass all 195 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
 
 ---
 

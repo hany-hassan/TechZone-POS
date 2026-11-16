@@ -41,8 +41,8 @@ Because the system is **100% offline** and binds to no public network interfaces
 - **Safe In-App Database Restore (`db_restore`):** Managers can restore any snapshot directly from `settings.html`. Before overwriting, a safety snapshot (`shop_YYYYMMDD_HHMMSS_before_restore.db`) is generated, ensuring zero data loss even if an incorrect backup is selected. Integrity is verified with `PRAGMA quick_check` prior to restore.
 
 ### 2.4 Server-Side Authorization (`_perm`)
-- **Backend-Enforced Authorization:** Authorization is verified strictly in Python (`app/api.py`) via `_perm(key)` and `_perm_any(*keys)`. Frontend checks in JavaScript (`hasPerm()`) are strictly for UI visibility and do not govern execution.
-- **16 Granular Permissions:** Cashiers operate under least-privilege principles covering sales, price modification, discounts, returns, customer data, inventory, repairs, used devices, reports, and settings.
+- **Backend-Enforced Authorization:** Authorization is verified strictly in Python (`app/api_*.py`) via `_perm(key)` and `_perm_any(*keys)`. Frontend checks in JavaScript (`hasPerm()`) are strictly for UI visibility and do not govern execution.
+- **18 Granular Permissions:** Cashiers operate under least-privilege principles covering sales, price modification, discounts, returns, customer data, installments, inventory, repairs, used devices, reports, and settings.
 - **Database Backup & Restore Isolation:** Endpoints `db_backup`, `backups_list`, and `db_restore` require `settings_manage` authorization; cashiers are strictly blocked.
 - **Immutable Historical Invoices:** Sales invoices (`sales`) cannot be deleted once committed. Adjustments must follow structured return procedures (`sale_returns`) with full audit traceability.
 
@@ -67,7 +67,7 @@ Under Egyptian Law No. 151 of 2020 (Personal Data Protection Law - PDPL):
 
 The following items are scheduled for hardening in **Phase 2** of the project roadmap:
 
-1. **Forced Default Credential Change:** Prompt mandatory PIN update on first run for default `admin` (1234) and `cashier` (1111) accounts.
+1. ✅ **Forced Default Credential Change (Implemented):** Mandatory PIN update on first run (`#modal-force-pin`) for default `admin` (`1234`) account, plus Owner PIN reset support.
 2. **Read-Endpoint Authorization Audit:** Ensure all read queries (`sale`, `quotation`, `repair`, `customer`, `shift_summary`) check granular view permissions rather than basic session presence.
 3. **Database at Rest Encryption:** Provide an optional transparent encryption wrapper (e.g., SQLCipher) or BitLocker storage guidance for `data/shop.db`.
 4. **Session Idle Timeout:** Add an automatic desktop lock screen after configurable inactivity periods (e.g., 15 minutes of idle time).

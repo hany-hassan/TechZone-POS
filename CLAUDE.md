@@ -8,7 +8,7 @@
 2. Read the current phase in `docs/ROADMAP.md` — find the first phase with ⬜ or 🟡.
 3. Read the "read before starting" docs listed for that phase.
 4. Skim `docs/OPEN-QUESTIONS.md` for anything blocking the current phase.
-5. Run `python app/selfcheck.py` to confirm baseline (expect 114/114 PASS).
+5. Run `python app/selfcheck.py` to confirm baseline (expect 195/195 PASS + `contract ok`).
 
 ## How to talk to the owner
 

@@ -65,24 +65,28 @@ Installing TechZone on a new store terminal takes less than 2 minutes:
    - TechZone automatically initializes the SQLite schema (`data\shop.db`) with Egyptian localized seed values.
    - Creates the receipt storage directory (`data\receipts\`).
    - Opens the smart login interface (`index.html`).
-4. **Default Logins (Change Immediately):**
-   - **Admin:** PIN `1234`
+4. **Default Logins & Owner Setup (Change Immediately):**
+   - **Admin:** PIN `1234` (first-run modal forces changing it to a secure PIN)
    - **Cashier:** PIN `1111`
+   - **Owner Mode (Recommended for software deployers):** Long-press the store logo/name for 2 seconds on the login screen (or Start Menu header) to set up the independent Owner passphrase and store the one-time recovery key securely.
 5. **Printer Configuration:** Connect the thermal printer (80mm USB / Network) and standard office printer (A4). Ensure the Windows Default Printer is assigned as desired.
 
 ---
 
 ## 5. Backup, Maintenance & Disaster Recovery
 
-### 5.1 Routine Database Backups
-All store operations, customer ledgers, invoices, inventory, and settings reside in a single file:
+### 5.1 Built-In & Routine Database Backups
+All store operations, customer ledgers, installment contracts, invoices, inventory, and settings reside in a single SQLite file:
 ```
 data\shop.db
+data\backups\    (automatic startup, shift-close, pre-restore & pre-fresh snapshots)
 ```
-- **Recommended Routine:** Copy `data\shop.db` to an external USB flash drive or local backup drive at the close of every business day.
-- **Pre-Update Backup:** Before replacing `TechZone.exe` with a newer version, always take a timestamped copy of `data\shop.db`.
+- **Automatic Rotation:** TechZone uses the ACID SQLite Online Backup API to save automatic snapshots on daily startup, cashier shift closure, and before structural/profile rebuilds (retaining the latest 30 snapshots automatically).
+- **Safe In-App Restore:** Managers (`settings_manage`) can restore any snapshot from `settings.html?tab=backups` after `PRAGMA quick_check` validation and an automatic `before_restore` safety backup.
+- **External Copy Routine:** Also copy `data\shop.db` / `data\backups\` to an external USB flash drive at the close of every business day.
+- **Pre-Update Backup:** Before replacing `TechZone.exe` with a newer version, always take a snapshot via `settings.html` or copy `data\shop.db`.
 
 ### 5.2 Automatic Database Schema Migrations
 TechZone includes non-destructive schema migrations in `app/db.py`:
-- Newly introduced columns (`_ensure_schema_columns`) and structural migrations (`_migrate_customers`) execute automatically on application launch.
+- Newly introduced columns (`_ensure_schema_columns`) and structural migrations (`_migrate_customers`, `customer_ledger`, `installments`, `modules`, `business_profiles`) execute automatically on application launch.
 - Existing sales, customers, and inventory data remain intact across software updates.

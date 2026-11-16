@@ -2,7 +2,7 @@
 
 ## Overview
 
-All TechZone data is stored in a single SQLite database at `data/shop.db` (or beside the `.exe` when packaged). The schema comprises **19 tables** managed by `app/db.py`, which handles creation, seeding, and non-destructive auto-migration on every startup.
+All TechZone data is stored in a single SQLite database at `data/shop.db` (or beside the `.exe` when packaged). The schema comprises **28 tables** managed by `app/db.py`, which handles creation, seeding, and non-destructive auto-migration on every startup.
 
 ---
 
@@ -455,9 +455,53 @@ Key-value store for all system-wide configuration.
 
 ---
 
+### 20. `customer_ledger`
+
+Unified chronological customer debt & credit ledger combining credit sales, vouchers, return credits, opening adjustments, installment charges, and installment payments.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PK, AUTOINCREMENT | Ledger entry ID |
+| `customer_id` | INTEGER | NOT NULL, FK → `customers.id` | Customer account |
+| `created_at` | TEXT | NOT NULL | ISO 8601 timestamp |
+| `kind` | TEXT | CHECK IN (`'credit_sale'`,`'voucher'`,`'return_credit'`,`'adjustment'`,`'installment_charge'`,`'installment_payment'`) | Entry type |
+| `ref` | TEXT | | Human-readable document reference |
+| `sale_id` | INTEGER | FK → `sales.id` | Related sale (nullable) |
+| `voucher_id` | INTEGER | FK → `customer_payments.id` | Related voucher (nullable) |
+| `plan_id` | INTEGER | | Related installment plan (nullable) |
+| `debit` | INTEGER | NOT NULL DEFAULT 0 | Debt increase (minor units) |
+| `credit` | INTEGER | NOT NULL DEFAULT 0 | Debt payment/reduction (minor units) |
+| `balance_after` | INTEGER | NOT NULL DEFAULT 0 | Running customer balance snapshot |
+
+---
+
+### 21. `installment_plans`
+
+Customer installment financing contracts (direct item sale, inventory deduction, or converted credit sale).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PK, AUTOINCREMENT | Plan ID |
+| `plan_no` | TEXT | NOT NULL, UNIQUE | Contract number (e.g. `INS-0001`) |
+| `customer_id` | INTEGER | NOT NULL, FK → `customers.id` | Contracting customer |
+| `sale_id` | INTEGER | FK → `sales.id` | Optional converted credit sale |
+| `product_id` | INTEGER | FK → `products.id` | Optional inventory product |
+| `principal` / `down_payment` / `fee_amount` / `financed_total` / `paid_total` / `remaining_total` | INTEGER | NOT NULL | Financial figures (minor units) |
+| `months` / `frequency` / `interval_days` / `start_date` | INTEGER / TEXT | NOT NULL | Repayment schedule config (`monthly`, `weekly`, `custom_days`) |
+| `status` | TEXT | CHECK IN (`'active'`,`'completed'`,`'cancelled'`) | Contract lifecycle status |
+
+---
+
+### 22. `installment_items` & 23. `installment_payments`
+
+- `installment_items`: Individual scheduled dues (`seq_no`, `due_date`, `amount`, `paid_amount`, `status`: `pending`/`partial`/`paid`/`cancelled`) per `plan_id`.
+- `installment_payments`: Immutable payment collection receipts (`receipt_no` `INP-...`, `plan_id`, `item_id`, `shift_id`, `amount`, `method`: `cash`/`wallet`, `ref_no`).
+
+---
+
 ## Access Control Matrix
 
-TechZone enforces **16 granular permissions** checked server-side via `_perm(key)` in `api.py`. The `admin` role bypasses all checks. Cashier permissions are individually toggled per user in `staff.html`.
+TechZone enforces **18 granular permissions** checked server-side via `_perm(key)` in `app/api_*.py`. The `admin` role bypasses all checks. Cashier permissions are individually toggled per user in `staff.html`.
 
 | Permission Key | Resource / Action | Admin | Cashier (if granted) |
 |---------------|-------------------|:-----:|:--------------------:|
@@ -477,6 +521,8 @@ TechZone enforces **16 granular permissions** checked server-side via `_perm(key
 | `used_manage` | Record used device purchases | ✅ | ✅ |
 | `reports_view` | Access financial reports and analytics | ✅ | ✅ |
 | `settings_manage` | Modify system settings, invoice templates, payment methods | ✅ | ✅ |
+| `installments_view` | View installment contracts, schedules & reminders | ✅ | ✅ |
+| `installments_manage` | Create, collect payments on, and cancel installment contracts | ✅ | ✅ |
 
 > **Note:** The "Cashier" column shows capabilities when the specific permission is granted. By default, a new cashier has **no permissions** — the admin must explicitly enable each one from `staff.html`.
 
@@ -485,6 +531,7 @@ TechZone enforces **16 granular permissions** checked server-side via `_perm(key
 | Page | Required Permission(s) | Fallback |
 |------|----------------------|----------|
 | `index.html` | None (public login) | — |
+| `owner.html` | Independent Owner Mode passphrase / setup by `admin` | Redirected / hidden behind 2s long-press |
 | `desktop.html` | Any authenticated user | — |
 | `profile.html` | Any authenticated user | — |
 | `pos.html` | `pos_sell` | Redirected / hidden |
@@ -492,6 +539,7 @@ TechZone enforces **16 granular permissions** checked server-side via `_perm(key
 | `history.html` | `pos_sell` or `sales_all` | Shows only own sales |
 | `customers.html` | `customers_view` | Redirected / hidden |
 | `customer_details.html` | `customers_view` | Redirected / hidden |
+| `installments.html` | `installments_view` | Redirected / hidden |
 | `inventory.html` | `inventory_view` | Redirected / hidden |
 | `repair.html` | `repair_view` | Redirected / hidden |
 | `buy_used.html` | `used_manage` | Redirected / hidden |

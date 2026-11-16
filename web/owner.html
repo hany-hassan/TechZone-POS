@@ -1068,6 +1068,11 @@
           showView('view-dashboard');
           await loadModules();
           await loadAuditLog();
+          const reqTab = new URLSearchParams(location.search).get('tab');
+          if (reqTab && ['modules', 'profiles', 'labels', 'security', 'audit'].includes(reqTab)) {
+            const tb = document.querySelector(`[data-otab="${reqTab}"]`);
+            if (tb) tb.click();
+          }
           return;
         }
         startOwnerSessionCountdown(0);

@@ -13,11 +13,12 @@ The user interface emulates a hybrid desktop operating system ("TechZone OS") th
 ```mermaid
 flowchart TD
     subgraph Native["Native Layer"]
-        MAIN["app/main.py\n(Entry Point)"]
+        MAIN["app/main.py\n(Entry Point & Session Cleanup)"]
         PV["pywebview 6.2.1\nWindow (maximized)"]
-        API["app/api.py\nApi class — 77 methods"]
-        DB_MOD["app/db.py\nSchema · Seed · Backups"]
-        PDF["PDF 1.4 Generator\n(pure Python in api.py)"]
+        API["app/api.py (Facade)\n8 Domain Mixins (107 public methods)"]
+        MODMAP["app/modules_map.py\nModule Guard & Profiles (profiles.py / fresh_db.py)"]
+        DB_MOD["app/db.py\nSchema · Seed · Migrations · Backups"]
+        PDF["PDF 1.4 Generator\n(pure Python in api_common.py / api_sales.py)"]
         WA["WhatsApp Integration\nctypes Win32 CF_HDROP"]
     end
 
@@ -26,17 +27,18 @@ flowchart TD
     end
 
     subgraph Frontend["Frontend (web/)"]
-        INDEX["index.html\n(Login & PIN Security)"]
+        INDEX["index.html\n(Smart Login & Owner Recovery)"]
         DESKTOP["desktop.html\n(TechZone OS Shell)"]
-        PAGES["13 App Pages\n(loaded in iframes)"]
-        APPJS["app.js\nBridge · Permissions · Invoices"]
+        OWNER["owner.html\n(Owner Mode & Profiles Control)"]
+        PAGES["14 App Pages\n(loaded in iframes / dynamic NAV)"]
+        APPJS["app.js\nBridge · Permissions · Labels t() · Invoices"]
         APPCSS["app.css\n(Compiled Tailwind)"]
         FONTS["fonts/\n23 local .woff2 files"]
     end
 
     subgraph Data["Data Layer"]
-        SQLITE[("data/shop.db\n19 Tables")]
-        BACKUPS["data/backups/\nACID Snapshots & Restores"]
+        SQLITE[("data/shop.db\n28 Tables")]
+        BACKUPS["data/backups/\nACID Snapshots & Pre-Fresh Backups"]
         RECEIPTS["data/receipts/\nExported PDFs"]
     end
 
@@ -44,9 +46,13 @@ flowchart TD
     PV -->|"loads file://"| WV2
     WV2 --> INDEX
     INDEX -->|"after login"| DESKTOP
+    INDEX -.->|"2s long press"| OWNER
+    DESKTOP -.->|"2s long press"| OWNER
     DESKTOP -->|"opens in iframes"| PAGES
     PAGES --> APPJS
+    OWNER --> APPJS
     APPJS -->|"window.pywebview.api.call(name, payload)"| API
+    API -->|"pre-dispatch check"| MODMAP
     API --> DB_MOD
     DB_MOD --> SQLITE
     API --> PDF
@@ -77,23 +83,25 @@ When packaged with PyInstaller (`sys.frozen` is `True`), `web/` assets are read 
 
 ## Frontend Architecture
 
-### Page Inventory (15 pages)
+### Page Inventory (17 pages)
 
 | Page | Role |
 |------|------|
-| `index.html` | Smart login screen — shows store name/logo, accepts PIN-only by default |
-| `desktop.html` | TechZone OS shell — taskbar, Start menu, Dock, floating windows, desktop icons |
-| `pos.html` | Point-of-sale cashier screen |
+| `index.html` | Smart login screen — shows store name/logo, accepts PIN-only by default, plus owner recovery modal |
+| `owner.html` | Hidden Owner Control panel — independent auth, module registry (toggle/reorder/edit/clone/delete), business profiles, demo catalogs, fresh clean DB builder, custom labels & audit log |
+| `desktop.html` | TechZone OS shell — dynamic module registry, taskbar, Start menu, Dock, floating windows, desktop icons |
+| `pos.html` | Point-of-sale cashier screen (with global USB barcode scanner listener) |
 | `sales_quotes.html` | Sales management, quotations, and invoice template designer |
 | `history.html` | Sales and returns history |
 | `customers.html` | Customer management and accounts receivable (full-screen) |
-| `customer_details.html` | Individual customer account statement (full-screen) |
+| `customer_details.html` | Individual customer account statement & installment contracts (full-screen) |
+| `installments.html` | Installment contracts, pre-sale calculator, payment collections, overdue alerts & WhatsApp reminders |
 | `inventory.html` | Product catalog and stock management |
 | `repair.html` | Repair/service ticket management |
 | `buy_used.html` | Used device purchasing |
 | `receipt.html` | Invoice/receipt preview, print, and WhatsApp sharing |
 | `settings.html` | System settings (4 tabs: store, login, invoice designer, and database backups/restore hub) |
-| `staff.html` | Employee management and per-user permission assignment |
+| `staff.html` | Employee management and 18-permission assignment |
 | `profile.html` | Personal profile and per-user desktop preferences |
 | `reports.html` | Financial reports and analytics |
 
@@ -110,7 +118,8 @@ The shared JavaScript module provides:
 | Subsystem | Purpose |
 |-----------|---------|
 | **Bridge** (`api(name, payload)`) | Wraps `window.pywebview.api.call(name, payload)`. Automatically detects whether it runs inside an iframe and resolves the bridge from the parent frame. Falls back to an HTTP POST mock (`/api/call`) only when running under a plain browser for screenshot tooling — never in production. |
-| **Permissions** (`hasPerm(key)`) | Client-side guard that mirrors the 16 server-side permission keys. Pages hide or disable UI elements based on the current user's permission set returned by `session`. |
+| **Permissions** (`hasPerm(key)`) | Client-side guard that mirrors the 18 server-side permission keys. Pages hide or disable UI elements based on the current user's permission set returned by `session`. |
+| **Labels & Modules** (`t(key)`, `UI_CONFIG`) | `app.js` fetches `ui_config` once at bootstrap, dynamically builds navigation from enabled `modules`, enforces the module-disabled page guard, and translates customizable UI labels (`ui_labels`). |
 | **Theme sync** (`applyThemeEverywhere`) | Propagates light/dark mode changes to `desktop.html` and every open iframe simultaneously. `applyAccentColorEverywhere` does the same for the user's chosen accent colour. |
 | **Invoice rendering** | `buildA4InvoiceHtml()` and `buildPosThermalReceiptHtml()` generate complete HTML documents for A4 and 80 mm/58 mm thermal receipts. `renderA4DocumentToJpeg()` and `renderInvoiceToJpeg()` rasterise them. `sendInvoicePdfToWhatsapp()` and `sendQuoteOrA4PdfToWhatsapp()` trigger Python-side PDF generation and Win32 clipboard injection. |
 | **Page init** (`pageInit`) | Bootstraps every page: fetches the session, checks permissions, applies theme, loads page-specific data. |
@@ -128,25 +137,23 @@ All fonts and Material Symbols icons are served from `web/fonts/` as `.woff2` fi
 
 ## Backend Architecture
 
-### `app/api.py` — The Api Class (≈ 3 500 lines)
+### `app/api.py` & Domain Mixins (8 Mixins, 107 Public Methods)
 
-A single Python class, `Api`, exposes every backend operation to the frontend. The class contains **77 public methods** covering:
+`app/api.py` acts as a backward-compatible Facade `Api` class composing 8 specialized domain mixins while exposing a single dispatcher `call(name, payload)`:
 
-- Session management (`login`, `logout`, `session`, `login_config`)
-- User/staff CRUD (`users_list`, `user_save`, `user_delete`, `profile_save`)
-- Products and inventory (`products_search`, `product_save`, `product_delete`, `stock_adjust`)
-- Serial number tracking (`serial_add`, `serial_list`)
-- Sales workflow (`sale_create`, `sale_return`)
-- Quotations (`quote_save`, `quote_convert`)
-- Customer accounts (`customer_save`, `customer_payment`, `customer_statement`)
-- Shifts (`shift_open`, `shift_close`, `shift_report`)
-- Repairs (`repair_save`, `repair_status_update`)
-- Used device purchases (`used_purchase_save`)
-- Reports and analytics (`report_daily`, `report_monthly`, `report_top_products`)
-- Database snapshots & recovery (`db_backup`, `backups_list`, `db_restore`)
-- Settings (`settings_get`, `settings_save`, `pos_categories_config_save`)
-- PDF generation and WhatsApp sharing (`generate_receipt_pdf`, `send_pdf_to_whatsapp`)
-- Invoice template management
+- `app/api_common.py` — Shared `_STATE` session/owner state, money helpers, phone normalization, PDF/WhatsApp Win32 clipboard helpers, and `customer_ledger` helpers
+- `app/api_auth.py` (`AuthSettingsMixin`) — Login modes, users/permissions CRUD, profile, system settings, and database backups/restore
+- `app/api_owner.py` (`OwnerMixin`) — Independent owner auth, recovery key, module registry CRUD/cloning, business profile switching/CRUD, custom labels, fresh DB creation, and audit log
+- `app/modules_map.py` — `API_MODULE_MAP`, `CORE_METHODS`, and `MODULE_REQUIRES` server-side module guard
+- `app/profiles.py` — `DEFAULT_BUSINESS_PROFILES` (with `demo_catalog` datasets) and `DEFAULT_LABELS`/`LABEL_KEYS`
+- `app/fresh_db.py` — Atomic per-profile clean database builder (`build_fresh_profile_db`) with selective carry-over and safety backup
+- `app/api_inventory.py` (`InventoryMixin`) — Categories, products, serials, and stock adjustments
+- `app/api_customers.py` (`CustomersMixin`) — Customer CRM, debt summary, ledger history, and payment vouchers
+- `app/api_installments.py` (`InstallmentsMixin`) — Installment contracts, schedules, collections, alerts, and WhatsApp reminders
+- `app/api_sales.py` (`SalesMixin`) — Shifts, POS checkout, returns, invoice modifications, PDF generation, and WhatsApp invoices
+- `app/api_quotes.py` (`QuotesMixin`) — B2B quotations, A4 invoices, and conversion to sales
+- `app/api_services.py` (`ServicesMixin`) — Repair workshop lifecycle and used device purchases
+- `app/api_reports.py` (`ReportsMixin`) — Daily/monthly financials, shifts, and top-selling reports
 
 #### Dispatcher: `call(name, payload)`
 
@@ -171,16 +178,16 @@ Every mutating or sensitive method then begins with a call to `_perm(key)` which
 
 This is a **server-side** gate — client-side `hasPerm()` is purely cosmetic.
 
-### `app/db.py` — Database Layer (≈ 680 lines)
+### `app/db.py` — Database Layer (≈ 1 390 lines)
 
 Responsibilities:
 
 | Area | Detail |
 |------|--------|
-| **Schema** | Defines 19 `CREATE TABLE IF NOT EXISTS` statements with `CHECK` constraints, foreign keys, and unique indices. |
+| **Schema** | Defines 28 `CREATE TABLE IF NOT EXISTS` statements with `CHECK` constraints, foreign keys, and performance indices. |
 | **Connection** | Provides `get_conn()` which returns a per-thread `sqlite3.Connection` with WAL mode, foreign keys enabled, and `Row` factory. |
-| **Seed data** | Inserts default admin user (PIN `0000`), default settings (store name, tax rate 14%, currency `ج.م`), default payment methods, and default invoice templates (`DEFAULT_A4_TEMPLATE`, `DEFAULT_POS_TEMPLATE`). |
-| **Auto-migration** | On startup, inspects existing columns via `PRAGMA table_info` and `ALTER TABLE ADD COLUMN` for any new fields. Existing data is never dropped — migrations are purely additive. |
+| **Seed data** | Inserts default admin user, default settings (store name, tax rate 14%, currency `ج.م`), `modules` registry, `business_profiles` (with `demo_catalog` datasets), default payment methods, and default invoice templates (`DEFAULT_A4_TEMPLATE`, `DEFAULT_POS_TEMPLATE`). |
+| **Auto-migration** | On startup, inspects existing columns via `PRAGMA table_info` and `_ensure_schema_columns()`, migrating schema non-destructively (e.g. `customer_ledger`, `installment_*`, `owner_*`, `modules`, `ui_labels`, `business_profiles`). Existing data is never dropped. |
 | **Template constants** | `DEFAULT_A4_TEMPLATE` and `DEFAULT_POS_TEMPLATE` contain full HTML/CSS invoice layouts pre-configured for Egyptian tax formatting and Arabic RTL. `DEFAULT_PAYMENT_METHODS` seeds the available payment methods (cash, card, etc.). |
 
 ### Authentication
@@ -220,19 +227,20 @@ Dependencies flow strictly downward — no circular imports, no upward callbacks
 
 ```mermaid
 flowchart TD
-    HTML["HTML Pages (15)"] --> APPJS["web/app.js"]
-    APPJS -->|"pywebview bridge"| API["app/api.py (Api class)"]
+    HTML["HTML Pages (17)"] --> APPJS["web/app.js"]
+    APPJS -->|"pywebview bridge"| API["app/api.py (Facade + 8 Mixins)"]
+    API --> MODMAP["app/modules_map.py + profiles.py + fresh_db.py"]
     API --> DB["app/db.py"]
-    DB --> SQLITE[("SQLite — data/shop.db")]
-    API --> PDF["PDF generation (in api.py)"]
-    API --> WIN32["ctypes Win32 (in api.py)"]
+    DB --> SQLITE[("SQLite — data/shop.db (28 tables)")]
+    API --> PDF["PDF generation (api_common.py / api_sales.py)"]
+    API --> WIN32["ctypes Win32 (api_common.py)"]
     MAIN["app/main.py"] --> API
     MAIN --> DB
 ```
 
-- HTML pages depend on `app.js` for the bridge, theming, and invoice utilities.
+- HTML pages depend on `app.js` for the bridge, theming, labels, and invoice utilities.
 - `app.js` depends on the pywebview bridge (`window.pywebview.api.call`).
-- `api.py` depends on `db.py` for connections and schema.
+- `api.py` and its domain mixins depend on `modules_map.py` (pre-dispatch guard), `profiles.py`, `fresh_db.py`, and `db.py` for connections and schema.
 - `db.py` depends only on Python's built-in `sqlite3`.
 - `main.py` bootstraps both `db` and `api`, then hands control to `pywebview`.
 
@@ -276,13 +284,15 @@ Produces `dist/TechZone.exe` — a single self-contained executable. On launch:
 python app/selfcheck.py
 ```
 
-Runs **104 assertion-based checks** covering:
+Runs **195 assertion-based checks** covering:
 
-- Database schema integrity (all 19 tables, required columns, constraints)
-- API method existence and signature validation
-- Default seed data presence (admin user, default settings, templates)
-- File system structure (all 15 HTML pages, fonts, icons)
+- Database schema integrity (all 28 tables, indices, required columns, constraints)
+- API method existence, `modules_map.py` classification, and frontend contract validation (`107` names)
+- Owner Mode auth, lockout, recovery key rotation, admin PIN reset, module CRUD/cloning, business profile CRUD/demo catalogs, and `fresh_db.py` clean rebuilds
+- Default seed data presence (admin user, default settings, templates, `modules`, `business_profiles`)
+- File system structure (all 17 HTML pages, fonts, icons)
 - Bridge function availability in `app.js`
+- Installments scheduling, collections, cancellation & ledger consistency
 - PDF generation smoke tests
 
 ---
@@ -292,43 +302,59 @@ Runs **104 assertion-based checks** covering:
 ```
 project001/
 ├── app/
-│   ├── main.py          — Entry point: window creation, icon, startup
-│   ├── api.py           — Api class: 69 functions, PDF gen, WhatsApp, permissions (~3500 lines)
-│   ├── db.py            — Schema (19 tables), connection, seed, auto-migration (~680 lines)
-│   └── selfcheck.py     — 104 automated integrity checks
+│   ├── main.py             — Entry point: window creation, icon, startup, window close cleanup
+│   ├── api.py              — Facade Api class composing 8 domain mixins (107 public methods)
+│   ├── api_common.py       — Shared session/owner state, money helpers, PDF & Win32 CF_HDROP
+│   ├── api_auth.py         — AuthSettingsMixin: login modes, users, permissions, settings & backups
+│   ├── api_owner.py        — OwnerMixin: owner auth, modules registry, profiles, labels & audit log
+│   ├── modules_map.py      — Server-side API_MODULE_MAP, CORE_METHODS & MODULE_REQUIRES guard
+│   ├── profiles.py         — DEFAULT_BUSINESS_PROFILES (with demo_catalog) & DEFAULT_LABELS
+│   ├── fresh_db.py         — Atomic per-profile clean DB builder with selective carry-over
+│   ├── api_inventory.py    — InventoryMixin: categories, products, serials & stock adjustments
+│   ├── api_customers.py    — CustomersMixin: customer CRM, unified ledger & vouchers
+│   ├── api_installments.py — InstallmentsMixin: contracts, schedules, collections & WhatsApp alerts
+│   ├── api_sales.py        — SalesMixin: shifts, POS checkout, returns & PDF invoices
+│   ├── api_quotes.py       — QuotesMixin: B2B quotations & conversion to sales
+│   ├── api_services.py     — ServicesMixin: repair tickets & used device purchases
+│   ├── api_reports.py      — ReportsMixin: daily/monthly financials & top-selling reports
+│   ├── db.py               — Schema (28 tables), connection, seed, auto-migration & backups
+│   └── selfcheck.py        — 195 automated integrity & contract checks
 ├── web/
-│   ├── index.html       — Login screen (smart PIN recognition)
-│   ├── desktop.html     — TechZone OS shell (taskbar, dock, floating windows)
-│   ├── pos.html         — Point-of-sale cashier
-│   ├── sales_quotes.html— Sales, quotations, invoice designer
-│   ├── history.html     — Sales & returns history
-│   ├── customers.html   — Customer management (full-screen)
-│   ├── customer_details.html — Customer account statement
-│   ├── inventory.html   — Products & stock
-│   ├── repair.html      — Service tickets
-│   ├── buy_used.html    — Used device purchasing
-│   ├── receipt.html     — Receipt preview, print, WhatsApp share
-│   ├── settings.html    — System settings (3 tabs)
-│   ├── staff.html       — Employee & permission management
-│   ├── profile.html     — Personal profile & desktop prefs
-│   ├── reports.html     — Financial reports & analytics
-│   ├── app.js           — JS bridge, permissions, invoice renderer (~1400 lines)
-│   ├── app.css          — Compiled Tailwind (committed)
-│   ├── tailwind.css     — Tailwind source + @font-face
-│   └── fonts/           — 23 local .woff2 files (Arabic + Latin + icons)
+│   ├── index.html          — Smart login screen (PIN auto-detect + owner recovery modal)
+│   ├── owner.html          — Hidden Owner Control panel (modules, profiles, labels, security, audit)
+│   ├── desktop.html        — TechZone OS shell (taskbar, dock, floating windows)
+│   ├── pos.html            — Point-of-sale cashier (with USB barcode scanner listener)
+│   ├── sales_quotes.html   — Sales, quotations, invoice designer
+│   ├── history.html        — Sales & returns history
+│   ├── customers.html      — Customer management (full-screen)
+│   ├── customer_details.html — Customer account statement & installments
+│   ├── installments.html   — Installment contracts, schedules & collections
+│   ├── inventory.html      — Products & stock
+│   ├── repair.html         — Service tickets
+│   ├── buy_used.html       — Used device purchasing
+│   ├── receipt.html        — Receipt preview, print, WhatsApp share
+│   ├── settings.html       — System settings (4 tabs: store, login, invoices, backups)
+│   ├── staff.html          — Employee & 18-permission management
+│   ├── profile.html        — Personal profile & desktop prefs
+│   ├── reports.html        — Financial reports & analytics
+│   ├── app.js              — JS bridge, permissions, labels t(), dynamic NAV, invoice renderer
+│   ├── app.css             — Compiled Tailwind (committed)
+│   ├── tailwind.css        — Tailwind source + @font-face
+│   └── fonts/              — 23 local .woff2 files (Arabic + Latin + icons)
 ├── data/
-│   ├── shop.db          — SQLite database (created at first run)
-│   └── receipts/        — Exported PDF invoices
+│   ├── shop.db             — SQLite database (created at first run)
+│   ├── backups/            — Automatic & manual ACID database snapshots
+│   └── receipts/           — Exported PDF invoices
 ├── tools/
-│   ├── import_products.py — Bulk product import from Excel
-│   └── take_screenshots.py— Automated screenshot capture
-├── screenshots/         — 16 app screenshots for README
-├── icon.ico             — Application icon
-├── build-exe.bat        — PyInstaller build script
-├── push-github.bat      — Git push helper
-├── TechZone.spec        — PyInstaller spec (committed)
-├── AGENTS.md            — AI agent source-of-truth
-└── README.md            — Project documentation (Arabic)
+│   ├── import_products.py  — Bulk product import from Excel
+│   └── take_screenshots.py — Automated 20-screenshot capture (isolated temp DB)
+├── screenshots/            — 20 app screenshots for README
+├── icon.ico                — Application icon
+├── build-exe.bat           — PyInstaller build script
+├── push-github.bat         — Git push helper
+├── TechZone.spec           — PyInstaller spec (committed)
+├── AGENTS.md               — AI agent source-of-truth
+└── README.md               — Project documentation (Arabic)
 ```
 
 ---
