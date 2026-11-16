@@ -261,6 +261,7 @@ const NAV = [
   { page: 'pos', href: 'pos.html', icon: 'point_of_sale', label: 'نقاط البيع' },
   { page: 'sales_quotes', href: 'sales_quotes.html', icon: 'description', label: 'المبيعات وعروض الأسعار' },
   { page: 'customers', href: 'customers.html', icon: 'people', label: 'العملاء والمديونيات', perm: ['customers_view', 'customers_edit'] },
+  { page: 'installments', href: 'installments.html', icon: 'event_repeat', label: 'نظام الأقساط', perm: ['installments_view', 'installments_manage'] },
   { page: 'history', href: 'history.html', icon: 'receipt_long', label: 'سجل المبيعات' },
   { page: 'receipt', href: 'receipt.html', icon: 'print', label: 'معاينة وطباعة الإيصال' },
   { page: 'repair', href: 'repair.html', icon: 'build', label: 'الصيانة', perm: ['repair_view', 'repair_edit'] },

@@ -19,6 +19,7 @@ from api_common import (  # noqa: F401
 )
 from api_auth import AuthSettingsMixin
 from api_customers import CustomersMixin
+from api_installments import InstallmentsMixin
 from api_inventory import InventoryMixin
 from api_quotes import QuotesMixin
 from api_reports import ReportsMixin
@@ -30,6 +31,7 @@ class Api(
     AuthSettingsMixin,
     InventoryMixin,
     CustomersMixin,
+    InstallmentsMixin,
     SalesMixin,
     QuotesMixin,
     ServicesMixin,

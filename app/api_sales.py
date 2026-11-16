@@ -92,6 +92,28 @@ class SalesMixin:
             cash_vouchers = sum(v["amount"] for v in vouchers_rows if v["method"] == "cash")
             wallet_vouchers = sum(v["amount"] for v in vouchers_rows if v["method"] == "wallet")
 
+            inst_pay_rows = conn.execute(
+                """SELECT ip.*, c.name AS customer_name, p.plan_no
+                   FROM installment_payments ip
+                   JOIN installment_plans p ON p.id=ip.plan_id
+                   LEFT JOIN customers c ON c.id=ip.customer_id
+                   WHERE ip.shift_id=? ORDER BY ip.id DESC""",
+                (sid,),
+            ).fetchall()
+            cash_inst = sum(r["amount"] for r in inst_pay_rows if r["method"] == "cash")
+            wallet_inst = sum(r["amount"] for r in inst_pay_rows if r["method"] == "wallet")
+
+            inst_down_rows = conn.execute(
+                """SELECT p.*, c.name AS customer_name
+                   FROM installment_plans p
+                   LEFT JOIN customers c ON c.id=p.customer_id
+                   WHERE p.shift_id=? AND p.sale_id IS NULL AND p.status != 'cancelled' AND p.down_payment > 0
+                   ORDER BY p.id DESC""",
+                (sid,),
+            ).fetchall()
+            cash_inst += sum(r["down_payment"] for r in inst_down_rows if r["down_method"] == "cash")
+            wallet_inst += sum(r["down_payment"] for r in inst_down_rows if r["down_method"] == "wallet")
+
             # جمع مدفوعات كل المبيعات دفعة واحدة (تجنب N+1)
             sale_ids = [sr["id"] for sr in sales_rows]
             pays_map = {}
@@ -132,9 +154,31 @@ class SalesMixin:
                     "methods_summary": lbl,
                     "status": "completed",
                 })
+            for ir in inst_pay_rows:
+                lbl = "تحصيل قسط نقدي" if ir["method"] == "cash" else f"تحصيل قسط محفظة ({ir['ref_no'] or ''})"
+                ops.append({
+                    "kind": "installment_payment",
+                    "ref": ir["receipt_no"],
+                    "created_at": ir["created_at"],
+                    "party": ir["customer_name"] or "عميل",
+                    "amount": ir["amount"],
+                    "methods_summary": f"{lbl} ({ir['plan_no']})",
+                    "status": "completed",
+                })
+            for idr in inst_down_rows:
+                lbl = "مقدم تقسيط نقدي" if idr["down_method"] == "cash" else f"مقدم تقسيط محفظة ({idr['down_ref_no'] or ''})"
+                ops.append({
+                    "kind": "installment_down",
+                    "ref": idr["plan_no"],
+                    "created_at": idr["created_at"],
+                    "party": idr["customer_name"] or "عميل",
+                    "amount": idr["down_payment"],
+                    "methods_summary": lbl,
+                    "status": "completed",
+                })
             ops.sort(key=lambda x: x["created_at"], reverse=True)
 
-            expected_cash = s["opening_cash"] + pays_by_method["cash"] + cash_vouchers
+            expected_cash = s["opening_cash"] + pays_by_method["cash"] + cash_vouchers + cash_inst
             sales_total = sum(sr["total"] for sr in sales_rows)
             return {
                 "shift": dict(s),
@@ -148,6 +192,8 @@ class SalesMixin:
                 "credit_sales": pays_by_method["credit"],
                 "cash_vouchers": cash_vouchers,
                 "wallet_vouchers": wallet_vouchers,
+                "cash_installments": cash_inst,
+                "wallet_installments": wallet_inst,
                 "expected_cash": expected_cash,
                 "operations": ops,
             }

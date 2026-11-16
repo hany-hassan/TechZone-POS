@@ -21,6 +21,8 @@ DEFAULT_CASHIER_PERMS = {
     "customers_view": True,
     "customers_edit": True,
     "customers_delete": False,
+    "installments_view": True,
+    "installments_manage": False,
     "repair_view": True,
     "repair_edit": True,
     "used_manage": False,
@@ -97,6 +99,7 @@ DEFAULT_POS_TEMPLATE = {
     "repair_prefix": "RPR-",
     "voucher_prefix": "RCV-",
     "used_prefix": "TRX-",
+    "installment_prefix": "INS-",
 }
 
 SCHEMA = """
@@ -174,6 +177,7 @@ CREATE TABLE IF NOT EXISTS customer_ledger (
   ref TEXT,
   sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
   voucher_id INTEGER REFERENCES customer_payments(id) ON DELETE SET NULL,
+  plan_id INTEGER,
   debit INTEGER NOT NULL DEFAULT 0,
   credit INTEGER NOT NULL DEFAULT 0,
   balance_after INTEGER NOT NULL DEFAULT 0,
@@ -367,6 +371,67 @@ CREATE TABLE IF NOT EXISTS quotation_items (
 );
 CREATE INDEX IF NOT EXISTS idx_quotations_created ON quotations(created_at);
 CREATE INDEX IF NOT EXISTS idx_quotation_items_quote ON quotation_items(quote_id);
+
+CREATE TABLE IF NOT EXISTS installment_plans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_no TEXT NOT NULL UNIQUE,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+  product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+  qty INTEGER NOT NULL DEFAULT 1,
+  title TEXT NOT NULL,
+  serial TEXT,
+  principal INTEGER NOT NULL,
+  down_payment INTEGER NOT NULL DEFAULT 0,
+  down_method TEXT NOT NULL DEFAULT 'cash' CHECK (down_method IN ('cash','wallet')),
+  down_ref_no TEXT,
+  fee_rate INTEGER NOT NULL DEFAULT 0,
+  fee_amount INTEGER NOT NULL DEFAULT 0,
+  financed_total INTEGER NOT NULL,
+  ledger_charge INTEGER NOT NULL DEFAULT 0,
+  paid_total INTEGER NOT NULL DEFAULT 0,
+  remaining_total INTEGER NOT NULL,
+  months INTEGER NOT NULL,
+  frequency TEXT NOT NULL DEFAULT 'monthly' CHECK (frequency IN ('monthly','weekly','custom_days')),
+  interval_days INTEGER NOT NULL DEFAULT 30,
+  start_date TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','cancelled')),
+  national_id TEXT,
+  guarantor_name TEXT,
+  guarantor_phone TEXT,
+  guarantor_national_id TEXT,
+  notes TEXT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  shift_id INTEGER REFERENCES shifts(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS installment_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plan_id INTEGER NOT NULL REFERENCES installment_plans(id) ON DELETE CASCADE,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  seq_no INTEGER NOT NULL,
+  due_date TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  paid_amount INTEGER NOT NULL DEFAULT 0,
+  paid_at TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','partial','paid','cancelled')),
+  notes TEXT
+);
+CREATE TABLE IF NOT EXISTS installment_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  receipt_no TEXT NOT NULL UNIQUE,
+  plan_id INTEGER NOT NULL REFERENCES installment_plans(id) ON DELETE CASCADE,
+  item_id INTEGER REFERENCES installment_items(id) ON DELETE SET NULL,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  shift_id INTEGER REFERENCES shifts(id),
+  created_at TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  method TEXT NOT NULL DEFAULT 'cash' CHECK (method IN ('cash','wallet')),
+  ref_no TEXT,
+  notes TEXT
+);
 """
 
 
@@ -480,6 +545,14 @@ _PERFORMANCE_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_payments_method ON payments(method, sale_id)",
     "CREATE INDEX IF NOT EXISTS idx_products_active_name ON products(active, name)",
     "CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)",
+    "CREATE INDEX IF NOT EXISTS idx_inst_plans_cust ON installment_plans(customer_id, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_inst_plans_status ON installment_plans(status, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_inst_plans_sale ON installment_plans(sale_id)",
+    "CREATE INDEX IF NOT EXISTS idx_inst_items_plan ON installment_items(plan_id, seq_no)",
+    "CREATE INDEX IF NOT EXISTS idx_inst_items_due ON installment_items(status, due_date)",
+    "CREATE INDEX IF NOT EXISTS idx_inst_pay_cust ON installment_payments(customer_id, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_inst_pay_plan ON installment_payments(plan_id, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_inst_pay_shift ON installment_payments(shift_id)",
 )
 
 
@@ -713,6 +786,7 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
               ref TEXT,
               sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
               voucher_id INTEGER REFERENCES customer_payments(id) ON DELETE SET NULL,
+              plan_id INTEGER,
               debit INTEGER NOT NULL DEFAULT 0,
               credit INTEGER NOT NULL DEFAULT 0,
               balance_after INTEGER NOT NULL DEFAULT 0,
@@ -721,6 +795,76 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
               notes TEXT,
               user_id INTEGER REFERENCES users(id),
               user_name TEXT
+            )"""
+        )
+        ledger_cols = {c["name"] for c in conn.execute("PRAGMA table_info(customer_ledger)").fetchall()}
+        if "plan_id" not in ledger_cols:
+            conn.execute("ALTER TABLE customer_ledger ADD COLUMN plan_id INTEGER")
+
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS installment_plans (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              plan_no TEXT NOT NULL UNIQUE,
+              customer_id INTEGER NOT NULL REFERENCES customers(id),
+              sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+              product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+              qty INTEGER NOT NULL DEFAULT 1,
+              title TEXT NOT NULL,
+              serial TEXT,
+              principal INTEGER NOT NULL,
+              down_payment INTEGER NOT NULL DEFAULT 0,
+              down_method TEXT NOT NULL DEFAULT 'cash' CHECK (down_method IN ('cash','wallet')),
+              down_ref_no TEXT,
+              fee_rate INTEGER NOT NULL DEFAULT 0,
+              fee_amount INTEGER NOT NULL DEFAULT 0,
+              financed_total INTEGER NOT NULL,
+              ledger_charge INTEGER NOT NULL DEFAULT 0,
+              paid_total INTEGER NOT NULL DEFAULT 0,
+              remaining_total INTEGER NOT NULL,
+              months INTEGER NOT NULL,
+              frequency TEXT NOT NULL DEFAULT 'monthly' CHECK (frequency IN ('monthly','weekly','custom_days')),
+              interval_days INTEGER NOT NULL DEFAULT 30,
+              start_date TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','cancelled')),
+              national_id TEXT,
+              guarantor_name TEXT,
+              guarantor_phone TEXT,
+              guarantor_national_id TEXT,
+              notes TEXT,
+              user_id INTEGER NOT NULL REFERENCES users(id),
+              shift_id INTEGER REFERENCES shifts(id),
+              created_at TEXT NOT NULL,
+              updated_at TEXT
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS installment_items (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              plan_id INTEGER NOT NULL REFERENCES installment_plans(id) ON DELETE CASCADE,
+              customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+              seq_no INTEGER NOT NULL,
+              due_date TEXT NOT NULL,
+              amount INTEGER NOT NULL,
+              paid_amount INTEGER NOT NULL DEFAULT 0,
+              paid_at TEXT,
+              status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','partial','paid','cancelled')),
+              notes TEXT
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS installment_payments (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              receipt_no TEXT NOT NULL UNIQUE,
+              plan_id INTEGER NOT NULL REFERENCES installment_plans(id) ON DELETE CASCADE,
+              item_id INTEGER REFERENCES installment_items(id) ON DELETE SET NULL,
+              customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+              user_id INTEGER NOT NULL REFERENCES users(id),
+              shift_id INTEGER REFERENCES shifts(id),
+              created_at TEXT NOT NULL,
+              amount INTEGER NOT NULL,
+              method TEXT NOT NULL DEFAULT 'cash' CHECK (method IN ('cash','wallet')),
+              ref_no TEXT,
+              notes TEXT
             )"""
         )
 
@@ -829,13 +973,33 @@ def _migrate_customer_ledger(conn: sqlite3.Connection) -> None:
             cust_paid AS (
                 SELECT customer_id AS cid, COALESCE(SUM(amount), 0) AS paid_total
                 FROM customer_payments GROUP BY customer_id
+            ),
+            cust_inst_charge AS (
+                SELECT customer_id AS cid,
+                       COALESCE(SUM(CASE WHEN sale_id IS NULL THEN principal ELSE 0 END), 0) AS standalone_principal,
+                       COALESCE(SUM(ledger_charge), 0) AS ledger_charge
+                FROM installment_plans
+                WHERE status != 'cancelled'
+                GROUP BY customer_id
+            ),
+            cust_inst_paid AS (
+                SELECT ip.customer_id AS cid, COALESCE(SUM(ip.amount), 0) AS paid_total
+                FROM installment_payments ip
+                JOIN installment_plans p ON p.id = ip.plan_id
+                WHERE p.status != 'cancelled'
+                GROUP BY ip.customer_id
             )
             UPDATE customers
-            SET total_purchases = COALESCE((SELECT total_purchases FROM cust_sales_agg WHERE cid = customers.id), 0),
-                credit_total = COALESCE((SELECT credit_total FROM cust_sales_agg WHERE cid = customers.id), 0),
-                paid_total = COALESCE((SELECT paid_total FROM cust_paid WHERE cid = customers.id), 0),
-                debt = MAX(0, COALESCE((SELECT credit_total FROM cust_sales_agg WHERE cid = customers.id), 0)
-                            - COALESCE((SELECT paid_total FROM cust_paid WHERE cid = customers.id), 0))
+            SET total_purchases = COALESCE((SELECT total_purchases FROM cust_sales_agg WHERE cid = customers.id), 0)
+                              + COALESCE((SELECT standalone_principal FROM cust_inst_charge WHERE cid = customers.id), 0),
+                credit_total = COALESCE((SELECT credit_total FROM cust_sales_agg WHERE cid = customers.id), 0)
+                             + COALESCE((SELECT ledger_charge FROM cust_inst_charge WHERE cid = customers.id), 0),
+                paid_total = COALESCE((SELECT paid_total FROM cust_paid WHERE cid = customers.id), 0)
+                           + COALESCE((SELECT paid_total FROM cust_inst_paid WHERE cid = customers.id), 0),
+                debt = MAX(0, (COALESCE((SELECT credit_total FROM cust_sales_agg WHERE cid = customers.id), 0)
+                             + COALESCE((SELECT ledger_charge FROM cust_inst_charge WHERE cid = customers.id), 0))
+                            - (COALESCE((SELECT paid_total FROM cust_paid WHERE cid = customers.id), 0)
+                             + COALESCE((SELECT paid_total FROM cust_inst_paid WHERE cid = customers.id), 0)))
             """
         )
 
@@ -877,19 +1041,49 @@ def _migrate_customer_ledger(conn: sqlite3.Connection) -> None:
                    LEFT JOIN users u ON u.id = cp.user_id"""
             ).fetchall()
 
+            inst_charge_rows = conn.execute(
+                """SELECT p.id AS plan_id, p.customer_id, p.sale_id, p.plan_no AS ref, p.created_at,
+                          p.ledger_charge, p.title, p.user_id, u.name AS user_name
+                   FROM installment_plans p
+                   LEFT JOIN users u ON u.id = p.user_id
+                   WHERE p.status != 'cancelled' AND p.ledger_charge > 0"""
+            ).fetchall()
+
+            inst_pay_rows = conn.execute(
+                """SELECT ip.id AS ipay_id, ip.customer_id, ip.plan_id, ip.receipt_no AS ref, ip.created_at,
+                          ip.amount, ip.method, ip.ref_no, ip.notes, ip.user_id, u.name AS user_name
+                   FROM installment_payments ip
+                   JOIN installment_plans p ON p.id = ip.plan_id
+                   LEFT JOIN users u ON u.id = ip.user_id
+                   WHERE p.status != 'cancelled'"""
+            ).fetchall()
+
             by_cust = {}
             for r in credit_rows:
                 by_cust.setdefault(r["customer_id"], []).append((
                     r["created_at"], 0, r["sale_id"],
-                    (r["customer_id"], r["created_at"], "credit_sale", r["ref"], r["sale_id"], None,
+                    (r["customer_id"], r["created_at"], "credit_sale", r["ref"], r["sale_id"], None, None,
                      r["net_credit"], 0, "credit", None, f"فاتورة آجلة ({r['ref']})", r["user_id"], None)
+                ))
+            for ic in inst_charge_rows:
+                by_cust.setdefault(ic["customer_id"], []).append((
+                    ic["created_at"], 0, ic["plan_id"],
+                    (ic["customer_id"], ic["created_at"], "installment_charge", ic["ref"], ic["sale_id"], None, ic["plan_id"],
+                     ic["ledger_charge"], 0, "credit", None, f"خطة أقساط ({ic['ref']} - {ic['title']})", ic["user_id"], ic["user_name"])
                 ))
             for v in voucher_rows:
                 note = v["notes"] or ("سداد نقدي" if v["method"] == "cash" else "سداد محفظة")
                 by_cust.setdefault(v["customer_id"], []).append((
                     v["created_at"], 1, v["voucher_id"],
-                    (v["customer_id"], v["created_at"], "voucher", v["ref"], v["sale_id"], v["voucher_id"],
+                    (v["customer_id"], v["created_at"], "voucher", v["ref"], v["sale_id"], v["voucher_id"], None,
                      0, v["amount"], v["method"], v["ref_no"], note, v["user_id"], v["user_name"])
+                ))
+            for ip in inst_pay_rows:
+                note = ip["notes"] or f"تحصيل قسط ({ip['ref']})"
+                by_cust.setdefault(ip["customer_id"], []).append((
+                    ip["created_at"], 1, ip["ipay_id"],
+                    (ip["customer_id"], ip["created_at"], "installment_payment", ip["ref"], None, None, ip["plan_id"],
+                     0, ip["amount"], ip["method"], ip["ref_no"], note, ip["user_id"], ip["user_name"])
                 ))
 
             to_insert = []
@@ -897,14 +1091,14 @@ def _migrate_customer_ledger(conn: sqlite3.Connection) -> None:
                 evs.sort(key=lambda x: (x[0], x[1], x[2]))
                 running = 0
                 for _, _, _, tpl in evs:
-                    running = max(0, running + tpl[6] - tpl[7])
-                    to_insert.append(tpl[:8] + (running,) + tpl[8:])
+                    running = max(0, running + tpl[7] - tpl[8])
+                    to_insert.append(tpl[:9] + (running,) + tpl[9:])
 
             if to_insert:
                 conn.executemany(
                     """INSERT INTO customer_ledger
-                       (customer_id, created_at, kind, ref, sale_id, voucher_id, debit, credit, balance_after, method, ref_no, notes, user_id, user_name)
-                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       (customer_id, created_at, kind, ref, sale_id, voucher_id, plan_id, debit, credit, balance_after, method, ref_no, notes, user_id, user_name)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     to_insert,
                 )
 

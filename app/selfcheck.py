@@ -749,6 +749,138 @@ with db.connect() as _c:
     check("_migrate_customer_ledger accurately backfills debt and ledger rows",
           _migrated_flag == "1" and _crow_mig["debt"] == 27000 and _crow_mig["credit_total"] == 27000 and _lcount_mig >= 2)
 
+# 13c) فحص نظام الأقساط المتكامل (المرحلة D): الصلاحيات، العقود المباشرة، التحصيل، الإلغاء، تحويل فاتورة آجلة، التنبيهات، وواتساب
+# أ) فحص صلاحيات الكاشير: مسموح بالعرض وممنوع من إنشاء/تحصيل/إلغاء الأقساط افتراضياً
+call(a, "login", {"username": "cashier", "pin": "1111"})
+check("cashier can view installments_list", call(a, "installments_list")["ok"])
+check("cashier denied installment_create", not call(a, "installment_create", {
+    "customer_name": "عميل مرفوض", "title": "جهاز", "principal": 1000, "months": 2
+})["ok"])
+call(a, "login", {"username": "admin", "pin": "1234"})
+
+# ب) إنشاء منتج ومخزون مخصص + عميل مخصص + فتح عقد تقسيط مباشر بـ 10% زيادة على 3 شهور
+ip_cat = call(a, "categories")["data"][0]["id"]
+ip_res = call(a, "product_save", {
+    "name": "هاتف فحص تقسيط D", "sku": "INST-TEST-D1", "category_id": ip_cat,
+    "cost": 800, "price": 1200, "min_qty": 1, "tracked": 0,
+})
+check("installment test product created", ip_res["ok"])
+inst_pid = ip_res["data"]["id"]
+call(a, "product_adjust", {"id": inst_pid, "qty_change": 4, "reason": "رصيد اختبار أقساط"})
+
+ic_res = call(a, "customers_save", {"name": "عميل أقساط اختبار", "phone": "01022334455"})
+check("installment test customer created", ic_res["ok"])
+inst_cid = ic_res["data"]["id"]
+
+# مقدم 200 من 1200 -> المتبقي الأساسي 1000، زيادة 10% = 100، المقسّط = 1100 ج.م على 3 أقساط (110000 قرش)
+p_standalone = call(a, "installment_create", {
+    "customer_id": inst_cid,
+    "product_id": inst_pid,
+    "qty": 1,
+    "down_payment": 200,
+    "down_method": "cash",
+    "fee_type": "percent",
+    "fee_value": 10,
+    "months": 3,
+    "frequency": "monthly",
+    "start_date": "2020-01-01",  # تاريخ ماضٍ لاختبار تنبيهات التأخير
+    "national_id": "29901010123456",
+    "guarantor_name": "ضامن اختبار",
+    "guarantor_phone": "01122334455",
+})
+check("standalone installment_create succeeds", p_standalone["ok"] and p_standalone["data"]["financed_total"] == 110000)
+plan_id = p_standalone["data"]["id"]
+plan_det = call(a, "installment_detail", {"id": plan_id})["data"]
+plan_items = plan_det["items"]
+check("installment schedule sums exactly to financed_total & deducts stock",
+      len(plan_items) == 3
+      and sum(it["amount"] for it in plan_items) == 110000
+      and call(a, "product", {"id": inst_pid})["data"]["qty"] == 3)
+check("standalone installment syncs customer debt & prevents customer deletion",
+      call(a, "customer_history", {"id": inst_cid})["data"]["customer"]["debt"] == 110000
+      and not call(a, "customers_delete", {"id": inst_cid})["ok"])
+
+# ج) فحص التنبيهات وتذكير واتساب
+al_res = call(a, "installment_alerts")
+check("installment_alerts detects overdue installment",
+      al_res["ok"] and al_res["data"]["overdue_count"] >= 1 and al_res["data"]["overdue_amount"] >= 110000)
+
+import webbrowser as _wb_inst
+_orig_wb_inst = _wb_inst.open
+_wb_inst.open = lambda url, *args, **kwargs: True
+try:
+    wa_inst = call(a, "installment_whatsapp_reminder", {"plan_id": plan_id, "open_app": False})
+    check("installment_whatsapp_reminder returns message & EG phone",
+          wa_inst["ok"] and wa_inst["data"]["phone"] == "201022334455" and p_standalone["data"]["plan_no"] in wa_inst["data"]["message"])
+finally:
+    _wb_inst.open = _orig_wb_inst
+
+# د) تحصيل الأقساط + رفض الزيادة عن المتبقي + رفض المحفظة بلا مرجع + مطابقة تقرير الوردية
+check("installment_pay rejects overpay", not call(a, "installment_pay", {"plan_id": plan_id, "amount": 5000, "method": "cash"})["ok"])
+check("installment_pay rejects wallet without ref_no", not call(a, "installment_pay", {"plan_id": plan_id, "amount": 100, "method": "wallet"})["ok"])
+
+pay1 = call(a, "installment_pay", {"plan_id": plan_id, "amount": 500, "method": "cash", "notes": "دفعة أولى"})
+check("installment_pay partial/multi-item allocates cleanly",
+      pay1["ok"] and pay1["data"]["remaining_total"] == 60000 and pay1["data"]["status"] == "active")
+sh_inst = call(a, "shift_summary")
+check("shift_summary includes cash_installments (down + installment payment)",
+      sh_inst["ok"] and sh_inst["data"]["cash_installments"] >= 70000)
+check("cannot cancel installment plan after payments", not call(a, "installment_cancel", {"plan_id": plan_id})["ok"])
+
+pay2 = call(a, "installment_pay", {"plan_id": plan_id, "amount": 600, "method": "wallet", "ref_no": "IPAY-7788"})
+check("installment_pay settles full plan & zeroes customer debt",
+      pay2["ok"] and pay2["data"]["status"] == "completed" and pay2["data"]["remaining_total"] == 0
+      and call(a, "customer_history", {"id": inst_cid})["data"]["customer"]["debt"] == 0)
+
+# هـ) فحص إلغاء عقد غير مدفوع وإعادة المخزون وعكس قيد الدفتر
+p_cancel_res = call(a, "installment_create", {
+    "customer_id": inst_cid, "product_id": inst_pid, "qty": 1,
+    "down_payment": 0, "fee_type": "fixed", "fee_value": 100, "months": 2,
+})
+check("second installment plan created & stock decremented",
+      p_cancel_res["ok"] and call(a, "product", {"id": inst_pid})["data"]["qty"] == 2
+      and call(a, "customer_history", {"id": inst_cid})["data"]["customer"]["debt"] == 130000)
+cancel_ok = call(a, "installment_cancel", {"plan_id": p_cancel_res["data"]["id"], "reason": "عدول العميل"})
+check("installment_cancel restores stock & reverses customer debt",
+      cancel_ok["ok"] and call(a, "product", {"id": inst_pid})["data"]["qty"] == 3
+      and call(a, "customer_history", {"id": inst_cid})["data"]["customer"]["debt"] == 0)
+
+# و) تحويل فاتورة آجلة قائمة إلى أقساط بدون ازدواج في المديونية
+# فاتورة بـ 1000 ج.م آجل بالكامل، ثم تحويلها بأقساط مع مقدم 200 ج.م ورسوم ثابتة 100 ج.م -> إجمالي المقسّط والمديونية = 900 ج.م (90000 قرش)
+call(a, "settings_save", {"tax_enabled": "0"})
+inv_sale = call(a, "sale_create", {
+    "customer_name": "عميل أقساط اختبار",
+    "customer_phone": "01022334455",
+    "items": [{"product_id": inst_pid, "qty": 1, "unit_price": 1000}],
+    "payments": [{"method": "credit", "amount": 1000}],
+})
+check("credit sale for installment conversion created", inv_sale["ok"])
+elig_before = call(a, "installment_eligible_sales", {"customer_id": inst_cid})
+check("installment_eligible_sales lists credit sale before conversion",
+      elig_before["ok"] and any(x["id"] == inv_sale["data"]["sale_id"] for x in elig_before["data"]))
+p_conv = call(a, "installment_create", {
+    "customer_id": inst_cid,
+    "sale_id": inv_sale["data"]["sale_id"],
+    "down_payment": 200,
+    "down_method": "cash",
+    "fee_type": "fixed",
+    "fee_value": 100,
+    "months": 3,
+})
+elig_after = call(a, "installment_eligible_sales", {"customer_id": inst_cid})
+hist_conv = call(a, "customer_history", {"id": inst_cid})["data"]
+check("sale conversion prevents double-counting debt & removes from eligible list",
+      p_conv["ok"]
+      and p_conv["data"]["financed_total"] == 90000
+      and hist_conv["customer"]["debt"] == 90000
+      and hist_conv["ledger"][0]["balance_after"] == 90000
+      and not any(x["id"] == inv_sale["data"]["sale_id"] for x in elig_after["data"]))
+
+# ز) التحقق من صفحة installments.html وتكامل المودالات والصلاحيات
+inst_html_text = (ROOT / "web" / "installments.html").read_text(encoding="utf-8")
+check("installments.html exists with create/detail/pay modals",
+      "id=\"create-modal\"" in inst_html_text and "id=\"detail-modal\"" in inst_html_text and "id=\"pay-modal\"" in inst_html_text)
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:

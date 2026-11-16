@@ -22,11 +22,15 @@
           <p class="text-xs text-slate-500"><span id="info-phone" class="font-num"></span> · تاريخ التسجيل: <span id="info-date" class="font-num"></span></p>
         </div>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <button onclick="window.print()" class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-medium flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700">
           <span class="material-icons-outlined text-base">print</span>
           طباعة كشف الحساب
         </button>
+        <a id="btn-new-installment" href="installments.html" class="px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold shadow-lg shadow-sky-600/20 flex items-center gap-2 text-sm">
+          <span class="material-icons-outlined text-base">event_repeat</span>
+          فتح عقد تقسيط
+        </a>
         <button id="btn-voucher" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-2 text-sm">
           <span class="material-icons-outlined text-base">payments</span>
           إصدار سند قبض (تسديد دفعة آجلة)
@@ -76,6 +80,33 @@
             </tr>
           </thead>
           <tbody id="ledger-list" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Installment Plans Table (عقود الأقساط) -->
+    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm mb-6 overflow-hidden">
+      <div class="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+        <h2 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="material-icons-outlined text-sky-500">event_repeat</span>
+          عقود الأقساط (<span id="inst-count">0</span>)
+        </h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-right border-collapse">
+          <thead>
+            <tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
+              <th class="px-6 py-4 font-semibold">رقم العقد</th>
+              <th class="px-6 py-4 font-semibold">البيان / الجهاز</th>
+              <th class="px-6 py-4 font-semibold">المقسّط</th>
+              <th class="px-6 py-4 font-semibold">المسدّد</th>
+              <th class="px-6 py-4 font-semibold">المتبقي</th>
+              <th class="px-6 py-4 font-semibold">القسط القادم</th>
+              <th class="px-6 py-4 font-semibold">الحالة</th>
+              <th class="px-6 py-4 font-semibold text-center">فتح</th>
+            </tr>
+          </thead>
+          <tbody id="inst-list" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
         </table>
       </div>
     </div>
@@ -190,11 +221,14 @@ function repairStatusColor(s) {
 
   const canEdit = hasPerm('customers_edit');
   const canDelete = hasPerm('customers_delete');
+  const canManageInst = hasPerm('installments_manage');
   if (!canEdit) document.getElementById('btn-voucher').classList.add('hidden');
+  if (!canManageInst) document.getElementById('btn-new-installment').classList.add('hidden');
 
   const params = new URLSearchParams(window.location.search);
   const cid = params.get('id');
   if (!cid) { location.href = 'customers.html'; return; }
+  document.getElementById('btn-new-installment').href = `installments.html?customer_id=${encodeURIComponent(cid)}`;
 
   document.getElementById('back-btn').addEventListener('click', () => {
     location.href = 'customers.html';
@@ -221,23 +255,27 @@ function repairStatusColor(s) {
     const ledger = res.ledger || [];
     document.getElementById('ledger-count').textContent = ledger.length;
     document.getElementById('ledger-list').innerHTML = ledger.length ? ledger.map((ev) => {
-      const isSale = ev.kind === 'credit_sale';
+      const isDebit = (ev.debit || 0) > 0;
+      let actionHtml = '—';
+      if (ev.kind === 'credit_sale' && ev.sale_id) {
+        actionHtml = `<a href="receipt.html?id=${ev.sale_id}" class="text-xs text-primary hover:underline">عرض الفاتورة</a>`;
+      } else if ((ev.kind === 'installment_charge' || ev.kind === 'installment_payment') && ev.plan_id) {
+        actionHtml = `<a href="installments.html?plan_id=${ev.plan_id}" class="text-xs text-sky-600 dark:text-sky-400 hover:underline">عرض العقد</a>`;
+      } else if (ev.kind === 'voucher' && (ev.voucher_id || ev.id) && canDelete) {
+        actionHtml = `<button data-del-v="${ev.voucher_id || ev.id}" class="text-xs text-red-500 hover:underline">حذف السند</button>`;
+      }
       return `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-        <td class="px-6 py-4 font-num font-bold ${isSale ? 'text-amber-600' : 'text-emerald-600'}">${esc(ev.ref)}</td>
+        <td class="px-6 py-4 font-num font-bold ${isDebit ? 'text-amber-600' : 'text-emerald-600'}">${esc(ev.ref || '—')}</td>
         <td class="px-6 py-4 text-sm font-num text-slate-500">${fmtDT(ev.created_at)}</td>
         <td class="px-6 py-4 text-sm">
-          <span class="font-medium">${esc(ev.notes)}</span>
+          <span class="font-medium">${esc(ev.notes || '')}</span>
           ${ev.ref_no ? `<span class="text-xs px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-num mr-1">مرجع المحفظة: ${esc(ev.ref_no)}</span>` : ''}
         </td>
         <td class="px-6 py-4 font-num font-bold text-amber-600">${ev.debit ? money(ev.debit) : '—'}</td>
         <td class="px-6 py-4 font-num font-bold text-emerald-600">${ev.credit ? money(ev.credit) : '—'}</td>
         <td class="px-6 py-4 font-num font-bold text-slate-900 dark:text-white">${money(ev.balance_after)}</td>
-        <td class="px-6 py-4 text-center">
-          ${isSale
-            ? `<a href="receipt.html?id=${ev.sale_id}" class="text-xs text-primary hover:underline">عرض الفاتورة</a>`
-            : (canDelete ? `<button data-del-v="${ev.id}" class="text-xs text-red-500 hover:underline">حذف السند</button>` : '—')}
-        </td>
+        <td class="px-6 py-4 text-center">${actionHtml}</td>
       </tr>`;
     }).join('') : '<tr><td colspan="7" class="px-6 py-10 text-center text-slate-400">لا توجد معاملات آجلة أو سندات قبض مسجلة لهذا العميل</td></tr>';
 
@@ -248,6 +286,25 @@ function repairStatusColor(s) {
         loadDetails();
       }
     }));
+
+    const insts = res.installments || [];
+    document.getElementById('inst-count').textContent = insts.length;
+    const instStatusMap = {
+      active: '<span class="px-2 py-1 rounded text-xs font-bold bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">نشط</span>',
+      completed: '<span class="px-2 py-1 rounded text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">مكتمل</span>',
+      cancelled: '<span class="px-2 py-1 rounded text-xs font-bold bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300">ملغى</span>',
+    };
+    document.getElementById('inst-list').innerHTML = insts.length ? insts.map(p => `
+      <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+        <td class="px-6 py-4 font-num font-bold text-sky-600">${esc(p.plan_no)}</td>
+        <td class="px-6 py-4 text-sm font-medium">${esc(p.title)} <span class="text-xs text-slate-400 font-num">(${p.paid_count || 0}/${p.months} قسط)</span></td>
+        <td class="px-6 py-4 font-num font-medium">${money(p.financed_total)}</td>
+        <td class="px-6 py-4 font-num font-bold text-emerald-600">${money(p.paid_total)}</td>
+        <td class="px-6 py-4 font-num font-bold ${p.remaining_total > 0 ? 'text-red-600' : 'text-slate-400'}">${money(p.remaining_total)}</td>
+        <td class="px-6 py-4 font-num text-xs">${p.next_due_date ? esc(p.next_due_date) : '—'}${p.overdue_count > 0 ? ` <span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold">متأخر (${p.overdue_count})</span>` : ''}</td>
+        <td class="px-6 py-4">${instStatusMap[p.status] || esc(p.status)}</td>
+        <td class="px-6 py-4 text-center"><a href="installments.html?plan_id=${p.id}" class="inline-flex items-center gap-1 text-xs font-bold text-sky-600 hover:underline">إدارة وتحصيل</a></td>
+      </tr>`).join('') : '<tr><td colspan="8" class="px-6 py-10 text-center text-slate-400">لا توجد عقود أقساط لهذا العميل</td></tr>';
 
     const sales = res.sales || [];
     document.getElementById('sales-count').textContent = sales.length;

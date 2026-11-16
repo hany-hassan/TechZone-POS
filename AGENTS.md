@@ -54,7 +54,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (137 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (158 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -67,17 +67,18 @@ Detailed technical specifications are modularized in the `docs/` directory:
 project001/
 ├── app/
 │   ├── main.py          # Entry point: pywebview window setup & branding
-│   ├── api.py           # Facade Api class composing 7 domain mixins (plus re-exports)
-│   ├── api_common.py    # Shared state, money/format helpers, PDF/WhatsApp Win32 & ledger helpers
+│   ├── api.py           # Facade Api class composing 8 domain mixins (plus re-exports)
+│   ├── api_common.py    # Shared state, money/format helpers, phone normalization, PDF/WhatsApp Win32 & ledger helpers
 │   ├── api_auth.py      # AuthSettingsMixin: login, users, permissions, profile & settings/backups
 │   ├── api_inventory.py # InventoryMixin: categories, products, serials & stock adjustments
 │   ├── api_customers.py # CustomersMixin: customer CRM, debt summary, ledger history & vouchers
+│   ├── api_installments.py # InstallmentsMixin: installment contracts, schedules, collections, alerts & WhatsApp reminders
 │   ├── api_sales.py     # SalesMixin: shifts, POS checkout, returns, modifications & WhatsApp invoice
 │   ├── api_quotes.py    # QuotesMixin: B2B quotations, A4 invoices & conversion to sales
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
-│   ├── db.py            # SQLite schema (20 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (137 checks)
+│   ├── db.py            # SQLite schema (23 tables), connection wrapper, seed, migration & backups
+│   └── selfcheck.py     # Comprehensive automated regression suite (158 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN & force-PIN security)
 │   ├── desktop.html     # TechZone OS hybrid desktop shell (dock, start menu, iframes)
@@ -85,12 +86,13 @@ project001/
 │   ├── sales_quotes.html# Official B2B A4 sales invoices & price quotations
 │   ├── inventory.html   # Product catalog, stock tracking, and serial numbers
 │   ├── customers.html   # Customer database, debt totals, and ledger shortcuts
-│   ├── customer_details.html # Customer debt statements & payment vouchers
+│   ├── customer_details.html # Customer debt statements, installment contracts & payment vouchers
+│   ├── installments.html # Installment contracts, pre-sale calculator, collection & overdue tracking
 │   ├── repair.html      # Maintenance lifecycle ticketing & spare parts
 │   ├── buy_used.html    # Used device purchasing, trade-ins, and anti-theft IDs
 │   ├── history.html     # Operations history, returns, and multi-filter ledger
 │   ├── reports.html     # Daily/monthly financials, shift logs, and net profits
-│   ├── staff.html       # Employee administration & 16-permission matrix
+│   ├── staff.html       # Employee administration & 18-permission matrix
 │   ├── profile.html     # Employee personal profile, PIN, and desktop theme setup
 │   ├── settings.html    # Store info, tax toggle, login mode, invoice studio & database backups/restore hub
 │   ├── receipt.html     # Thermal 80mm & A4 preview and WhatsApp sharing
@@ -111,7 +113,7 @@ project001/
 
 ---
 
-## 6. Permissions Matrix (16 Granular Keys)
+## 6. Permissions Matrix (18 Granular Keys)
 
 The administrator (`role='admin'`) possesses unrestricted system access. All other staff members (`role='cashier'`) have individual booleans stored in `users.permissions`:
 1. `pos_sell`: Process POS transactions and checkout.
@@ -130,6 +132,8 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 14. `used_manage`: Purchase and evaluate used customer devices.
 15. `reports_view`: Access financial summaries, profits, and shift audits.
 16. `settings_manage`: Edit store profile, tax rules, and employee accounts.
+17. `installments_view`: View installment contracts, schedules, and reminders.
+18. `installments_manage`: Create, collect payments on, and cancel installment contracts.
 
 ---
 
@@ -140,12 +144,27 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 137 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 158 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-15 — Phase D (Isolated Worktree): Installments Management System (نظام الأقساط)
+- **Isolated Branch/Worktree**: Executed on branch `feat/phase-a-performance` in `../project001-worker/` keeping `main` and production DB untouched.
+- **Database Schema, Indexes & Ledger Integration (`app/db.py`, `app/api_common.py`, `app/api_customers.py`, `app/api_sales.py`)**:
+  1. Added `installment_plans`, `installment_items`, and `installment_payments` tables plus 8 performance indexes (`idx_inst_plans_*`, `idx_inst_items_*`, `idx_inst_pay_*`) and `customer_ledger.plan_id` column with automatic schema migration.
+  2. Added `installments_view` (`True` default) and `installments_manage` (`False` default) to `DEFAULT_CASHIER_PERMS` (`18` total keys) and `installment_prefix` (`INS-`) to `DEFAULT_POS_TEMPLATE`.
+  3. Updated `_customer_debt_summary()`, `_migrate_customer_ledger()`, `customers_delete()` guard, `customer_history()`, and `shift_summary()` (`cash_installments`, `wallet_installments`) to unify installment balances, down payments, and collections with zero double-counting when converting existing credit sales (`sale_id`).
+- **Installments Domain Engine (`app/api_installments.py`, `app/api.py`)**:
+  1. Implemented `InstallmentsMixin`: `installment_alerts`, `installments_list`, `installment_eligible_sales`, `installment_detail`, `installment_create` (direct/inventory with stock/serial deduction & credit-sale conversion, %/fixed fees, monthly/weekly/custom schedules with exact minor-unit rounding), `installment_pay` (partial/multi-item allocation with `INP-` receipts), `installment_cancel` (unpaid plans only, reversing ledger/stock), and `installment_whatsapp_reminder` (using shared `_normalize_eg_phone` helper in `app/api_common.py`).
+- **Frontend UI & OS Shell Integration (`web/installments.html`, `web/desktop.html`, `web/app.js`, `web/staff.html`, `web/settings.html`, `web/customer_details.html`, `web/app.css`)**:
+  1. Built `web/installments.html` with KPI cards, overdue/upcoming alert filters, pre-sale calculator & live schedule preview, contract details/collection/cancellation modals, printable contract & receipt views, WhatsApp reminder triggers, and `?plan_id=` / `?customer_id=` deep-linking.
+  2. Registered app icon (`نظام الأقساط`) in `web/desktop.html` & `web/app.js`, start-page/permission controls in `web/staff.html` & `web/settings.html`, customer installments table + fixed ledger navigation in `web/customer_details.html`, and recompiled `web/app.css`.
+- **Verification (`app/selfcheck.py`, stress DB)**:
+  - Added Phase D automated checks (permissions, standalone schedule/stock/debt sync, overdue alerts, WhatsApp reminder, partial/full collections & shift reconciliation, unpaid cancellation, credit-sale conversion with zero double-counting, and UI modal checks): `158/158` checks passing (`contract ok (85 names)`).
+  - Verified auto-migration and query latency on `../project001-worker/data/shop.db` (3,001 customers, 30,002 sales): schema migration `106.71ms`, `installment_alerts` `3.77ms`, `installments_list` `5.25ms`, `customers_list` `5.95ms`.
 
 ### 2026-11-15 — Phase B & Phase C (Isolated Worktree): API Domain Modularization, Customer Ledger & Cached Balances
 - **Isolated Branch/Worktree**: Continued on branch `feat/phase-a-performance` in `../project001-worker/` keeping `main` and production DB untouched.

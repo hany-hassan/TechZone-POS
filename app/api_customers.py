@@ -104,8 +104,8 @@ class CustomersMixin:
             summary = _customer_debt_summary(conn, cust)
             if summary["debt"] > 0:
                 raise ApiError("لا يمكن حذف عميل عليه مديونية متبقية — يجب سداد المديونية أولاً")
-            if summary["sales"] or summary["vouchers"]:
-                raise ApiError("لا يمكن حذف عميل مرتبط بفواتير أو سندات قبض للحفاظ على سلامة الحسابات وسجل الورديات")
+            if summary["sales"] or summary["vouchers"] or summary.get("inst_plans_count"):
+                raise ApiError("لا يمكن حذف عميل مرتبط بفواتير أو سندات قبض أو عقود أقساط للحفاظ على سلامة الحسابات وسجل الورديات")
             conn.execute("DELETE FROM customers WHERE id=?", (cid,))
             return True
 
@@ -152,7 +152,7 @@ class CustomersMixin:
             cust_dict["debt"] = summary["debt"]
 
             ledger_rows = conn.execute(
-                """SELECT id, kind, ref, sale_id, voucher_id, created_at, debit, credit,
+                """SELECT id, kind, ref, sale_id, voucher_id, plan_id, created_at, debit, credit,
                           balance_after, method, ref_no, notes, user_name
                    FROM customer_ledger
                    WHERE customer_id=?
@@ -205,12 +205,23 @@ class CustomersMixin:
                    ORDER BY r.id DESC""",
                 (cname, cphone, cphone, cphone),
             ).fetchall()
+            installments = conn.execute(
+                """SELECT ip.*,
+                          (SELECT COUNT(*) FROM installment_items ii WHERE ii.plan_id=ip.id AND ii.status='paid') AS paid_count,
+                          (SELECT MIN(ii.due_date) FROM installment_items ii WHERE ii.plan_id=ip.id AND ii.status IN ('pending','partial')) AS next_due_date,
+                          (SELECT COUNT(*) FROM installment_items ii WHERE ii.plan_id=ip.id AND ii.status IN ('pending','partial') AND ii.due_date < date('now','localtime')) AS overdue_count
+                   FROM installment_plans ip
+                   WHERE ip.customer_id=?
+                   ORDER BY ip.id DESC""",
+                (cid,),
+            ).fetchall()
             return {
                 "customer": cust_dict,
                 "sales": summary["sales"],
                 "vouchers": summary["vouchers"],
                 "ledger": events,
                 "repairs": [dict(r) for r in repairs],
+                "installments": [dict(p) for p in installments],
             }
 
     def customer_payment_create(self, customer_id, amount, method="cash", ref_no=None, sale_id=None, notes=None):

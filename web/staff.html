@@ -35,7 +35,7 @@
         <span class="material-icons-round text-primary">manage_accounts</span>
         <span>إدارة الموظفين وتخصيص الصلاحيات لكل مستخدم</span>
       </h1>
-      <p class="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-0.5">إضافة وتعديل الموظفين، تعيين الرمز السري الفريد، رفع صورة الموظف، تحديد صفحة البداية بعد تسجيل الدخول، وتخصيص الـ 16 صلاحية</p>
+      <p class="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-0.5">إضافة وتعديل الموظفين، تعيين الرمز السري الفريد، رفع صورة الموظف، تحديد صفحة البداية بعد تسجيل الدخول، وتخصيص الصلاحيات الـ 18</p>
     </div>
     <div class="flex items-center gap-2">
       <a href="profile.html" class="px-3.5 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
@@ -119,6 +119,7 @@
             <option value="sales_quotes">المبيعات وعروض الأسعار (A4)</option>
             <option value="inventory">المخزون والمنتجات</option>
             <option value="customers">العملاء والمديونيات</option>
+            <option value="installments">نظام الأقساط والمتابعة</option>
             <option value="repair">مركز الصيانة</option>
             <option value="history">سجل المبيعات والمرتجعات</option>
             <option value="buy_used">شراء الأجهزة المستعملة</option>
@@ -140,10 +141,10 @@
       </div>
     </div>
 
-    <!-- الصلاحيات الـ 16 -->
+    <!-- الصلاحيات الـ 18 -->
     <div id="perms-box" class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
       <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-        <span class="text-xs font-bold text-slate-700 dark:text-slate-300">الصلاحيات المخصصة للموظف في كافة أقسام البرنامج (16 صلاحية):</span>
+        <span class="text-xs font-bold text-slate-700 dark:text-slate-300">الصلاحيات المخصصة للموظف في كافة أقسام البرنامج (18 صلاحية):</span>
         <div class="flex gap-2">
           <button type="button" id="perms-all" class="text-xs text-primary font-bold hover:underline">تحديد الكل</button>
           <span class="text-slate-300">|</span>
@@ -181,6 +182,7 @@ const START_PAGE_LABELS = {
   sales_quotes: 'المبيعات وعروض الأسعار',
   inventory: 'المخزون والمنتجات',
   customers: 'العملاء والمديونيات',
+  installments: 'نظام الأقساط',
   repair: 'مركز الصيانة',
   history: 'سجل المبيعات',
   buy_used: 'شراء المستعمل',
@@ -202,6 +204,8 @@ const PERM_LABELS = [
   { key: 'customers_view', label: 'دخول صفحة العملاء وعرض كشف الحساب', def: true },
   { key: 'customers_edit', label: 'إضافة/تعديل العملاء وإصدار سندات قبض', def: true },
   { key: 'customers_delete', label: 'حذف العملاء وسندات القبض', def: false },
+  { key: 'installments_view', label: 'دخول نظام الأقساط وتحصيل الأقساط وإرسال التذكير', def: true },
+  { key: 'installments_manage', label: 'إنشاء عقود تقسيط جديدة أو إلغاء العقود', def: false },
   { key: 'repair_view', label: 'دخول الصيانة وإنشاء التذاكر وتغيير حالتها', def: true },
   { key: 'repair_edit', label: 'إضافة قطع غيار لتذاكر الصيانة', def: true },
   { key: 'used_manage', label: 'شراء الأجهزة المستعملة', def: false },

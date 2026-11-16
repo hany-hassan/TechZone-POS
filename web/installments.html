@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>نظام الأقساط والمتابعة - تك زون للإلكترونيات</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico"/>
+<link rel="icon" type="image/png" href="icon.png"/>
+<link href="app.css" rel="stylesheet"/>
+<script>if(localStorage.getItem('tz-theme')==='dark')document.documentElement.classList.add('dark');</script>
+<style>
+  @media print {
+    body > *:not(#print-area) { display: none !important; }
+    #print-area { display: block !important; position: static !important; width: 100%; background: #fff !important; color: #000 !important; padding: 16px; }
+  }
+</style>
+</head>
+<body id="shell" class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-200 h-screen overflow-hidden flex flex-col md:flex-row">
+<main class="flex-1 min-w-0 w-full h-screen overflow-y-auto flex flex-col p-6 md:p-8">
+  <div class="w-full flex-1 flex flex-col">
+    <!-- Header -->
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+      <div>
+        <h1 class="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+          <span class="material-icons-outlined text-sky-600 text-3xl">event_repeat</span>
+          إدارة الأقساط وجدولة السداد
+        </h1>
+        <p class="text-slate-500 dark:text-slate-400">عقود البيع بالتقسيط، تقسيط الفواتير الآجلة، تنبيهات المتأخرات، وتحصيل الأقساط</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-refresh" class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm font-semibold flex items-center gap-1.5">
+          <span class="material-icons-outlined text-base">refresh</span>
+          تحديث
+        </button>
+        <button id="btn-new-plan" class="px-6 py-3 rounded-xl bg-sky-600 text-white font-bold shadow-lg shadow-sky-600/30 hover:bg-sky-700 transition-all flex items-center gap-2 active:scale-95">
+          <span class="material-icons-outlined">add_circle_outline</span>
+          عقد تقسيط جديد
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm flex items-start justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">العقود النشطة</p>
+          <h3 id="kpi-active" class="text-2xl font-bold font-num text-slate-900 dark:text-white">0</h3>
+          <p class="text-xs text-emerald-600 mt-1.5 font-medium">مكتملة: <span id="kpi-completed" class="font-num font-bold">0</span></p>
+        </div>
+        <div class="p-3 rounded-xl bg-sky-100 dark:bg-sky-900/20 text-sky-600"><span class="material-icons-outlined">assignment</span></div>
+      </div>
+
+      <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm flex items-start justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">إجمالي المتبقي بالمحفظة</p>
+          <h3 id="kpi-remaining" class="text-2xl font-bold font-num text-primary">0.00</h3>
+          <p class="text-xs text-slate-400 mt-1.5">إجمالي التمويل: <span id="kpi-financed" class="font-num font-bold">0.00</span></p>
+        </div>
+        <div class="p-3 rounded-xl bg-primary/10 text-primary"><span class="material-icons-outlined">account_balance</span></div>
+      </div>
+
+      <button type="button" id="card-filter-overdue" class="text-right bg-white dark:bg-slate-800 rounded-2xl border-2 border-red-200 dark:border-red-900/50 p-5 shadow-sm flex items-start justify-between hover:border-red-400 transition-colors">
+        <div>
+          <p class="text-xs font-bold text-red-600 dark:text-red-400 mb-1">أقساط متأخرة السداد (اضغط للتصفية)</p>
+          <h3 id="kpi-overdue-amt" class="text-2xl font-bold font-num text-red-600 dark:text-red-400">0.00</h3>
+          <p class="text-xs text-red-500 mt-1.5 font-medium"><span id="kpi-overdue-items" class="font-num font-bold">0</span> قسط في <span id="kpi-overdue-plans" class="font-num font-bold">0</span> عقد</p>
+        </div>
+        <div class="p-3 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600"><span class="material-icons-outlined">warning_amber</span></div>
+      </button>
+
+      <button type="button" id="card-filter-upcoming" class="text-right bg-white dark:bg-slate-800 rounded-2xl border border-emerald-200 dark:border-emerald-800 p-5 shadow-sm flex items-start justify-between hover:border-emerald-400 transition-colors">
+        <div>
+          <p class="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-1">المحصّل هذا الشهر</p>
+          <h3 id="kpi-collected-month" class="text-2xl font-bold font-num text-emerald-600">0.00</h3>
+          <p class="text-xs text-amber-600 mt-1.5 font-medium">مستحق خلال 7 أيام: <span id="kpi-upcoming-amt" class="font-num font-bold">0.00</span> (<span id="kpi-upcoming-cnt" class="font-num">0</span>)</p>
+        </div>
+        <div class="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600"><span class="material-icons-outlined">payments</span></div>
+      </button>
+    </div>
+
+    <!-- Table Card -->
+    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex-1 flex flex-col min-h-[380px]">
+      <div class="p-4 md:p-5 border-b border-slate-100 dark:border-slate-700 flex flex-wrap justify-between items-center gap-3">
+        <div class="relative w-full md:w-80">
+          <span class="material-icons-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+          <input id="q" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pr-10 pl-4 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500" placeholder="بحث برقم العقد، العميل، الهاتف، الرقم القومي، الجهاز..."/>
+        </div>
+        <div id="status-tabs" class="flex flex-wrap gap-1.5">
+          <button data-status="all" class="status-tab px-3.5 py-1.5 rounded-lg text-xs font-bold bg-sky-600 text-white">الكل</button>
+          <button data-status="overdue" class="status-tab px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-700 text-red-600 dark:text-red-400">متأخرة</button>
+          <button data-status="upcoming" class="status-tab px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-700 text-amber-700 dark:text-amber-300">مستحقة قريباً (7 أيام)</button>
+          <button data-status="active" class="status-tab px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">نشطة</button>
+          <button data-status="completed" class="status-tab px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-700 text-emerald-700 dark:text-emerald-300">مكتملة</button>
+          <button data-status="cancelled" class="status-tab px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">ملغاة</button>
+        </div>
+      </div>
+
+      <div class="flex-1 min-h-0 overflow-auto">
+        <table class="w-full text-right border-collapse">
+          <thead class="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900/90 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
+            <tr>
+              <th class="px-5 py-3.5 font-semibold">رقم العقد</th>
+              <th class="px-5 py-3.5 font-semibold">العميل / الهاتف</th>
+              <th class="px-5 py-3.5 font-semibold">الجهاز / البيان</th>
+              <th class="px-5 py-3.5 font-semibold">المقسّط</th>
+              <th class="px-5 py-3.5 font-semibold">التقدم والسداد</th>
+              <th class="px-5 py-3.5 font-semibold">المتبقي</th>
+              <th class="px-5 py-3.5 font-semibold">الاستحقاق القادم</th>
+              <th class="px-5 py-3.5 font-semibold">الحالة</th>
+              <th class="px-5 py-3.5 font-semibold text-center">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="plans-tbody" class="divide-y divide-slate-100 dark:divide-slate-700 text-sm"></tbody>
+        </table>
+      </div>
+
+      <div class="px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center text-xs text-slate-500">
+        <div>إجمالي النتائج: <span id="pg-total" class="font-num font-bold text-slate-800 dark:text-white">0</span></div>
+        <div class="flex items-center gap-2">
+          <button id="pg-prev" class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40">السابق</button>
+          <span id="pg-info" class="font-num font-bold">1 / 1</span>
+          <button id="pg-next" class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40">التالي</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1: Create Installment Plan (مع حاسبة الأقساط المسبقة) -->
+  <div id="create-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-3 md:p-5">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center shrink-0">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="material-icons-outlined text-sky-600">event_repeat</span>
+            إنشاء عقد تقسيط جديد وجدولة الأقساط
+          </h3>
+          <p class="text-xs text-slate-500">يدعم التقسيط المباشر لمنتج من المخزون أو بيان حر، أو تقسيط فاتورة آجلة قائمة</p>
+        </div>
+        <button type="button" id="cm-close" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700">
+          <span class="material-icons-outlined">close</span>
+        </button>
+      </div>
+
+      <form id="create-form" class="flex-1 min-h-0 overflow-y-auto p-6 space-y-5">
+        <!-- Mode switcher -->
+        <div class="flex gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-900/70 w-fit">
+          <button type="button" id="mode-direct" class="px-4 py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 shadow-sm text-sky-600">عقد تقسيط مباشر</button>
+          <button type="button" id="mode-sale" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400">تقسيط فاتورة آجلة قائمة</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <!-- Right column: Customer + Item + Financial Terms -->
+          <div class="lg:col-span-7 space-y-4">
+            <!-- Customer Box -->
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-slate-700 dark:text-slate-300">بيانات العميل *</span>
+                <span id="cm-cust-badge" class="hidden text-xs px-2 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 font-bold"></span>
+              </div>
+              <div class="relative">
+                <input id="cm-cust-search" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500" placeholder="ابحث عن عميل مسجل بالاسم أو الهاتف..."/>
+                <div id="cm-cust-drop" class="hidden absolute z-30 left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-52 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700"></div>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <input id="cm-cust-name" required class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm" placeholder="اسم العميل *"/>
+                <input id="cm-cust-phone" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num" placeholder="رقم الهاتف"/>
+                <input id="cm-nid" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num" placeholder="الرقم القومي (14 رقم)"/>
+              </div>
+            </div>
+
+            <!-- Eligible Sale Selector (when mode=sale) -->
+            <div id="cm-sale-box" class="hidden p-4 rounded-xl bg-amber-50/70 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800 space-y-2">
+              <label class="block text-xs font-bold text-amber-800 dark:text-amber-300">اختر الفاتورة الآجلة المطلوب تقسيطها *</label>
+              <select id="cm-sale-select" class="w-full bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2 text-sm font-num"></select>
+              <p class="text-[11px] text-amber-700 dark:text-amber-400">سيُحسب المتبقي الآجل من الفاتورة كأصل التقسيط، وأي مقدم مدفوع الآن يُسجّل تلقائياً كسند قبض عليها.</p>
+            </div>
+
+            <!-- Item / Product Box (when mode=direct) -->
+            <div id="cm-item-box" class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-slate-700 dark:text-slate-300">الجهاز / السلعة</span>
+                <span id="cm-prod-badge" class="hidden text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">مرتبط بالمخزون</span>
+              </div>
+              <div class="relative">
+                <input id="cm-prod-search" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500" placeholder="(اختياري) ابحث عن صنف من المخزون بالاسم أو SKU أو السيريال..."/>
+                <div id="cm-prod-drop" class="hidden absolute z-30 left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-52 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700"></div>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                <input id="cm-title" required class="sm:col-span-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm" placeholder="اسم الجهاز / البيان *"/>
+                <input id="cm-serial" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num" placeholder="السيريال / IMEI"/>
+                <input id="cm-qty" type="number" min="1" value="1" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num" placeholder="الكمية"/>
+              </div>
+            </div>
+
+            <!-- Financial Terms -->
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 space-y-3">
+              <span class="block text-xs font-bold text-slate-700 dark:text-slate-300">شروط التمويل وجدولة الأقساط</span>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-xs text-slate-500 mb-1">قيمة العقد الأصلية *</label>
+                  <input id="cm-principal" type="number" min="1" step="0.01" required class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num font-bold"/>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-500 mb-1">الدفعة المقدمة</label>
+                  <input id="cm-down" type="number" min="0" step="0.01" value="0" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num font-bold"/>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-500 mb-1">طريقة دفع المقدم</label>
+                  <select id="cm-down-method" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm">
+                    <option value="cash">نقدي (كاش)</option>
+                    <option value="wallet">محفظة إلكترونية</option>
+                  </select>
+                </div>
+                <div id="cm-down-ref-wrap" class="hidden col-span-2 sm:col-span-3">
+                  <input id="cm-down-ref" class="w-full bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2 text-sm font-num" placeholder="رقم العملية المرجعية لتحويل المقدم بالمحفظة *"/>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-500 mb-1">حساب الزيادة / الفائدة</label>
+                  <select id="cm-fee-type" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm">
+                    <option value="percent">نسبة مئوية (%)</option>
+                    <option value="fixed">مبلغ ثابت</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-500 mb-1">قيمة الزيادة / الفائدة</label>
+                  <input id="cm-fee-val" type="number" min="0" step="0.01" value="0" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num font-bold"/>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-500 mb-1">تاريخ أول قسط *</label>
+                  <input id="cm-start-date" type="date" required class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num"/>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div>
+                  <label class="block text-xs text-slate-500 mb-1">عدد الأقساط *</label>
+                  <div class="flex gap-1.5 items-center">
+                    <input id="cm-months" type="number" min="1" max="120" value="6" required class="w-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num font-bold"/>
+                    <div class="flex flex-wrap gap-1">
+                      <button type="button" data-m="3" class="m-chip px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-[11px] font-num font-bold">3</button>
+                      <button type="button" data-m="6" class="m-chip px-2 py-1 rounded bg-sky-600 text-white text-[11px] font-num font-bold">6</button>
+                      <button type="button" data-m="12" class="m-chip px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-[11px] font-num font-bold">12</button>
+                      <button type="button" data-m="18" class="m-chip px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-[11px] font-num font-bold">18</button>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-500 mb-1">دورية السداد</label>
+                  <select id="cm-freq" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm">
+                    <option value="monthly">شهري (كل شهر)</option>
+                    <option value="weekly">أسبوعي (كل 7 أيام)</option>
+                    <option value="custom_days">كل عدد محدد من الأيام</option>
+                  </select>
+                </div>
+                <div id="cm-days-wrap" class="hidden">
+                  <label class="block text-xs text-slate-500 mb-1">عدد الأيام بين الأقساط</label>
+                  <input id="cm-days" type="number" min="1" value="15" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num"/>
+                </div>
+              </div>
+            </div>
+
+            <!-- Guarantor & Notes -->
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 space-y-2.5">
+              <span class="block text-xs font-bold text-slate-700 dark:text-slate-300">بيانات الضامن والملاحظات (اختياري)</span>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <input id="cm-g-name" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm" placeholder="اسم الضامن"/>
+                <input id="cm-g-phone" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num" placeholder="هاتف الضامن"/>
+                <input id="cm-g-nid" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-num" placeholder="رقم قومي الضامن"/>
+              </div>
+              <input id="cm-notes" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm" placeholder="ملاحظات إضافية على العقد..."/>
+            </div>
+          </div>
+
+          <!-- Left column: Live Schedule Preview -->
+          <div class="lg:col-span-5 flex flex-col bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+            <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-1.5">
+              <span class="material-icons-outlined text-sky-600 text-base">calculate</span>
+              ملخص الحساب ومعاينة الأقساط
+            </h4>
+            <div class="grid grid-cols-2 gap-2.5 text-xs mb-3">
+              <div class="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700">
+                <div class="text-slate-400">المتبقي الأساسي</div>
+                <div id="pv-base" class="text-base font-bold font-num mt-0.5">0.00</div>
+              </div>
+              <div class="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700">
+                <div class="text-slate-400">الفائدة / الرسوم</div>
+                <div id="pv-fee" class="text-base font-bold font-num text-amber-600 mt-0.5">0.00</div>
+              </div>
+              <div class="bg-white dark:bg-slate-800 rounded-xl p-3 border border-sky-200 dark:border-sky-800">
+                <div class="text-sky-600 font-bold">إجمالي المبلغ المقسّط</div>
+                <div id="pv-total" class="text-base font-bold font-num text-sky-600 mt-0.5">0.00</div>
+              </div>
+              <div class="bg-white dark:bg-slate-800 rounded-xl p-3 border border-emerald-200 dark:border-emerald-800">
+                <div class="text-emerald-600 font-bold">قيمة القسط التقديرية</div>
+                <div id="pv-installment" class="text-base font-bold font-num text-emerald-600 mt-0.5">0.00</div>
+              </div>
+            </div>
+            <div class="flex-1 min-h-[220px] max-h-[340px] overflow-y-auto bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+              <table class="w-full text-right text-xs">
+                <thead class="sticky top-0 bg-slate-100 dark:bg-slate-900 text-slate-500">
+                  <tr>
+                    <th class="px-3 py-2">#</th>
+                    <th class="px-3 py-2">تاريخ الاستحقاق</th>
+                    <th class="px-3 py-2">القيمة</th>
+                  </tr>
+                </thead>
+                <tbody id="pv-schedule" class="divide-y divide-slate-100 dark:divide-slate-700 font-num"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </form>
+
+      <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3 shrink-0">
+        <button type="button" id="cm-cancel" class="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 font-semibold text-sm">إلغاء</button>
+        <button type="submit" form="create-form" id="cm-submit" class="px-7 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm shadow-lg shadow-sky-600/25 flex items-center gap-2">
+          <span class="material-icons-outlined text-base">check_circle</span>
+          حفظ وتوليد جدول الأقساط
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Contract Details & Schedule (التحصيل والطباعة والتذكير) -->
+  <div id="detail-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-3 md:p-5">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap justify-between items-center gap-3 shrink-0">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="material-icons-outlined text-sky-600">receipt</span>
+            عقد تقسيط: <span id="dt-plan-no" class="font-num text-sky-600"></span>
+            <span id="dt-status-badge" class="text-xs px-2.5 py-0.5 rounded-full font-bold"></span>
+          </h3>
+          <p id="dt-subtitle" class="text-xs text-slate-500 mt-0.5"></p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" id="dt-wa-btn" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5">
+            <span class="material-icons-outlined text-sm">chat</span>
+            تذكير واتساب
+          </button>
+          <button type="button" id="dt-print-btn" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-bold flex items-center gap-1.5">
+            <span class="material-icons-outlined text-sm">print</span>
+            طباعة العقد
+          </button>
+          <button type="button" id="dt-pay-btn" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
+            <span class="material-icons-outlined text-sm">payments</span>
+            تحصيل دفعة / قسط
+          </button>
+          <button type="button" id="dt-cancel-plan-btn" class="hidden px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5">
+            <span class="material-icons-outlined text-sm">cancel</span>
+            إلغاء العقد
+          </button>
+          <button type="button" id="dt-close" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700">
+            <span class="material-icons-outlined">close</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 min-h-0 overflow-y-auto p-6 space-y-5">
+        <!-- Info Strip -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+            <div class="text-slate-400">سعر العقد</div>
+            <div id="dt-principal" class="font-num font-bold text-sm mt-0.5">0.00</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+            <div class="text-slate-400">المقدم المدفوع</div>
+            <div id="dt-down" class="font-num font-bold text-sm mt-0.5">0.00</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+            <div class="text-slate-400">الفائدة / الرسوم</div>
+            <div id="dt-fee" class="font-num font-bold text-sm text-amber-600 mt-0.5">0.00</div>
+          </div>
+          <div class="p-3 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800">
+            <div class="text-sky-700 dark:text-sky-300">إجمالي المقسّط</div>
+            <div id="dt-financed" class="font-num font-bold text-sm text-sky-700 dark:text-sky-300 mt-0.5">0.00</div>
+          </div>
+          <div class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+            <div class="text-emerald-700 dark:text-emerald-300">المحصّل</div>
+            <div id="dt-paid" class="font-num font-bold text-sm text-emerald-700 dark:text-emerald-300 mt-0.5">0.00</div>
+          </div>
+          <div class="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+            <div class="text-red-700 dark:text-red-300 font-bold">المتبقي</div>
+            <div id="dt-remaining" class="font-num font-bold text-sm text-red-600 dark:text-red-400 mt-0.5">0.00</div>
+          </div>
+        </div>
+
+        <div id="dt-extra-info" class="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/40 rounded-xl p-3.5 border border-slate-200 dark:border-slate-700 flex flex-wrap gap-x-6 gap-y-1.5"></div>
+
+        <!-- Schedule Items -->
+        <div class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div class="px-4 py-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700 font-bold text-sm flex justify-between items-center">
+            <span>جدول استحقاق الأقساط</span>
+            <span id="dt-items-count" class="text-xs font-num text-slate-500"></span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500">
+                <tr>
+                  <th class="px-4 py-2.5">#</th>
+                  <th class="px-4 py-2.5">تاريخ الاستحقاق</th>
+                  <th class="px-4 py-2.5">قيمة القسط</th>
+                  <th class="px-4 py-2.5">المدفوع</th>
+                  <th class="px-4 py-2.5">المتبقي</th>
+                  <th class="px-4 py-2.5">الحالة</th>
+                  <th class="px-4 py-2.5">تاريخ السداد</th>
+                  <th class="px-4 py-2.5 text-center">إجراء</th>
+                </tr>
+              </thead>
+              <tbody id="dt-items-tbody" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Payment Receipts History -->
+        <div class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div class="px-4 py-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700 font-bold text-sm flex justify-between items-center">
+            <span>سجل إيصالات تحصيل الأقساط</span>
+            <span id="dt-pays-count" class="text-xs font-num text-slate-500"></span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500">
+                <tr>
+                  <th class="px-4 py-2.5">رقم الإيصال</th>
+                  <th class="px-4 py-2.5">التاريخ والوقت</th>
+                  <th class="px-4 py-2.5">المبلغ</th>
+                  <th class="px-4 py-2.5">الطريقة</th>
+                  <th class="px-4 py-2.5">المرجع / ملاحظات</th>
+                  <th class="px-4 py-2.5">المحصّل</th>
+                  <th class="px-4 py-2.5 text-center">طباعة</th>
+                </tr>
+              </thead>
+              <tbody id="dt-pays-tbody" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center shrink-0">
+        <a id="dt-cust-link" href="#" class="text-xs font-bold text-primary hover:underline flex items-center gap-1">
+          <span class="material-icons-outlined text-sm">person</span>
+          فتح كشف حساب العميل الكامل
+        </a>
+        <button type="button" id="dt-close-bottom" class="px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-600 font-semibold text-xs">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Pay Installment -->
+  <div id="pay-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[60] p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-700">
+      <h3 class="text-lg font-bold mb-1">تحصيل دفعة تقسيط</h3>
+      <p id="pm-hint" class="text-xs text-slate-500 mb-4"></p>
+      <form id="pay-form" class="space-y-4">
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-sm font-medium text-slate-600 dark:text-slate-300">المبلغ المدفوع *</label>
+            <div class="flex gap-2">
+              <button type="button" id="pm-fill-item" class="hidden text-xs font-bold text-sky-600 hover:underline">قيمة القسط</button>
+              <button type="button" id="pm-fill-all" class="text-xs font-bold text-emerald-600 hover:underline">كامل المتبقي</button>
+            </div>
+          </div>
+          <input id="pm-amount" type="number" min="0.01" step="0.01" required class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 font-num font-bold text-lg outline-none focus:ring-2 focus:ring-sky-500"/>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">طريقة السداد *</label>
+          <select id="pm-method" class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-sm">
+            <option value="cash">نقدي (كاش)</option>
+            <option value="wallet">محفظة إلكترونية (إنستا باي / فودافون كاش)</option>
+          </select>
+        </div>
+        <div id="pm-ref-wrap" class="hidden">
+          <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">رقم العملية المرجعية *</label>
+          <input id="pm-ref" class="w-full bg-slate-50 dark:bg-slate-700 border border-blue-300 dark:border-blue-600 rounded-xl px-4 py-2.5 text-sm font-num" placeholder="رقم المرجع"/>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">ملاحظات (اختياري)</label>
+          <input id="pm-notes" class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-sm" placeholder="مثال: سداد قسط شهر نوفمبر"/>
+        </div>
+        <div class="flex gap-3 pt-2">
+          <button type="button" id="pm-cancel" class="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 font-semibold text-sm">إلغاء</button>
+          <button type="submit" id="pm-submit" class="flex-1 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm shadow-lg shadow-sky-600/20">تأكيد التحصيل</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</main>
+
+<!-- Hidden Print Stage -->
+<div id="print-area" class="hidden" dir="rtl"></div>
+
+<script src="app.js"></script>
+<script>
+(() => {
+  const PAGE_SIZE = 40;
+  let CURRENT_STATUS = 'all';
+  let CURRENT_OFFSET = 0;
+  let TOTAL_PLANS = 0;
+  let CAN_MANAGE = false;
+  let STORE_SETTINGS = {};
+  let CREATE_MODE = 'direct';
+  let SELECTED_CUST = null;
+  let SELECTED_PROD = null;
+  let ACTIVE_DETAIL = null;
+  let PAY_ITEM_CTX = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  function addMonthsIso(isoDate, offset) {
+    const parts = (isoDate || '').split('-').map(Number);
+    if (parts.length !== 3) return isoDate;
+    const [y, m, d] = parts;
+    const dt = new Date(y, m - 1 + offset, 1);
+    const maxD = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+    dt.setDate(Math.min(d, maxD));
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  function addDaysIso(isoDate, days) {
+    const parts = (isoDate || '').split('-').map(Number);
+    if (parts.length !== 3) return isoDate;
+    const dt = new Date(parts[0], parts[1] - 1, parts[2] + days);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  function defaultStartDateIso() {
+    const now = new Date();
+    const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0'), d = String(now.getDate()).padStart(2, '0');
+    return addMonthsIso(`${y}-${m}-${d}`, 1);
+  }
+
+  function updateCalculatorPreview() {
+    const principal = toAmount($('cm-principal').value || 0);
+    const down = toAmount($('cm-down').value || 0);
+    const base = Math.max(0, principal - down);
+    const fType = $('cm-fee-type').value;
+    const fVal = Number($('cm-fee-val').value || 0);
+    let fee = 0;
+    if (fType === 'percent') {
+      fee = Math.round(base * Math.max(0, fVal) / 100);
+    } else {
+      fee = Math.max(0, toAmount(fVal));
+    }
+    const total = base + fee;
+    const months = Math.max(1, Math.min(120, parseInt($('cm-months').value || '1', 10) || 1));
+    const freq = $('cm-freq').value;
+    const stepDays = Math.max(1, parseInt($('cm-days').value || '15', 10) || 15);
+    const startDate = $('cm-start-date').value || defaultStartDateIso();
+
+    const perInst = Math.floor(total / months);
+    const rem = total % months;
+
+    $('pv-base').textContent = money(base);
+    $('pv-fee').textContent = money(fee);
+    $('pv-total').textContent = money(total);
+    $('pv-installment').textContent = money(perInst);
+
+    if (total <= 0) {
+      $('pv-schedule').innerHTML = '<tr><td colspan="3" class="px-3 py-6 text-center text-slate-400">أدخل قيمة العقد لعرض الجدول</td></tr>';
+      return;
+    }
+    const rows = [];
+    for (let i = 0; i < months; i++) {
+      let due = startDate;
+      if (freq === 'monthly') due = addMonthsIso(startDate, i);
+      else if (freq === 'weekly') due = addDaysIso(startDate, 7 * i);
+      else due = addDaysIso(startDate, stepDays * i);
+      const amt = perInst + (i === months - 1 ? rem : 0);
+      rows.push(`<tr><td class="px-3 py-1.5 font-bold">#${i + 1}</td><td class="px-3 py-1.5">${due}</td><td class="px-3 py-1.5 font-bold text-sky-600">${money(amt)}</td></tr>`);
+    }
+    $('pv-schedule').innerHTML = rows.join('');
+  }
+
+  function statusBadgeHtml(p) {
+    if (p.status === 'completed') {
+      return '<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">مكتمل</span>';
+    }
+    if (p.status === 'cancelled') {
+      return '<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300">ملغى</span>';
+    }
+    if ((p.overdue_count || 0) > 0) {
+      return `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">متأخر (${p.overdue_count})</span>`;
+    }
+    return '<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">نشط منتظم</span>';
+  }
+
+  function setStatusTab(st) {
+    CURRENT_STATUS = st;
+    CURRENT_OFFSET = 0;
+    document.querySelectorAll('.status-tab').forEach((btn) => {
+      const active = btn.dataset.status === st;
+      btn.className = active
+        ? 'status-tab px-3.5 py-1.5 rounded-lg text-xs font-bold bg-sky-600 text-white'
+        : 'status-tab px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300';
+    });
+    loadPlans();
+  }
+
+  async function loadPlans() {
+    const res = await guard(() => api('installments_list', {
+      q: $('q').value || '',
+      status: CURRENT_STATUS,
+      limit: PAGE_SIZE,
+      offset: CURRENT_OFFSET,
+    }));
+    if (!res) return;
+
+    const s = res.summary || {};
+    $('kpi-active').textContent = s.active_count || 0;
+    $('kpi-completed').textContent = s.completed_count || 0;
+    $('kpi-remaining').textContent = money(s.remaining_portfolio || 0);
+    $('kpi-financed').textContent = money(s.total_financed || 0);
+    $('kpi-overdue-amt').textContent = money(s.overdue_amount || 0);
+    $('kpi-overdue-items').textContent = s.overdue_items_count || 0;
+    $('kpi-overdue-plans').textContent = s.overdue_plans_count || 0;
+    $('kpi-collected-month').textContent = money(s.collected_month || 0);
+    $('kpi-upcoming-amt').textContent = money(s.upcoming_amount || 0);
+    $('kpi-upcoming-cnt').textContent = s.upcoming_items_count || 0;
+
+    TOTAL_PLANS = res.total || 0;
+    $('pg-total').textContent = TOTAL_PLANS;
+    const totalPages = Math.max(1, Math.ceil(TOTAL_PLANS / PAGE_SIZE));
+    const curPage = Math.floor(CURRENT_OFFSET / PAGE_SIZE) + 1;
+    $('pg-info').textContent = `${curPage} / ${totalPages}`;
+    $('pg-prev').disabled = CURRENT_OFFSET <= 0;
+    $('pg-next').disabled = CURRENT_OFFSET + PAGE_SIZE >= TOTAL_PLANS;
+
+    const rows = res.rows || [];
+    $('plans-tbody').innerHTML = rows.length ? rows.map((p) => {
+      const pct = p.financed_total > 0 ? Math.min(100, Math.round((p.paid_total / p.financed_total) * 100)) : 0;
+      const barColor = p.status === 'completed' ? 'bg-emerald-500' : ((p.overdue_count || 0) > 0 ? 'bg-red-500' : 'bg-sky-500');
+      return `
+      <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer" data-open-plan="${p.id}">
+        <td class="px-5 py-3.5">
+          <div class="font-num font-bold text-sky-600">${esc(p.plan_no)}</div>
+          <div class="text-[11px] font-num text-slate-400">${(p.created_at || '').slice(0, 10)}${p.sale_invoice_no ? ' · ' + esc(p.sale_invoice_no) : ''}</div>
+        </td>
+        <td class="px-5 py-3.5">
+          <div class="font-bold text-slate-900 dark:text-white">${esc(p.customer_name)}</div>
+          <div class="text-xs font-num text-slate-500">${esc(p.customer_phone || 'بدون هاتف')}</div>
+        </td>
+        <td class="px-5 py-3.5">
+          <div class="font-medium">${esc(p.title)}</div>
+          ${p.serial ? `<div class="text-[11px] font-num text-slate-400">SN: ${esc(p.serial)}</div>` : ''}
+        </td>
+        <td class="px-5 py-3.5 font-num">
+          <div class="font-bold">${money(p.financed_total)}</div>
+          ${p.down_payment > 0 ? `<div class="text-[11px] text-slate-400">مقدم: ${money(p.down_payment)}</div>` : ''}
+        </td>
+        <td class="px-5 py-3.5 min-w-[140px]">
+          <div class="flex justify-between text-[11px] font-num mb-1">
+            <span class="font-bold text-emerald-600">${p.paid_count || 0}/${p.months} قسط</span>
+            <span class="text-slate-500">${pct}%</span>
+          </div>
+          <div class="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+            <div class="h-full ${barColor}" style="width:${pct}%"></div>
+          </div>
+        </td>
+        <td class="px-5 py-3.5 font-num font-bold ${p.remaining_total > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400'}">${money(p.remaining_total)}</td>
+        <td class="px-5 py-3.5 font-num text-xs">
+          ${p.next_due_date ? `<div>${esc(p.next_due_date)}</div><div class="font-bold text-slate-700 dark:text-slate-200">${money(p.next_due_amount || 0)}</div>` : '<span class="text-slate-400">—</span>'}
+        </td>
+        <td class="px-5 py-3.5">${statusBadgeHtml(p)}</td>
+        <td class="px-5 py-3.5 text-center" onclick="event.stopPropagation()">
+          <div class="inline-flex items-center gap-1.5">
+            <button type="button" data-open-plan="${p.id}" class="px-2.5 py-1.5 rounded-lg bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-xs font-bold hover:bg-sky-100">تفاصيل / تحصيل</button>
+            <button type="button" data-wa-plan="${p.id}" title="تذكير واتساب" class="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 hover:bg-emerald-100"><span class="material-icons-outlined text-sm">chat</span></button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="9" class="px-6 py-12 text-center text-slate-400">لا توجد عقود تقسيط مطابقة</td></tr>';
+
+    document.querySelectorAll('[data-open-plan]').forEach((el) => el.addEventListener('click', () => openDetail(+el.dataset.openPlan)));
+    document.querySelectorAll('[data-wa-plan]').forEach((el) => el.addEventListener('click', () => sendWhatsappReminder(+el.dataset.waPlan)));
+  }
+
+  async function sendWhatsappReminder(planId, itemId = null) {
+    const res = await guard(() => api('installment_whatsapp_reminder', { plan_id: planId, item_id: itemId }));
+    if (res) {
+      toast(res.opened ? 'تم فتح واتساب مع رسالة التذكير الجاهزة' : 'تم تجهيز رسالة التذكير للرقم ' + res.phone);
+    }
+  }
+
+  function setCreateMode(mode) {
+    CREATE_MODE = mode;
+    const isSale = mode === 'sale';
+    $('mode-direct').className = !isSale
+      ? 'px-4 py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 shadow-sm text-sky-600'
+      : 'px-4 py-2 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400';
+    $('mode-sale').className = isSale
+      ? 'px-4 py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 shadow-sm text-amber-600'
+      : 'px-4 py-2 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400';
+    $('cm-sale-box').classList.toggle('hidden', !isSale);
+    $('cm-item-box').classList.toggle('hidden', isSale);
+    $('cm-title').required = !isSale;
+    $('cm-principal').readOnly = isSale;
+    if (isSale && SELECTED_CUST) {
+      loadEligibleSales(SELECTED_CUST.id);
+    }
+    updateCalculatorPreview();
+  }
+
+  async function loadEligibleSales(cid) {
+    const sel = $('cm-sale-select');
+    sel.innerHTML = '<option value="">جاري تحميل الفواتير الآجلة...</option>';
+    const list = await guard(() => api('installment_eligible_sales', { customer_id: cid }));
+    if (!list || !list.length) {
+      sel.innerHTML = '<option value="">لا توجد فواتير آجلة مفتوحة لهذا العميل</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">-- اختر الفاتورة الآجلة --</option>' + list.map((s) =>
+      `<option value="${s.id}" data-net="${s.net_credit}" data-inv="${esc(s.invoice_no)}">${esc(s.invoice_no)} | المتبقي: ${money(s.net_credit)} | ${s.created_at.slice(0, 10)}</option>`
+    ).join('');
+  }
+
+  $('cm-sale-select').addEventListener('change', () => {
+    const opt = $('cm-sale-select').selectedOptions[0];
+    if (opt && opt.dataset.net) {
+      $('cm-principal').value = (+opt.dataset.net / 100).toFixed(2);
+      $('cm-title').value = `تقسيط فاتورة (${opt.dataset.inv})`;
+    }
+    updateCalculatorPreview();
+  });
+
+  function pickCustomer(c) {
+    SELECTED_CUST = c;
+    $('cm-cust-name').value = c.name || '';
+    $('cm-cust-phone').value = c.phone || '';
+    $('cm-cust-badge').textContent = c.debt > 0 ? `مديونية حالية: ${money(c.debt)}` : 'عميل مسجل';
+    $('cm-cust-badge').classList.remove('hidden');
+    $('cm-cust-drop').classList.add('hidden');
+    if (CREATE_MODE === 'sale') loadEligibleSales(c.id);
+  }
+
+  let custTimer = null;
+  $('cm-cust-search').addEventListener('input', () => {
+    clearTimeout(custTimer);
+    custTimer = setTimeout(async () => {
+      const q = $('cm-cust-search').value.trim();
+      const rows = await api('customers_search', { q, limit: 10 });
+      const drop = $('cm-cust-drop');
+      if (!rows || !rows.length) { drop.classList.add('hidden'); return; }
+      drop.innerHTML = rows.map((c, idx) => `
+        <button type="button" data-cidx="${idx}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 flex justify-between items-center text-xs">
+          <div><span class="font-bold">${esc(c.name)}</span> <span class="font-num text-slate-400">${esc(c.phone || '')}</span></div>
+          ${c.debt > 0 ? `<span class="font-num text-red-600 font-bold">آجل: ${money(c.debt)}</span>` : ''}
+        </button>`).join('');
+      drop.classList.remove('hidden');
+      drop.querySelectorAll('[data-cidx]').forEach((b) => b.addEventListener('click', () => pickCustomer(rows[+b.dataset.cidx])));
+    }, 180);
+  });
+
+  $('cm-cust-name').addEventListener('input', () => {
+    if (SELECTED_CUST && $('cm-cust-name').value.trim() !== SELECTED_CUST.name) {
+      SELECTED_CUST = null;
+      $('cm-cust-badge').classList.add('hidden');
+    }
+  });
+
+  let prodTimer = null;
+  $('cm-prod-search').addEventListener('input', () => {
+    clearTimeout(prodTimer);
+    prodTimer = setTimeout(async () => {
+      const q = $('cm-prod-search').value.trim();
+      if (!q) { $('cm-prod-drop').classList.add('hidden'); return; }
+      const rows = await api('products_search', { q });
+      const drop = $('cm-prod-drop');
+      if (!rows || !rows.length) { drop.classList.add('hidden'); return; }
+      drop.innerHTML = rows.slice(0, 12).map((p, idx) => `
+        <button type="button" data-pidx="${idx}" class="w-full text-right px-3.5 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 flex justify-between items-center text-xs">
+          <div><span class="font-bold">${esc(p.name)}</span> <span class="font-num text-slate-400">(${esc(p.sku)}) · متاح: ${p.qty}</span></div>
+          <span class="font-num font-bold text-primary">${money(p.price)}</span>
+        </button>`).join('');
+      drop.classList.remove('hidden');
+      drop.querySelectorAll('[data-pidx]').forEach((b) => b.addEventListener('click', () => {
+        const p = rows[+b.dataset.pidx];
+        SELECTED_PROD = p;
+        $('cm-title').value = p.name;
+        const qty = Math.max(1, parseInt($('cm-qty').value || '1', 10) || 1);
+        $('cm-principal').value = ((p.price * qty) / 100).toFixed(2);
+        $('cm-prod-badge').classList.remove('hidden');
+        drop.classList.add('hidden');
+        updateCalculatorPreview();
+      }));
+    }, 180);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#cm-cust-search') && !e.target.closest('#cm-cust-drop')) $('cm-cust-drop').classList.add('hidden');
+    if (!e.target.closest('#cm-prod-search') && !e.target.closest('#cm-prod-drop')) $('cm-prod-drop').classList.add('hidden');
+  });
+
+  function openCreateModal(prefillCustomer = null) {
+    SELECTED_CUST = null;
+    SELECTED_PROD = null;
+    $('create-form').reset();
+    $('cm-cust-badge').classList.add('hidden');
+    $('cm-prod-badge').classList.add('hidden');
+    $('cm-down-ref-wrap').classList.add('hidden');
+    $('cm-days-wrap').classList.add('hidden');
+    $('cm-months').value = '6';
+    $('cm-qty').value = '1';
+    $('cm-down').value = '0';
+    $('cm-fee-val').value = '0';
+    $('cm-start-date').value = defaultStartDateIso();
+    setCreateMode('direct');
+    if (prefillCustomer) pickCustomer(prefillCustomer);
+    updateCalculatorPreview();
+    $('create-modal').classList.replace('hidden', 'flex');
+  }
+
+  function closeCreateModal() {
+    $('create-modal').classList.replace('flex', 'hidden');
+  }
+
+  $('cm-down-method').addEventListener('change', () => {
+    $('cm-down-ref-wrap').classList.toggle('hidden', $('cm-down-method').value !== 'wallet');
+  });
+  $('cm-freq').addEventListener('change', () => {
+    $('cm-days-wrap').classList.toggle('hidden', $('cm-freq').value !== 'custom_days');
+    updateCalculatorPreview();
+  });
+  document.querySelectorAll('.m-chip').forEach((btn) => btn.addEventListener('click', () => {
+    $('cm-months').value = btn.dataset.m;
+    document.querySelectorAll('.m-chip').forEach((b) => {
+      b.className = b === btn
+        ? 'm-chip px-2 py-1 rounded bg-sky-600 text-white text-[11px] font-num font-bold'
+        : 'm-chip px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-[11px] font-num font-bold';
+    });
+    updateCalculatorPreview();
+  }));
+  ['cm-principal', 'cm-down', 'cm-fee-type', 'cm-fee-val', 'cm-months', 'cm-days', 'cm-start-date'].forEach((id) => {
+    $(id).addEventListener('input', updateCalculatorPreview);
+    $(id).addEventListener('change', updateCalculatorPreview);
+  });
+  $('cm-qty').addEventListener('input', () => {
+    if (SELECTED_PROD) {
+      const qty = Math.max(1, parseInt($('cm-qty').value || '1', 10) || 1);
+      $('cm-principal').value = ((SELECTED_PROD.price * qty) / 100).toFixed(2);
+    }
+    updateCalculatorPreview();
+  });
+
+  $('create-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('cm-submit');
+    btn.disabled = true;
+    try {
+      const isSale = CREATE_MODE === 'sale';
+      const saleId = isSale ? ($('cm-sale-select').value ? +$('cm-sale-select').value : null) : null;
+      if (isSale && !saleId) {
+        toast('يرجى اختيار الفاتورة الآجلة المطلوب تقسيطها', 'warn');
+        return;
+      }
+      const payload = {
+        customer_id: SELECTED_CUST ? SELECTED_CUST.id : null,
+        customer_name: $('cm-cust-name').value.trim(),
+        customer_phone: $('cm-cust-phone').value.trim() || null,
+        sale_id: saleId,
+        product_id: (!isSale && SELECTED_PROD) ? SELECTED_PROD.id : null,
+        qty: Math.max(1, parseInt($('cm-qty').value || '1', 10) || 1),
+        title: $('cm-title').value.trim(),
+        serial: $('cm-serial').value.trim() || null,
+        principal: toAmount($('cm-principal').value),
+        down_payment: toAmount($('cm-down').value || 0),
+        down_method: $('cm-down-method').value,
+        down_ref_no: $('cm-down-ref').value.trim() || null,
+        fee_type: $('cm-fee-type').value,
+        fee_value: Number($('cm-fee-val').value || 0),
+        months: parseInt($('cm-months').value || '6', 10),
+        frequency: $('cm-freq').value,
+        interval_days: parseInt($('cm-days').value || '30', 10),
+        start_date: $('cm-start-date').value,
+        national_id: $('cm-nid').value.trim() || null,
+        guarantor_name: $('cm-g-name').value.trim() || null,
+        guarantor_phone: $('cm-g-phone').value.trim() || null,
+        guarantor_national_id: $('cm-g-nid').value.trim() || null,
+        notes: $('cm-notes').value.trim() || null,
+      };
+      const res = await guard(() => api('installment_create', payload));
+      if (res) {
+        toast(`تم إنشاء عقد التقسيط ${res.plan_no} بنجاح`);
+        closeCreateModal();
+        await loadPlans();
+        openDetail(res.id);
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function openDetail(planId) {
+    const det = await guard(() => api('installment_detail', { id: planId }));
+    if (!det || !det.plan) return;
+    ACTIVE_DETAIL = det;
+    const p = det.plan;
+
+    $('dt-plan-no').textContent = p.plan_no;
+    $('dt-subtitle').textContent = `${p.customer_name} (${p.customer_phone || 'بدون هاتف'}) · ${p.title}`;
+    const stMap = {
+      active: { txt: 'نشط', cls: 'bg-sky-100 text-sky-700' },
+      completed: { txt: 'مكتمل السداد', cls: 'bg-emerald-100 text-emerald-700' },
+      cancelled: { txt: 'ملغى', cls: 'bg-slate-200 text-slate-600' },
+    };
+    const sb = stMap[p.status] || { txt: p.status, cls: 'bg-slate-100' };
+    $('dt-status-badge').textContent = sb.txt;
+    $('dt-status-badge').className = `text-xs px-2.5 py-0.5 rounded-full font-bold ${sb.cls}`;
+
+    $('dt-principal').textContent = money(p.principal);
+    $('dt-down').textContent = money(p.down_payment);
+    $('dt-fee').textContent = money(p.fee_amount);
+    $('dt-financed').textContent = money(p.financed_total);
+    $('dt-paid').textContent = money(p.paid_total);
+    $('dt-remaining').textContent = money(p.remaining_total);
+
+    const extras = [];
+    if (p.national_id) extras.push(`<span>الرقم القومي للعميل: <b class="font-num">${esc(p.national_id)}</b></span>`);
+    if (p.serial) extras.push(`<span>السيريال: <b class="font-num">${esc(p.serial)}</b></span>`);
+    if (p.sale_invoice_no) extras.push(`<span>الفاتورة المرتبطة: <b class="font-num">${esc(p.sale_invoice_no)}</b></span>`);
+    if (p.guarantor_name) extras.push(`<span>الضامن: <b>${esc(p.guarantor_name)}</b> (${esc(p.guarantor_phone || '—')})</span>`);
+    if (p.notes) extras.push(`<span>ملاحظات: <b>${esc(p.notes)}</b></span>`);
+    if (!extras.length) extras.push('<span class="text-slate-400">لا توجد بيانات ضامن أو ملاحظات إضافية مسجلة.</span>');
+    $('dt-extra-info').innerHTML = extras.join('');
+
+    $('dt-pay-btn').classList.toggle('hidden', p.status !== 'active' || p.remaining_total <= 0);
+    $('dt-cancel-plan-btn').classList.toggle('hidden', !(CAN_MANAGE && p.status === 'active' && p.paid_total === 0));
+    $('dt-cust-link').href = `customer_details.html?id=${p.customer_id}`;
+
+    const items = det.items || [];
+    $('dt-items-count').textContent = `${items.length} قسط`;
+    $('dt-items-tbody').innerHTML = items.map((it) => {
+      let badge = '<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold">مجدول</span>';
+      if (it.status === 'paid') badge = '<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">مدفوع</span>';
+      else if (it.status === 'cancelled') badge = '<span class="px-2 py-0.5 rounded bg-slate-200 text-slate-500 font-bold">ملغى</span>';
+      else if (it.is_overdue) badge = `<span class="px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold">متأخر (${it.days_overdue} يوم)</span>`;
+      else if (it.status === 'partial') badge = '<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-bold">مدفوع جزئياً</span>';
+
+      const canPayItem = p.status === 'active' && it.remaining > 0;
+      return `
+      <tr class="${it.is_overdue ? 'bg-red-50/40 dark:bg-red-900/10' : ''}">
+        <td class="px-4 py-2.5 font-num font-bold">#${it.seq_no}</td>
+        <td class="px-4 py-2.5 font-num">${esc(it.due_date)}</td>
+        <td class="px-4 py-2.5 font-num font-bold">${money(it.amount)}</td>
+        <td class="px-4 py-2.5 font-num text-emerald-600">${money(it.paid_amount)}</td>
+        <td class="px-4 py-2.5 font-num font-bold ${it.remaining > 0 ? 'text-red-600' : 'text-slate-400'}">${money(it.remaining)}</td>
+        <td class="px-4 py-2.5">${badge}</td>
+        <td class="px-4 py-2.5 font-num text-slate-500">${it.paid_at ? fmtDT(it.paid_at) : '—'}</td>
+        <td class="px-4 py-2.5 text-center">
+          ${canPayItem
+            ? `<div class="inline-flex gap-1"><button type="button" data-pay-item="${it.id}" data-rem="${it.remaining}" data-seq="${it.seq_no}" class="px-2.5 py-1 rounded bg-sky-600 text-white font-bold hover:bg-sky-700">سداد</button><button type="button" data-wa-item="${it.id}" class="px-2 py-1 rounded bg-emerald-100 text-emerald-700 font-bold hover:bg-emerald-200" title="تذكير واتساب لهذا القسط">واتساب</button></div>`
+            : '—'}
+        </td>
+      </tr>`;
+    }).join('');
+
+    document.querySelectorAll('[data-pay-item]').forEach((btn) => btn.addEventListener('click', () => {
+      openPayModal({ item_id: +btn.dataset.payItem, rem: +btn.dataset.rem, seq: +btn.dataset.seq });
+    }));
+    document.querySelectorAll('[data-wa-item]').forEach((btn) => btn.addEventListener('click', () => {
+      sendWhatsappReminder(p.id, +btn.dataset.waItem);
+    }));
+
+    const pays = det.payments || [];
+    $('dt-pays-count').textContent = `${pays.length} إيصال`;
+    $('dt-pays-tbody').innerHTML = pays.length ? pays.map((pay, idx) => `
+      <tr>
+        <td class="px-4 py-2.5 font-num font-bold text-emerald-600">${esc(pay.receipt_no)}</td>
+        <td class="px-4 py-2.5 font-num text-slate-500">${fmtDT(pay.created_at)}</td>
+        <td class="px-4 py-2.5 font-num font-bold">${money(pay.amount)}</td>
+        <td class="px-4 py-2.5">${pay.method === 'cash' ? 'نقدي' : 'محفظة'}</td>
+        <td class="px-4 py-2.5">${esc(pay.ref_no || '')} ${esc(pay.notes || '')}</td>
+        <td class="px-4 py-2.5">${esc(pay.user_name || '—')}</td>
+        <td class="px-4 py-2.5 text-center"><button type="button" data-print-pay="${idx}" class="text-primary font-bold hover:underline">إيصال</button></td>
+      </tr>`).join('') : '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-400">لم تُحصّل أقساط بعد</td></tr>';
+
+    document.querySelectorAll('[data-print-pay]').forEach((b) => b.addEventListener('click', () => printPaymentReceipt(pays[+b.dataset.printPay])));
+
+    $('detail-modal').classList.replace('hidden', 'flex');
+  }
+
+  function closeDetailModal() {
+    $('detail-modal').classList.replace('flex', 'hidden');
+  }
+
+  function openPayModal(itemCtx = null) {
+    if (!ACTIVE_DETAIL || !ACTIVE_DETAIL.plan) return;
+    const p = ACTIVE_DETAIL.plan;
+    PAY_ITEM_CTX = itemCtx;
+    const defAmt = itemCtx ? itemCtx.rem : p.remaining_total;
+    $('pm-amount').value = (defAmt / 100).toFixed(2);
+    $('pm-method').value = 'cash';
+    $('pm-ref-wrap').classList.add('hidden');
+    $('pm-ref').value = '';
+    $('pm-notes').value = itemCtx ? `سداد قسط #${itemCtx.seq}` : '';
+    $('pm-hint').textContent = itemCtx
+      ? `القسط #${itemCtx.seq} — المتبقي على القسط: ${money(itemCtx.rem)} | إجمالي المتبقي على العقد: ${money(p.remaining_total)}`
+      : `إجمالي المتبقي على العقد ${p.plan_no}: ${money(p.remaining_total)}`;
+    $('pm-fill-item').classList.toggle('hidden', !itemCtx);
+    $('pay-modal').classList.replace('hidden', 'flex');
+  }
+
+  function closePayModal() {
+    $('pay-modal').classList.replace('flex', 'hidden');
+  }
+
+  $('pm-method').addEventListener('change', () => {
+    $('pm-ref-wrap').classList.toggle('hidden', $('pm-method').value !== 'wallet');
+  });
+  $('pm-fill-item').addEventListener('click', () => {
+    if (PAY_ITEM_CTX) $('pm-amount').value = (PAY_ITEM_CTX.rem / 100).toFixed(2);
+  });
+  $('pm-fill-all').addEventListener('click', () => {
+    if (ACTIVE_DETAIL && ACTIVE_DETAIL.plan) $('pm-amount').value = (ACTIVE_DETAIL.plan.remaining_total / 100).toFixed(2);
+  });
+
+  $('pay-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!ACTIVE_DETAIL || !ACTIVE_DETAIL.plan) return;
+    const btn = $('pm-submit');
+    btn.disabled = true;
+    try {
+      const res = await guard(() => api('installment_pay', {
+        plan_id: ACTIVE_DETAIL.plan.id,
+        amount: toAmount($('pm-amount').value),
+        method: $('pm-method').value,
+        ref_no: $('pm-ref').value.trim() || null,
+        item_id: PAY_ITEM_CTX ? PAY_ITEM_CTX.item_id : null,
+        notes: $('pm-notes').value.trim() || null,
+      }));
+      if (res) {
+        toast(`تم تحصيل الدفعة (${res.receipt_no}) بنجاح`);
+        closePayModal();
+        await loadPlans();
+        await openDetail(ACTIVE_DETAIL.plan.id);
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function printContractSchedule() {
+    if (!ACTIVE_DETAIL || !ACTIVE_DETAIL.plan) return;
+    const p = ACTIVE_DETAIL.plan;
+    const storeName = STORE_SETTINGS.store_name || 'تك زون للإلكترونيات';
+    const cur = STORE_SETTINGS.currency || 'ج.م';
+    $('print-area').innerHTML = `
+      <div style="font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;max-width:760px;margin:0 auto;padding:12px;color:#0f172a">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0ea5e9;padding-bottom:10px;margin-bottom:14px">
+          <div>
+            <h2 style="margin:0;font-size:20px">${esc(storeName)}</h2>
+            <div style="font-size:12px;color:#475569">${esc(STORE_SETTINGS.store_phone || '')} · ${esc(STORE_SETTINGS.store_address || '')}</div>
+          </div>
+          <div style="text-align:left">
+            <div style="font-weight:bold;font-size:16px;color:#0369a1">عقد وجدول أقساط: ${esc(p.plan_no)}</div>
+            <div style="font-size:12px;color:#475569">التاريخ: ${(p.created_at || '').slice(0, 10)}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;background:#f8fafc;padding:10px;border-radius:8px;border:1px solid #cbd5e1;margin-bottom:12px">
+          <div><b>العميل:</b> ${esc(p.customer_name)} (${esc(p.customer_phone || '—')})</div>
+          <div><b>الرقم القومي:</b> ${esc(p.national_id || '—')}</div>
+          <div><b>الجهاز / البيان:</b> ${esc(p.title)} ${p.serial ? '(' + esc(p.serial) + ')' : ''}</div>
+          <div><b>الضامن:</b> ${esc(p.guarantor_name || '—')} ${p.guarantor_phone ? '(' + esc(p.guarantor_phone) + ')' : ''}</div>
+          <div><b>إجمالي العقد:</b> ${money(p.principal)} ${esc(cur)} | <b>المقدم:</b> ${money(p.down_payment)} ${esc(cur)}</div>
+          <div><b>المقسّط:</b> ${money(p.financed_total)} ${esc(cur)} | <b>المتبقي:</b> ${money(p.remaining_total)} ${esc(cur)}</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#e2e8f0"><th style="border:1px solid #cbd5e1;padding:6px">#</th><th style="border:1px solid #cbd5e1;padding:6px">تاريخ الاستحقاق</th><th style="border:1px solid #cbd5e1;padding:6px">القيمة</th><th style="border:1px solid #cbd5e1;padding:6px">المدفوع</th><th style="border:1px solid #cbd5e1;padding:6px">المتبقي</th><th style="border:1px solid #cbd5e1;padding:6px">الحالة</th></tr></thead>
+          <tbody>
+            ${(ACTIVE_DETAIL.items || []).map((it) => `<tr><td style="border:1px solid #cbd5e1;padding:6px">#${it.seq_no}</td><td style="border:1px solid #cbd5e1;padding:6px">${esc(it.due_date)}</td><td style="border:1px solid #cbd5e1;padding:6px">${money(it.amount)}</td><td style="border:1px solid #cbd5e1;padding:6px">${money(it.paid_amount)}</td><td style="border:1px solid #cbd5e1;padding:6px">${money(it.remaining)}</td><td style="border:1px solid #cbd5e1;padding:6px">${it.status === 'paid' ? 'مدفوع' : (it.is_overdue ? 'متأخر' : 'مستحق')}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    window.print();
+  }
+
+  function printPaymentReceipt(pay) {
+    if (!ACTIVE_DETAIL || !ACTIVE_DETAIL.plan || !pay) return;
+    const p = ACTIVE_DETAIL.plan;
+    const storeName = STORE_SETTINGS.store_name || 'تك زون للإلكترونيات';
+    const cur = STORE_SETTINGS.currency || 'ج.م';
+    $('print-area').innerHTML = `
+      <div style="font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;width:290px;margin:0 auto;padding:8px;color:#000;font-size:12px">
+        <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:6px;margin-bottom:8px">
+          <div style="font-weight:bold;font-size:15px">${esc(storeName)}</div>
+          <div>إيصال سداد قسط</div>
+          <div style="font-weight:bold">${esc(pay.receipt_no)}</div>
+        </div>
+        <div><b>التاريخ:</b> ${fmtDT(pay.created_at)}</div>
+        <div><b>العقد:</b> ${esc(p.plan_no)} — ${esc(p.title)}</div>
+        <div><b>العميل:</b> ${esc(p.customer_name)}</div>
+        <div style="margin:8px 0;padding:6px;border-top:1px dashed #000;border-bottom:1px dashed #000">
+          <div><b>المبلغ المسدد:</b> ${money(pay.amount)} ${esc(cur)}</div>
+          <div><b>طريقة الدفع:</b> ${pay.method === 'cash' ? 'نقدي' : 'محفظة'}${pay.ref_no ? ' (' + esc(pay.ref_no) + ')' : ''}</div>
+          <div><b>المتبقي على العقد:</b> ${money(p.remaining_total)} ${esc(cur)}</div>
+        </div>
+        <div style="text-align:center;font-size:11px">شكراً لالتزامكم بالسداد — ${esc(pay.user_name || '')}</div>
+      </div>`;
+    window.print();
+  }
+
+  $('dt-cancel-plan-btn').addEventListener('click', async () => {
+    if (!ACTIVE_DETAIL || !ACTIVE_DETAIL.plan) return;
+    if (!confirm(`هل أنت متأكد من إلغاء عقد التقسيط ${ACTIVE_DETAIL.plan.plan_no}؟ سيتم عكس القيد في دفتر الأستاذ وإعادة المخزون إن وجد.`)) return;
+    if (await guard(() => api('installment_cancel', { plan_id: ACTIVE_DETAIL.plan.id }))) {
+      toast('تم إلغاء عقد التقسيط بنجاح');
+      closeDetailModal();
+      loadPlans();
+    }
+  });
+
+  // Wiring
+  $('btn-new-plan').addEventListener('click', () => openCreateModal());
+  $('btn-refresh').addEventListener('click', loadPlans);
+  $('mode-direct').addEventListener('click', () => setCreateMode('direct'));
+  $('mode-sale').addEventListener('click', () => setCreateMode('sale'));
+  $('cm-close').addEventListener('click', closeCreateModal);
+  $('cm-cancel').addEventListener('click', closeCreateModal);
+  $('dt-close').addEventListener('click', closeDetailModal);
+  $('dt-close-bottom').addEventListener('click', closeDetailModal);
+  $('dt-pay-btn').addEventListener('click', () => openPayModal(null));
+  $('dt-wa-btn').addEventListener('click', () => ACTIVE_DETAIL && sendWhatsappReminder(ACTIVE_DETAIL.plan.id));
+  $('dt-print-btn').addEventListener('click', printContractSchedule);
+  $('pm-cancel').addEventListener('click', closePayModal);
+  $('card-filter-overdue').addEventListener('click', () => setStatusTab('overdue'));
+  $('card-filter-upcoming').addEventListener('click', () => setStatusTab('upcoming'));
+  document.querySelectorAll('.status-tab').forEach((b) => b.addEventListener('click', () => setStatusTab(b.dataset.status)));
+
+  $('pg-prev').addEventListener('click', () => {
+    CURRENT_OFFSET = Math.max(0, CURRENT_OFFSET - PAGE_SIZE);
+    loadPlans();
+  });
+  $('pg-next').addEventListener('click', () => {
+    if (CURRENT_OFFSET + PAGE_SIZE < TOTAL_PLANS) {
+      CURRENT_OFFSET += PAGE_SIZE;
+      loadPlans();
+    }
+  });
+
+  let qTimer = null;
+  $('q').addEventListener('input', () => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => { CURRENT_OFFSET = 0; loadPlans(); }, 200);
+  });
+
+  (async () => {
+    const user = await pageInit('installments', { perm: ['installments_view', 'installments_manage'] });
+    if (!user) return;
+    CAN_MANAGE = hasPerm('installments_manage');
+    if (!CAN_MANAGE) $('btn-new-plan').classList.add('hidden');
+    try { STORE_SETTINGS = await api('settings') || {}; } catch (_) {}
+
+    await loadPlans();
+
+    const params = new URLSearchParams(window.location.search);
+    const planId = params.get('plan_id');
+    const custId = params.get('customer_id');
+    if (planId) {
+      await openDetail(+planId);
+    } else if (custId && CAN_MANAGE) {
+      const hist = await guard(() => api('customer_history', { id: +custId }));
+      if (hist && hist.customer) openCreateModal(hist.customer);
+    }
+  })();
+})();
+</script>
+</body></html>

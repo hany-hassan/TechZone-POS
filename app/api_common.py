@@ -408,13 +408,36 @@ def _customer_debt_summary(conn, cust_row) -> dict:
         (cid,),
     ).fetchall()
     vouchers_out = [dict(v) for v in vouchers]
-    paid_total = sum(v["amount"] for v in vouchers_out)
+    inst_row = conn.execute(
+        """SELECT COUNT(*) AS plans_count,
+                  COALESCE(SUM(CASE WHEN sale_id IS NULL THEN principal ELSE 0 END), 0) AS standalone_principal,
+                  COALESCE(SUM(ledger_charge), 0) AS ledger_charge
+           FROM installment_plans
+           WHERE customer_id=? AND status != 'cancelled'""",
+        (cid,),
+    ).fetchone()
+    inst_paid_row = conn.execute(
+        """SELECT COALESCE(SUM(ip.amount), 0) AS inst_paid
+           FROM installment_payments ip
+           JOIN installment_plans p ON p.id = ip.plan_id
+           WHERE ip.customer_id=? AND p.status != 'cancelled'""",
+        (cid,),
+    ).fetchone()
+    inst_charges = inst_row["ledger_charge"] if inst_row else 0
+    inst_paid = inst_paid_row["inst_paid"] if inst_paid_row else 0
+    standalone_principal = inst_row["standalone_principal"] if inst_row else 0
+    total_purchases += standalone_principal
+    credit_total += inst_charges
+    paid_total = sum(v["amount"] for v in vouchers_out) + inst_paid
     debt = max(0, credit_total - paid_total)
     return {
         "total_purchases": total_purchases,
         "credit_total": credit_total,
         "paid_total": paid_total,
         "debt": debt,
+        "inst_charges": inst_charges,
+        "inst_paid": inst_paid,
+        "inst_plans_count": inst_row["plans_count"] if inst_row else 0,
         "sales": sales_out,
         "vouchers": vouchers_out,
     }
@@ -536,6 +559,7 @@ def _append_ledger_entry(
     credit: int = 0,
     sale_id: int | None = None,
     voucher_id: int | None = None,
+    plan_id: int | None = None,
     method: str | None = None,
     ref_no: str | None = None,
     notes: str | None = None,
@@ -558,8 +582,8 @@ def _append_ledger_entry(
     bal_after = max(0, prev_bal + int(debit or 0) - int(credit or 0))
     conn.execute(
         """INSERT INTO customer_ledger
-           (customer_id, created_at, kind, ref, sale_id, voucher_id, debit, credit, balance_after, method, ref_no, notes, user_id, user_name)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           (customer_id, created_at, kind, ref, sale_id, voucher_id, plan_id, debit, credit, balance_after, method, ref_no, notes, user_id, user_name)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             customer_id,
             created_at or db.now(),
@@ -567,6 +591,7 @@ def _append_ledger_entry(
             ref,
             sale_id,
             voucher_id,
+            plan_id,
             int(debit or 0),
             int(credit or 0),
             bal_after,
@@ -608,6 +633,18 @@ def _sync_sale_ledger_delta(conn, sale_row, prev_net_credit: int, user=None, rea
         _refresh_customer_cache(conn, cid)
 
 
+def _normalize_eg_phone(raw_phone: str) -> str:
+    """تطبيع رقم الهاتف المصري لصيغة واتساب الدولية (2010...)."""
+    digits = "".join(ch for ch in (raw_phone or "").strip() if ch.isdigit())
+    if not digits:
+        return ""
+    if digits.startswith("00"):
+        digits = digits[2:]
+    elif digits.startswith("01") and len(digits) == 11:
+        digits = "2" + digits
+    elif not digits.startswith("20") and len(digits) == 10:
+        digits = "20" + digits
+    return digits
 
 
 class _BaseApiMixin:
