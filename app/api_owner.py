@@ -2,6 +2,7 @@
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 
@@ -13,6 +14,32 @@ OWNER_LOCK_MAX_ATTEMPTS = 5
 OWNER_LOCK_SECONDS = 15 * 60
 _RECOVERY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 _WEAK_PINS = {"1234", "0000", "1111"}
+_ICON_RE = re.compile(r"^[a-z0-9_]{1,40}$")
+_COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|linear-gradient\([#0-9a-zA-Z,.%() -]{1,120}\))$")
+_PARAMS_RE = re.compile(r"^[A-Za-z0-9_=&.-]{0,120}$")
+
+
+def _validate_module_fields(title, icon, color, params="", perm_keys=None):
+    t = str(title or "").strip()
+    if not t or len(t) > 60:
+        raise ApiError("اسم القسم مطلوب (بحد أقصى 60 حرفاً)")
+    ic = str(icon or "").strip()
+    if not _ICON_RE.match(ic):
+        raise ApiError("اسم الأيقونة غير صالح (أحرف إنجليزية صغيرة وأرقام و _ فقط)")
+    col = str(color or "").strip()
+    if not _COLOR_RE.match(col):
+        raise ApiError("صيغة اللون أو التدرج غير صالحة")
+    par = str(params or "").strip().lstrip("?")
+    if not _PARAMS_RE.match(par):
+        raise ApiError("معاملات الرابط غير صالحة (أحرف وأرقام و = & _ - . فقط)")
+    if perm_keys is None:
+        perms = None
+    else:
+        if not isinstance(perm_keys, list):
+            raise ApiError("صيغة الصلاحيات غير صالحة")
+        valid_perms = set(db.DEFAULT_CASHIER_PERMS.keys())
+        perms = [str(k) for k in perm_keys if str(k) in valid_perms]
+    return t, ic, col, par, perms
 
 
 def _generate_recovery_key() -> str:
@@ -420,3 +447,86 @@ class OwnerMixin:
             conn.commit()
             self._modules_cache = None
             return [self._serialize_module(m) for m in self._modules_rows(conn)]
+
+    # ---------------------------------------------------------- تعديل / نسخ / حذف الأقسام (Phase 3)
+    def module_save(self, key, title, icon=None, color=None, params=None, perm_keys=None):
+        """تعديل بيانات القسم (الاسم، الأيقونة، اللون، المعاملات للنسخ المخصصة، أو الصلاحيات)."""
+        self._owner()
+        key = str(key or "").strip()
+        if not key:
+            raise ApiError("مفتاح القسم مطلوب")
+        with db.connect() as conn:
+            self._modules_cache = None
+            cur = next((m for m in self._modules_rows(conn) if m["key"] == key), None)
+            if not cur:
+                raise ApiError("القسم غير موجود")
+            next_icon = cur["icon"] if icon is None else icon
+            next_color = cur["color"] if color is None else color
+            next_params = cur["params"] if (params is None or cur["is_builtin"]) else params
+            next_perms = cur["perm_keys"] if perm_keys is None else perm_keys
+            t, ic, col, par, perms = _validate_module_fields(title, next_icon, next_color, next_params, next_perms)
+            self._owner_backup_once()
+            conn.execute(
+                "UPDATE modules SET title=?, icon=?, color=?, params=?, perm_keys=?, updated_at=? WHERE key=?",
+                (t, ic, col, par, json.dumps(perms or [], ensure_ascii=False), db.now(), key),
+            )
+            self._audit(conn, "module_save", key, {"title": t, "icon": ic})
+            conn.commit()
+            self._modules_cache = None
+            return self._serialize_module(next(m for m in self._modules_rows(conn) if m["key"] == key))
+
+    def module_clone(self, source_key, title, icon=None, color=None, params="", perm_keys=None):
+        """إنشاء قسم مخصص جديد كنسخة من قالب قسم حالي (يفتح نفس الصفحة ويشارك نفس البيانات)."""
+        self._owner()
+        src_key = str(source_key or "").strip()
+        with db.connect() as conn:
+            self._modules_cache = None
+            rows = self._modules_rows(conn)
+            src = next((m for m in rows if m["key"] == src_key), None)
+            if not src:
+                raise ApiError("القسم المصدري غير موجود")
+            base_source = src.get("clone_of") or src["key"]
+            next_icon = src["icon"] if not icon else icon
+            next_color = src["color"] if not color else color
+            next_perms = src["perm_keys"] if perm_keys is None else perm_keys
+            t, ic, col, par, perms = _validate_module_fields(title, next_icon, next_color, params, next_perms)
+
+            slug_src = re.sub(r"[^a-z0-9]+", "_", base_source.lower()).strip("_") or "mod"
+            existing_keys = {m["key"] for m in rows}
+            idx = 2
+            new_key = f"c_{slug_src}_{idx}"
+            while new_key in existing_keys:
+                idx += 1
+                new_key = f"c_{slug_src}_{idx}"
+
+            max_order = max((int(m.get("sort_order", 0) or 0) for m in rows), default=0)
+            ts = db.now()
+            self._owner_backup_once()
+            conn.execute(
+                """INSERT INTO modules
+                   (key, title, icon, color, url, params, perm_keys, sort_order, enabled, is_core, is_builtin, clone_of, created_at, updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,1,0,0,?,?,?)""",
+                (new_key, t, ic, col, src["url"], par, json.dumps(perms or [], ensure_ascii=False), max_order + 10, base_source, ts, ts),
+            )
+            self._audit(conn, "module_clone", new_key, {"source": src_key, "title": t, "params": par})
+            conn.commit()
+            self._modules_cache = None
+            return self._serialize_module(next(m for m in self._modules_rows(conn) if m["key"] == new_key))
+
+    def module_delete(self, key):
+        """حذف قسم مخصص فقط؛ الأقسام المبنية في النظام تُعطّل ولا تُحذف."""
+        self._owner()
+        key = str(key or "").strip()
+        with db.connect() as conn:
+            self._modules_cache = None
+            cur = next((m for m in self._modules_rows(conn) if m["key"] == key), None)
+            if not cur:
+                raise ApiError("القسم غير موجود")
+            if cur["is_builtin"] or cur["is_core"]:
+                raise ApiError("لا يمكن حذف قسم أساسي أو مبني في النظام — استخدم زر التعطيل بدلاً من ذلك")
+            self._owner_backup_once()
+            conn.execute("DELETE FROM modules WHERE key=? AND is_builtin=0", (key,))
+            self._audit(conn, "module_delete", key, {"title": cur["title"]})
+            conn.commit()
+            self._modules_cache = None
+            return True

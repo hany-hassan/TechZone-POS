@@ -55,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (177 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (182 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -81,7 +81,7 @@ project001/
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
 │   ├── db.py            # SQLite schema (26 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (177 checks)
+│   └── selfcheck.py     # Comprehensive automated regression suite (182 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
@@ -148,12 +148,19 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 177 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 182 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-16 — Owner Control Phase 3 (Isolated Worktree): Edit, Clone & Delete Sections
+- **Backend Validation & CRUD (`app/api_owner.py`)**: Added `_validate_module_fields()` (regex checks on icon/color/params, title length, permission key allowlist), `module_save()`, `module_clone()` (`c_<slug>` unique alias inheriting source page & permissions), and `module_delete()` (custom clones only; builtin/core deletions refused).
+- **Frontend UI (`web/owner.html`, `web/desktop.html`)**:
+  1. Added Edit and Clone modal (`#modal-module-form`) with color presets, optional query `params`, explicit shared-data notice, and Delete confirmation for custom clones.
+  2. Updated `desktop.html` `openUrlInApp()` to match `full_url` cleanly.
+- **Verification (`app/selfcheck.py`)**: Added 5 Phase 3 checks (clone params, input validation, edit, delete protection, pre-change backup + audit trail); `182/182` checks pass (`contract ok (101 names)`).
 
 ### 2026-11-16 — Owner Control Phase 2 (Isolated Worktree): Module Registry & Server-Side Guard
 - **Database Schema & Seeding (`app/db.py`)**: Added `modules` table (`DEFAULT_MODULES` for all 13 built-in sections; `settings`, `profile`, `receipt` marked `is_core=1`), idempotent `seed_modules_if_empty()`, and `business_profile` / `structure_version` settings.

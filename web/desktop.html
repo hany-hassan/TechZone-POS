@@ -1205,7 +1205,7 @@ const TZOS = {
       return;
     }
     const clean = href.split('?')[0];
-    const match = ACTIVE_APPS.find((a) => a.url === clean);
+    const match = ACTIVE_APPS.find((a) => (a.full_url || a.url) === href) || ACTIVE_APPS.find((a) => a.url === clean);
     if (match) {
       this.openApp(match.id, href);
     } else if (href.startsWith('customer_details.html') && isModuleEnabled('customers')) {

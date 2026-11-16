@@ -985,6 +985,37 @@ check("idempotent module migration preserves existing data and seeds 13 modules 
       _c1 == 13 and _c2 == 13 and _p_cnt > 0)
 call(a, "owner_logout")
 
+# 13d) تعديل ونسخ وحذف الأقسام — المرحلة 3
+call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
+cln = call(a, "module_clone", {"source_key": "inventory", "title": "مخزون فرعي", "params": "category_id=2"})
+cln_key = cln["data"]["key"] if cln["ok"] else ""
+check("module_clone creates custom alias opening source page with params",
+      cln["ok"]
+      and cln_key.startswith("c_")
+      and cln["data"]["url"] == "inventory.html"
+      and cln["data"]["full_url"] == "inventory.html?category_id=2"
+      and not cln["data"]["is_builtin"]
+      and cln["data"]["perm_keys"] == ["inventory_view", "inventory_edit"])
+check("module validation rejects bad icon, color, params & empty title",
+      (not call(a, "module_clone", {"source_key": "inventory", "title": "bad icon", "icon": "bad icon!"})["ok"])
+      and (not call(a, "module_clone", {"source_key": "inventory", "title": "bad col", "color": "javascript:alert(1)"})["ok"])
+      and (not call(a, "module_clone", {"source_key": "inventory", "title": "bad par", "params": "x=<script>"})["ok"])
+      and (not call(a, "module_save", {"key": cln_key, "title": "   "})["ok"]))
+msave = call(a, "module_save", {"key": cln_key, "title": "مخزون محدث", "icon": "category", "color": "#2563eb", "params": "cat=5"})
+check("module_save updates metadata & params on custom clone",
+      msave["ok"] and msave["data"]["title"] == "مخزون محدث" and msave["data"]["full_url"] == "inventory.html?cat=5")
+check("module_delete refuses builtin/core modules & deletes custom clone",
+      (not call(a, "module_delete", {"key": "pos"})["ok"])
+      and (not call(a, "module_delete", {"key": "settings"})["ok"])
+      and call(a, "module_delete", {"key": cln_key})["ok"]
+      and not any(m["key"] == cln_key for m in call(a, "modules_all")["data"]))
+_bkp_dir = pathlib.Path(os.environ["SHOP_DB"]).parent / "backups"
+_has_struct_bkp = _bkp_dir.exists() and any("before_structure_change" in p.name for p in _bkp_dir.glob("*.db"))
+_aud_actions = {x["action"] for x in call(a, "owner_audit_list", {"limit": 50})["data"]}
+check("automatic pre-structure backup created & audit log tracks clone/save/delete",
+      _has_struct_bkp and {"module_clone", "module_save", "module_delete"}.issubset(_aud_actions))
+call(a, "owner_logout")
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:

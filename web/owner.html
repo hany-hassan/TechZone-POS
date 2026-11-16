@@ -202,6 +202,10 @@
             <p class="text-xs text-slate-500 dark:text-slate-400">تفعيل/تعطيل أي قسم اختياري وإعادة ترتيبه. الأقسام الأساسية محمية من التعطيل.</p>
           </div>
           <div class="flex flex-wrap gap-2">
+            <button id="btn-add-clone" type="button" class="px-3.5 py-2 rounded-xl bg-primary text-white hover:bg-primary-dark text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm">
+              <span class="material-icons-round text-base">add_circle</span>
+              <span>إضافة قسم (نسخة من قالب)</span>
+            </button>
             <button id="btn-reset-modules" type="button" class="px-3.5 py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
               <span class="material-icons-round text-base">restart_alt</span>
               <span>استعادة الأقسام الافتراضية</span>
@@ -278,6 +282,59 @@
         </div>
       </div>
     </section>
+  </div>
+
+  <!-- Modal: Edit / Clone Module -->
+  <div id="modal-module-form" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-700 max-w-lg w-full p-5 shadow-2xl">
+      <div class="flex items-center justify-between mb-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+        <h3 id="mod-modal-title" class="font-bold text-base">تعديل القسم</h3>
+        <button id="btn-close-mod-modal" type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>
+      <div id="mod-clone-note" class="hidden mb-3 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold">
+        نسخة من القسم — تفتح نفس الصفحة وتشارك نفس البيانات والجداول.
+      </div>
+      <form id="form-module-modal" class="space-y-3.5">
+        <input type="hidden" id="mod-form-mode" value="edit" />
+        <input type="hidden" id="mod-form-key" value="" />
+        <div id="mod-source-wrap" class="hidden">
+          <label class="block text-xs font-bold mb-1">القسم المصدري (القالب)</label>
+          <select id="mod-source-key" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold mb-1">اسم القسم الظاهر</label>
+          <input id="mod-title" type="text" maxlength="60" required class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm" />
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold mb-1">الأيقونة (Material Icon)</label>
+            <input id="mod-icon" type="text" dir="ltr" required class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm font-num" placeholder="inventory_2" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">اللون أو التدرج</label>
+            <input id="mod-color" type="text" dir="ltr" required class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-num" placeholder="#2563eb" />
+          </div>
+        </div>
+        <div id="mod-color-presets" class="flex flex-wrap gap-1.5">
+          <button type="button" data-mcol="linear-gradient(135deg,#2563eb,#0ea5e9)" class="w-6 h-6 rounded-lg" style="background:linear-gradient(135deg,#2563eb,#0ea5e9)"></button>
+          <button type="button" data-mcol="linear-gradient(135deg,#059669,#10b981)" class="w-6 h-6 rounded-lg" style="background:linear-gradient(135deg,#059669,#10b981)"></button>
+          <button type="button" data-mcol="linear-gradient(135deg,#7c3aed,#a855f7)" class="w-6 h-6 rounded-lg" style="background:linear-gradient(135deg,#7c3aed,#a855f7)"></button>
+          <button type="button" data-mcol="linear-gradient(135deg,#ea580c,#f97316)" class="w-6 h-6 rounded-lg" style="background:linear-gradient(135deg,#ea580c,#f97316)"></button>
+          <button type="button" data-mcol="linear-gradient(135deg,#d97706,#f59e0b)" class="w-6 h-6 rounded-lg" style="background:linear-gradient(135deg,#d97706,#f59e0b)"></button>
+          <button type="button" data-mcol="linear-gradient(135deg,#db2777,#ec4899)" class="w-6 h-6 rounded-lg" style="background:linear-gradient(135deg,#db2777,#ec4899)"></button>
+        </div>
+        <div id="mod-params-wrap">
+          <label class="block text-xs font-bold mb-1">معاملات الرابط الإضافية (اختياري للنسخ المخصصة)</label>
+          <input id="mod-params" type="text" dir="ltr" maxlength="120" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-num" placeholder="مثال: category_id=2" />
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button id="btn-cancel-mod-modal" type="button" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">إلغاء</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold">حفظ</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="app.js"></script>
@@ -383,6 +440,10 @@
             </div>
           </div>
           <div class="flex items-center gap-2">
+            <button type="button" data-medit="${esc(m.key)}" class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-primary text-xs font-bold" title="تعديل">
+              تعديل
+            </button>
+            ${!m.is_builtin ? `<button type="button" data-mdel="${esc(m.key)}" class="px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-600 hover:text-white text-xs font-bold" title="حذف القسم المخصص">حذف</button>` : ''}
             <button type="button" data-mup="${esc(m.key)}" ${idx === 0 ? 'disabled' : ''} class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-primary disabled:opacity-30" title="تحريك لأعلى">
               <span class="material-icons-round text-base">arrow_upward</span>
             </button>
@@ -423,6 +484,55 @@
       };
       box.querySelectorAll('[data-mup]').forEach((b) => b.addEventListener('click', () => moveMod(b.dataset.mup, -1)));
       box.querySelectorAll('[data-mdn]').forEach((b) => b.addEventListener('click', () => moveMod(b.dataset.mdn, 1)));
+      box.querySelectorAll('[data-medit]').forEach((b) => b.addEventListener('click', () => openModuleEditModal(b.dataset.medit)));
+      box.querySelectorAll('[data-mdel]').forEach((b) => b.addEventListener('click', async () => {
+        const m = ALL_MODULES.find((x) => x.key === b.dataset.mdel);
+        if (!confirm(`حذف القسم المخصص «${m ? m.title : b.dataset.mdel}»؟ لن تتأثر بيانات النظام الأساسية.`)) return;
+        if (await guard(() => api('module_delete', { key: b.dataset.mdel }))) {
+          toast('تم حذف القسم المخصص');
+          await loadModules();
+        }
+      }));
+    }
+
+    function openModuleEditModal(key) {
+      const m = ALL_MODULES.find((x) => x.key === key);
+      if (!m) return;
+      $('mod-modal-title').textContent = `تعديل القسم: ${m.title}`;
+      $('mod-form-mode').value = 'edit';
+      $('mod-form-key').value = m.key;
+      $('mod-source-wrap').classList.add('hidden');
+      $('mod-clone-note').classList.toggle('hidden', m.is_builtin);
+      $('mod-params-wrap').classList.toggle('hidden', m.is_builtin);
+      $('mod-title').value = m.title;
+      $('mod-icon').value = m.icon;
+      $('mod-color').value = m.color;
+      $('mod-params').value = m.params || '';
+      $('modal-module-form').classList.remove('hidden');
+      $('modal-module-form').classList.add('flex');
+    }
+
+    function openModuleCloneModal() {
+      const builtins = ALL_MODULES.filter((x) => x.is_builtin);
+      $('mod-modal-title').textContent = 'إضافة قسم جديد (نسخة من قالب)';
+      $('mod-form-mode').value = 'clone';
+      $('mod-form-key').value = '';
+      $('mod-source-wrap').classList.remove('hidden');
+      $('mod-clone-note').classList.remove('hidden');
+      $('mod-params-wrap').classList.remove('hidden');
+      $('mod-source-key').innerHTML = builtins.map((b) => `<option value="${esc(b.key)}">${esc(b.title)} (${esc(b.url)})</option>`).join('');
+      const first = builtins[0];
+      $('mod-title').value = first ? `${first.title} - نسخة` : '';
+      $('mod-icon').value = first ? first.icon : 'apps';
+      $('mod-color').value = first ? first.color : 'linear-gradient(135deg,#2563eb,#0ea5e9)';
+      $('mod-params').value = '';
+      $('modal-module-form').classList.remove('hidden');
+      $('modal-module-form').classList.add('flex');
+    }
+
+    function closeModuleModal() {
+      $('modal-module-form').classList.add('hidden');
+      $('modal-module-form').classList.remove('flex');
     }
 
     async function loadAuditLog() {
@@ -491,6 +601,52 @@
         if (tab === 'modules') loadModules();
         if (tab === 'audit') loadAuditLog();
       });
+    });
+
+    $('btn-add-clone').addEventListener('click', openModuleCloneModal);
+    $('btn-close-mod-modal').addEventListener('click', closeModuleModal);
+    $('btn-cancel-mod-modal').addEventListener('click', closeModuleModal);
+    $('mod-source-key').addEventListener('change', (e) => {
+      const src = ALL_MODULES.find((x) => x.key === e.target.value);
+      if (src) {
+        $('mod-title').value = `${src.title} - نسخة`;
+        $('mod-icon').value = src.icon;
+        $('mod-color').value = src.color;
+      }
+    });
+    document.querySelectorAll('[data-mcol]').forEach((b) => {
+      b.addEventListener('click', () => { $('mod-color').value = b.dataset.mcol; });
+    });
+    $('form-module-modal').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const mode = $('mod-form-mode').value;
+      if (mode === 'clone') {
+        const res = await guard(() => api('module_clone', {
+          source_key: $('mod-source-key').value,
+          title: $('mod-title').value.trim(),
+          icon: $('mod-icon').value.trim(),
+          color: $('mod-color').value.trim(),
+          params: $('mod-params').value.trim(),
+        }));
+        if (res) {
+          toast(`تم إنشاء القسم المخصص «${res.title}»`);
+          closeModuleModal();
+          await loadModules();
+        }
+      } else {
+        const res = await guard(() => api('module_save', {
+          key: $('mod-form-key').value,
+          title: $('mod-title').value.trim(),
+          icon: $('mod-icon').value.trim(),
+          color: $('mod-color').value.trim(),
+          params: $('mod-params').value.trim(),
+        }));
+        if (res) {
+          toast(`تم تحديث القسم «${res.title}»`);
+          closeModuleModal();
+          await loadModules();
+        }
+      }
     });
 
     $('btn-reset-modules').addEventListener('click', async () => {
