@@ -456,9 +456,17 @@
 
     let ALL_MODULES = [];
 
+    async function syncOwnerTimer() {
+      try {
+        const st = await api('owner_status');
+        if (st && st.active) startOwnerSessionCountdown(st.seconds_left);
+      } catch (e) {}
+    }
+
     async function loadModules() {
       const rows = await guard(() => api('modules_all'));
       if (!rows) return;
+      syncOwnerTimer();
       ALL_MODULES = rows;
       const box = $('modules-list');
       box.innerHTML = rows.map((m, idx) => `
@@ -591,6 +599,7 @@
     async function loadProfiles() {
       const list = await guard(() => api('profiles_list'));
       if (!list) return;
+      syncOwnerTimer();
       $('profile-preview-box').classList.add('hidden');
       $('profiles-grid').innerHTML = list.map((p) => `
         <div class="p-4 rounded-2xl border ${p.is_current ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700'} flex flex-col justify-between gap-3">
@@ -651,6 +660,7 @@
     async function loadLabels() {
       const cfg = await guard(() => api('ui_config'));
       if (!cfg) return;
+      syncOwnerTimer();
       const defs = cfg.default_labels || DEFAULT_LABELS;
       const cur = cfg.labels || {};
       const form = $('form-labels');
@@ -671,6 +681,7 @@
     async function loadAuditLog() {
       const rows = await guard(() => api('owner_audit_list', { limit: 100 }));
       if (!rows) return;
+      syncOwnerTimer();
       const tbody = $('audit-tbody');
       if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-slate-400">لا توجد أحداث مسجلة بعد</td></tr>';

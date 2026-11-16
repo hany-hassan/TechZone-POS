@@ -71,3 +71,16 @@ The following items are scheduled for hardening in **Phase 2** of the project ro
 2. **Read-Endpoint Authorization Audit:** Ensure all read queries (`sale`, `quotation`, `repair`, `customer`, `shift_summary`) check granular view permissions rather than basic session presence.
 3. **Database at Rest Encryption:** Provide an optional transparent encryption wrapper (e.g., SQLCipher) or BitLocker storage guidance for `data/shop.db`.
 4. **Session Idle Timeout:** Add an automatic desktop lock screen after configurable inactivity periods (e.g., 15 minutes of idle time).
+
+---
+
+## 5. Owner Mode & Structure Protection (Added 2026-11-16)
+
+To separate software structural control from day-to-day shop administration (`admin`):
+- **Independent Owner Secret:** `owner_auth` stores a PBKDF2-HMAC-SHA256 (200,000 iterations, 16-byte salt) hash of an owner passphrase (≥ 8 chars) and a one-time 20-char recovery key (`XXXXX-XXXXX-XXXXX-XXXXX`). Hashes and salts are never returned in any API response.
+- **First-Run Claim Guard:** `owner_setup` requires an authenticated `admin` session and only succeeds once when `owner_auth` is unconfigured.
+- **Persistent Lockout & Idle Expiry:** 5 failed attempts on `owner_login`, `owner_recover`, or `owner_reset_admin_pin` trigger a 15-minute lockout persisted in `owner_auth.fail_state`. Active owner sessions expire after 10 minutes of inactivity (`OWNER_SESSION_TTL = 600`) and are cleared on `logout()`, `owner_logout()`, and native window close.
+- **Recovery Model:** The one-time recovery key rotates itself on use (`owner_recover`). Either the passphrase or recovery key can reset a forgotten shop `admin` PIN (`owner_reset_admin_pin`) with PIN strength and uniqueness enforcement.
+- **Server-Side Module Guard:** `Api.call()` enforces `API_MODULE_MAP` before dispatching any method, blocking disabled modules even for `admin`.
+- **Automatic Pre-Change Snapshot & Audit Trail:** Structural mutations create a `before_structure_change` SQLite backup once per owner session and log every action to `owner_audit_log`.
+- **Honest Security Boundary:** Because the system runs offline on the client machine, Owner Mode prevents tampering **through the UI and `Api.call` bridge**. It cannot prevent direct modification of `data/shop.db` or Python source files by someone with local OS file access; production deployments should distribute the compiled `TechZone.exe` binary.

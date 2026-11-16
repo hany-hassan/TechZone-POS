@@ -1059,6 +1059,19 @@ check("labels_save validates keys/length and updates ui_config labels",
 call(a, "module_delete", {"key": _custom_keep})
 call(a, "owner_logout")
 
+# 13f) التحقق من واجهات وضع المالك وإغلاق الجلسة عند إغلاق النافذة — المرحلة 5
+_own_html = (ROOT / "web" / "owner.html").read_text(encoding="utf-8")
+_idx_html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+_desk_html = (ROOT / "web" / "desktop.html").read_text(encoding="utf-8")
+_main_py = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
+check("owner.html contains setup, recovery, tabs (modules/profiles/labels/security/audit) & idle timer",
+      all(tok in _own_html for tok in ("view-setup", "view-recovery-reveal", "opane-modules", "opane-profiles", "opane-labels", "opane-security", "opane-audit", "syncOwnerTimer")))
+check("index.html & desktop.html wire long-press owner entry, reset-admin modal & dynamic UI_CONFIG",
+      "modal-reset-admin-pin" in _idx_html and "owner.html" in _idx_html and "start-owner-trigger" in _desk_html and "UI_CONFIG.modules" in _desk_html)
+check("pages include data-label hooks and main.py clears owner state on window close",
+      all("data-label=" in (ROOT / "web" / fn).read_text(encoding="utf-8") for fn in ("pos.html", "inventory.html", "customers.html", "repair.html", "buy_used.html"))
+      and "_on_window_closed" in _main_py and '_STATE["owner"] = None' in _main_py)
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:

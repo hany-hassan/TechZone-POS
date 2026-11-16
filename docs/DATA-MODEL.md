@@ -525,3 +525,16 @@ This approach means the database file (`data/shop.db`) is forward-compatible: up
 | Packaged `.exe` | `<exe_directory>/data/shop.db` | `<exe_directory>/data/receipts/` |
 
 The `data/` directory is always resolved relative to the executable (or project root in development), ensuring the database persists across application updates while the `web/` assets can be replaced from `sys._MEIPASS`.
+
+---
+
+## Owner Control & Module Registry Tables (Added 2026-11-16)
+
+| Table | Purpose | Key Columns |
+|---|---|---|
+| `owner_auth` | Single-row (`id = 1`) owner passphrase & recovery key salted PBKDF2 hashes + persistent lockout state | `pass_hash`, `pass_salt`, `recovery_hash`, `recovery_salt`, `fail_state` |
+| `modules` | Database-driven section registry replacing hardcoded `OS_APPS` / `NAV`; stores 13 built-ins + custom clones (`c_<slug>`) | `key`, `title`, `icon`, `color`, `url`, `params`, `perm_keys`, `sort_order`, `enabled`, `is_core`, `is_builtin`, `clone_of` |
+| `ui_labels` | Key-value overrides for localized UI terminology (`LABEL_KEYS` allowlist) | `key`, `value` |
+| `owner_audit_log` | Immutable log of structural changes made in Owner Mode | `ts`, `action`, `target`, `details` |
+
+Settings keys managed by Owner Mode (outside the `settings_save` allowlist): `business_profile` (default `retail_electronics`), `structure_version`.

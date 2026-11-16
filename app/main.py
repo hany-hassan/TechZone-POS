@@ -5,6 +5,7 @@ import sys
 import webview
 
 from api import Api
+from api_common import _STATE
 
 if getattr(sys, "frozen", False):
     # onedir: ملفات --add-data داخل sys._MEIPASS (dist/TechZone/_internal/web)
@@ -55,6 +56,12 @@ def main():
         min_size=(360, 500),
         maximized=True,
     )
+
+    def _on_window_closed():
+        _STATE["owner"] = None
+        _STATE["user"] = None
+
+    window.events.closed += _on_window_closed
     webview.start(icon=str(icon_path) if icon_path else None)  # ponytail: بدون LocalHTTP server — الملفات تُقرأ كـ file:// (كافٍ لنافذة واحدة)
 
 

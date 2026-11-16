@@ -158,9 +158,11 @@ window.pywebview.api.call("sale_create", { items: [...], customer_id: 5 })
 
 `call()` in Python looks up the method by `name` on the `Api` instance and passes `payload` (a dict) as keyword arguments. This keeps the bridge surface minimal (one exposed function) while supporting an unlimited number of backend operations.
 
-#### Permission Enforcement — `_perm(key)`
+#### Permission Enforcement — `_perm(key)` & Module Guard (`app/modules_map.py`)
 
-Every mutating or sensitive method begins with a call to `_perm(key)` which:
+Before method dispatch, `Api.call()` checks `API_MODULE_MAP` in `app/modules_map.py`: if the requested method belongs to a module that is currently disabled in the `modules` table (`enabled = 0`), execution is rejected server-side even for `admin`. Core methods (`CORE_METHODS`) remain always available. A contract assertion in `selfcheck.py` enforces that every public `Api` method is classified in `modules_map.py`.
+
+Every mutating or sensitive method then begins with a call to `_perm(key)` which:
 
 1. Reads the current user from `_STATE`.
 2. If the user's role is `admin`, access is granted unconditionally.

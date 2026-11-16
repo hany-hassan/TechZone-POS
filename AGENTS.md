@@ -55,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (187 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (190 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -67,7 +67,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 ```
 project001/
 ├── app/
-│   ├── main.py          # Entry point: pywebview window setup & branding
+│   ├── main.py          # Entry point: pywebview window setup, branding & session cleanup on close
 │   ├── api.py           # Facade Api class composing 8 domain mixins (plus re-exports)
 │   ├── api_common.py    # Shared state, money/format helpers, phone normalization, PDF/WhatsApp Win32 & ledger helpers
 │   ├── api_auth.py      # AuthSettingsMixin: login, users, permissions, profile & settings/backups
@@ -82,7 +82,7 @@ project001/
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
 │   ├── db.py            # SQLite schema (27 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (187 checks)
+│   └── selfcheck.py     # Comprehensive automated regression suite (190 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
@@ -149,12 +149,19 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 187 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 190 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-16 — Owner Control Phase 5 (Isolated Worktree): Hardening, CSS Rebuild & Documentation
+- **Hardening (`app/main.py`, `web/owner.html`, `web/app.css`)**:
+  1. Added `window.events.closed` hook in `app/main.py` clearing `_STATE["owner"]` and `_STATE["user"]` on native window close.
+  2. Synced sliding idle-timeout badge (`syncOwnerTimer()`) across owner dashboard actions in `web/owner.html` and recompiled `web/app.css`.
+- **Documentation & ADR**: Updated `docs/DATA-MODEL.md`, `docs/SECURITY.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and `docs/OPEN-QUESTIONS.md`, and added `docs/adr/0003-owner-mode-and-module-registry.md`.
+- **Verification (`app/selfcheck.py`, stress DB copy)**: Added 3 Phase 5 checks (`190/190` passing, `contract ok (104 names)`), and verified non-destructive migration on a temporary copy of `data/shop.db` (3,001 customers, 30,002 sales, 13 modules seeded in `127.01ms`).
 
 ### 2026-11-16 — Owner Control Phase 4 (Isolated Worktree): Business Profiles & Custom Labels
 - **Profiles & Labels Registry (`app/profiles.py`, `app/db.py`, `app/api_owner.py`)**:
