@@ -1016,6 +1016,49 @@ check("automatic pre-structure backup created & audit log tracks clone/save/dele
       _has_struct_bkp and {"module_clone", "module_save", "module_delete"}.issubset(_aud_actions))
 call(a, "owner_logout")
 
+# 13e) ملفات النشاط التجاري والمسميات — المرحلة 4
+call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
+profs = call(a, "profiles_list")
+check("profiles_list returns 4 business profiles", profs["ok"] and len(profs["data"]) == 4)
+# إضافة نسخة مخصصة قبل تغيير النشاط للتأكد من بقائها، وضبط صفحة البداية على repair لاختبار التراجع التلقائي
+_custom_keep = call(a, "module_clone", {"source_key": "inventory", "title": "نسخة دائمة"})["data"]["key"]
+call(a, "settings_save", {"default_start_page": "repair"})
+dry = call(a, "profile_apply", {"key": "restaurant", "dry_run": True})
+ui_before_dry = call(a, "ui_config")["data"]
+check("profile_apply dry_run=True previews diff without modifying DB",
+      dry["ok"]
+      and dry["data"]["dry_run"]
+      and not dry["data"]["applied"]
+      and ui_before_dry["profile"] == "retail_electronics"
+      and any(m["key"] == "repair" for m in ui_before_dry["modules"]))
+ph_apply = call(a, "profile_apply", {"key": "pharmacy", "dry_run": False})
+ui_ph = call(a, "ui_config")["data"]
+st_ph = call(a, "settings")["data"]
+check("profile_apply pharmacy configures modules/labels, preserves clones & resets disabled start page",
+      ph_apply["ok"]
+      and ph_apply["data"]["applied"]
+      and ui_ph["profile"] == "pharmacy"
+      and not any(m["key"] in ("repair", "sales_quotes", "installments", "buy_used") for m in ui_ph["modules"])
+      and any(m["key"] == _custom_keep for m in ui_ph["modules"])
+      and ui_ph["labels"].get("module_inventory") == "الأدوية والمستلزمات"
+      and st_ph.get("default_start_page") == "pos")
+rst_prof = call(a, "profile_apply", {"key": "retail_electronics", "dry_run": False})
+ui_ret = call(a, "ui_config")["data"]
+check("switching back to retail_electronics restores all 13 builtins & clears overrides",
+      rst_prof["ok"]
+      and ui_ret["profile"] == "retail_electronics"
+      and len([m for m in ui_ret["modules"] if m["is_builtin"]]) == 13
+      and ui_ret["labels"] == {})
+check("labels_save validates keys/length and updates ui_config labels",
+      (not call(a, "labels_save", {"labels": {"unknown_key": "X"}})["ok"])
+      and (not call(a, "labels_save", {"labels": {"product_singular": "x" * 41}})["ok"])
+      and call(a, "labels_save", {"labels": {"product_singular": "صنف"}})["ok"]
+      and call(a, "ui_config")["data"]["labels"].get("product_singular") == "صنف"
+      and call(a, "labels_save", {"labels": {"product_singular": ""}})["ok"]
+      and "product_singular" not in call(a, "ui_config")["data"]["labels"])
+call(a, "module_delete", {"key": _custom_keep})
+call(a, "owner_logout")
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:

@@ -55,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (182 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (187 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -73,6 +73,7 @@ project001/
 │   ├── api_auth.py      # AuthSettingsMixin: login, users, permissions, profile & settings/backups
 │   ├── api_owner.py     # OwnerMixin: owner auth, module registry, profiles, labels & audit log
 │   ├── modules_map.py   # API_MODULE_MAP, CORE_METHODS & MODULE_REQUIRES server guard map
+│   ├── profiles.py      # BUSINESS_PROFILES presets & DEFAULT_LABELS/LABEL_KEYS allowlist
 │   ├── api_inventory.py # InventoryMixin: categories, products, serials & stock adjustments
 │   ├── api_customers.py # CustomersMixin: customer CRM, debt summary, ledger history & vouchers
 │   ├── api_installments.py # InstallmentsMixin: installment contracts, schedules, collections, alerts & WhatsApp reminders
@@ -80,8 +81,8 @@ project001/
 │   ├── api_quotes.py    # QuotesMixin: B2B quotations, A4 invoices & conversion to sales
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
-│   ├── db.py            # SQLite schema (26 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (182 checks)
+│   ├── db.py            # SQLite schema (27 tables), connection wrapper, seed, migration & backups
+│   └── selfcheck.py     # Comprehensive automated regression suite (187 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
@@ -148,12 +149,21 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 182 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 187 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-16 — Owner Control Phase 4 (Isolated Worktree): Business Profiles & Custom Labels
+- **Profiles & Labels Registry (`app/profiles.py`, `app/db.py`, `app/api_owner.py`)**:
+  1. Added `ui_labels` table and `app/profiles.py` defining `BUSINESS_PROFILES` (`retail_electronics`, `generic_shop`, `restaurant`, `pharmacy`) and `DEFAULT_LABELS`/`LABEL_KEYS`.
+  2. Implemented `profiles_list()`, `profile_apply(dry_run=True/False)` (diff preview, untouched custom clones, safe `default_start_page` fallback), and `labels_save()` (allowlist + 40-char limit), and wired `ui_labels` into `ui_config()`.
+- **Frontend Labels & Profile UI (`web/app.js`, `web/owner.html`, `web/pos.html`, `web/inventory.html`, `web/customers.html`, `web/repair.html`, `web/buy_used.html`)**:
+  1. Added `DEFAULT_LABELS`, `t()`, and `applyLabels()` in `app.js` plus `[data-label]` hooks on core page titles.
+  2. Added "نوع النشاط" (preview & apply) and "المسميات" tabs to `web/owner.html`.
+- **Verification (`app/selfcheck.py`)**: Added 5 Phase 4 checks; `187/187` checks pass (`contract ok (104 names)`).
 
 ### 2026-11-16 — Owner Control Phase 3 (Isolated Worktree): Edit, Clone & Delete Sections
 - **Backend Validation & CRUD (`app/api_owner.py`)**: Added `_validate_module_fields()` (regex checks on icon/color/params, title length, permission key allowlist), `module_save()`, `module_clone()` (`c_<slug>` unique alias inheriting source page & permissions), and `module_delete()` (custom clones only; builtin/core deletions refused).

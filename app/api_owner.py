@@ -9,6 +9,7 @@ import time
 import db
 from api_common import ApiError, OWNER_SESSION_TTL, _STATE, _int
 from modules_map import MODULE_REQUIRES
+from profiles import BUSINESS_PROFILES, DEFAULT_LABELS, LABEL_KEYS
 
 OWNER_LOCK_MAX_ATTEMPTS = 5
 OWNER_LOCK_SECONDS = 15 * 60
@@ -345,9 +346,11 @@ class OwnerMixin:
             st = self._settings(conn)
             rows = self._modules_rows(conn)
             enabled = [self._serialize_module(m) for m in rows if m["enabled"]]
+            lbls = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM ui_labels")}
             return {
                 "modules": enabled,
-                "labels": {},
+                "labels": lbls,
+                "default_labels": dict(DEFAULT_LABELS),
                 "profile": st.get("business_profile") or "retail_electronics",
             }
 
@@ -530,3 +533,142 @@ class OwnerMixin:
             conn.commit()
             self._modules_cache = None
             return True
+
+    # ---------------------------------------------------------- ملفات النشاط والمسميات (Phase 4)
+    def profiles_list(self):
+        """عرض قوالب الأنشطة التجارية المتاحة مع حالة النشاط الحالي."""
+        self._owner()
+        with db.connect() as conn:
+            cur = self._settings(conn).get("business_profile") or "retail_electronics"
+            return [
+                {
+                    "key": k,
+                    "label": v["label"],
+                    "description": v["description"],
+                    "modules_enabled": list(v["modules_enabled"]),
+                    "module_titles": dict(v.get("module_titles") or {}),
+                    "labels": dict(v.get("labels") or {}),
+                    "is_current": k == cur,
+                }
+                for k, v in BUSINESS_PROFILES.items()
+            ]
+
+    def profile_apply(self, key, dry_run=True):
+        """معاينة أو تطبيق ملف نشاط تجاري (يحدّث الأقسام المبنية والمسميات دون مساس بالبيانات أو النسخ المخصصة)."""
+        self._owner()
+        key = str(key or "").strip()
+        prof = BUSINESS_PROFILES.get(key)
+        if not prof:
+            raise ApiError("ملف النشاط التجاري غير معروف")
+
+        target_set = set(prof["modules_enabled"])
+        prof_titles = prof.get("module_titles") or {}
+        default_titles = {row[0]: row[1] for row in db.DEFAULT_MODULES}
+
+        with db.connect() as conn:
+            self._modules_cache = None
+            rows = self._modules_rows(conn)
+            to_enable = []
+            to_disable = []
+            title_changes = []
+            for m in rows:
+                if not m["is_builtin"]:
+                    continue
+                next_en = (m["key"] in target_set) or bool(m["is_core"])
+                next_title = prof_titles.get(m["key"], default_titles.get(m["key"], m["title"]))
+                if next_en and not m["enabled"]:
+                    to_enable.append({"key": m["key"], "title": next_title})
+                elif not next_en and m["enabled"]:
+                    to_disable.append({"key": m["key"], "title": m["title"]})
+                if next_title != m["title"]:
+                    title_changes.append({"key": m["key"], "from": m["title"], "to": next_title})
+
+            if dry_run:
+                return {
+                    "dry_run": True,
+                    "applied": False,
+                    "profile": key,
+                    "label": prof["label"],
+                    "to_enable": to_enable,
+                    "to_disable": to_disable,
+                    "title_changes": title_changes,
+                    "labels": dict(prof.get("labels") or {}),
+                }
+
+            self._owner_backup_once()
+            ts = db.now()
+            for m in rows:
+                if not m["is_builtin"]:
+                    continue
+                next_en = 1 if ((m["key"] in target_set) or bool(m["is_core"])) else 0
+                next_title = prof_titles.get(m["key"], default_titles.get(m["key"], m["title"]))
+                conn.execute(
+                    "UPDATE modules SET enabled=?, title=?, updated_at=? WHERE key=?",
+                    (next_en, next_title, ts, m["key"]),
+                )
+
+            conn.execute("DELETE FROM ui_labels")
+            for lk, lv in (prof.get("labels") or {}).items():
+                if lk in LABEL_KEYS and str(lv).strip():
+                    conn.execute("INSERT INTO ui_labels(key, value) VALUES(?,?)", (lk, str(lv).strip()[:40]))
+
+            st = self._settings(conn)
+            ver = _int(st.get("structure_version", "1"), 1) + 1
+            conn.execute(
+                "INSERT INTO settings(key, value) VALUES('business_profile', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key,),
+            )
+            conn.execute(
+                "INSERT INTO settings(key, value) VALUES('structure_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (str(ver),),
+            )
+            cur_sp = st.get("default_start_page") or "pos"
+            if cur_sp != "desktop" and cur_sp not in target_set:
+                conn.execute(
+                    "INSERT INTO settings(key, value) VALUES('default_start_page', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (prof.get("default_start_page") or "pos",),
+                )
+
+            self._audit(conn, "profile_apply", key, {"enabled": len(target_set), "disabled": len(to_disable)})
+            conn.commit()
+            self._modules_cache = None
+            self._settings_cache = None
+            return {
+                "dry_run": False,
+                "applied": True,
+                "profile": key,
+                "label": prof["label"],
+                "to_enable": to_enable,
+                "to_disable": to_disable,
+                "title_changes": title_changes,
+                "labels": dict(prof.get("labels") or {}),
+            }
+
+    def labels_save(self, labels):
+        """حفظ مسميات الواجهة المخصصة مع التحقق من المفاتيح المسموحة والطول."""
+        self._owner()
+        if not isinstance(labels, dict):
+            raise ApiError("صيغة المسميات غير صالحة")
+        cleaned = {}
+        for k, v in labels.items():
+            sk = str(k or "").strip()
+            if sk not in LABEL_KEYS:
+                raise ApiError(f"مفتاح مسمى غير مسموح: {sk}")
+            sv = "" if v is None else str(v).strip()
+            if len(sv) > 40:
+                raise ApiError("طول المسمى يجب ألا يتجاوز 40 حرفاً")
+            cleaned[sk] = sv
+
+        with db.connect() as conn:
+            self._owner_backup_once()
+            for sk, sv in cleaned.items():
+                if sv == "":
+                    conn.execute("DELETE FROM ui_labels WHERE key=?", (sk,))
+                else:
+                    conn.execute(
+                        "INSERT INTO ui_labels(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                        (sk, sv),
+                    )
+            self._audit(conn, "labels_save", None, {"keys": sorted(cleaned.keys())})
+            conn.commit()
+            return {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM ui_labels")}

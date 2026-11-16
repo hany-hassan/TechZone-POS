@@ -278,6 +278,37 @@ function isModuleEnabled(key) {
   return window.UI_CONFIG.modules.some((m) => m.key === key || m.id === key || m.url === `${key}.html`);
 }
 
+const DEFAULT_LABELS = {
+  module_pos: 'نقاط البيع (الكاشير)',
+  module_inventory: 'المخزون والمنتجات',
+  module_customers: 'العملاء والمديونيات',
+  module_sales_quotes: 'المبيعات وعروض الأسعار',
+  module_repair: 'مركز الصيانة',
+  module_buy_used: 'شراء أجهزة مستعملة',
+  product_singular: 'منتج',
+  products_plural: 'المنتجات',
+  customer_singular: 'عميل',
+  customers_plural: 'العملاء',
+  repair_center: 'مركز الصيانة',
+  used_devices: 'الأجهزة المستعملة',
+};
+
+function t(key, fallback = '') {
+  const lbls = (window.UI_CONFIG && window.UI_CONFIG.labels) || {};
+  if (lbls[key]) return lbls[key];
+  if (DEFAULT_LABELS[key]) return DEFAULT_LABELS[key];
+  return fallback || key;
+}
+
+function applyLabels() {
+  const lbls = (window.UI_CONFIG && window.UI_CONFIG.labels) || {};
+  document.querySelectorAll('[data-label]').forEach((el) => {
+    const k = el.dataset.label;
+    if (!el.dataset.origLabel) el.dataset.origLabel = el.textContent;
+    el.textContent = lbls[k] || el.dataset.origLabel;
+  });
+}
+
 const DEFAULT_NAV = [
   { page: 'desktop', href: 'desktop.html', icon: 'desktop_windows', label: 'سطح المكتب (النظام)' },
   { page: 'pos', href: 'pos.html', icon: 'point_of_sale', label: 'نقاط البيع' },
@@ -478,6 +509,7 @@ async function pageInit(current, opts) {
   }
   const nav = getNavItems().find((x) => x.page === current);
   syncTitle(nav ? nav.label : '');
+  applyLabels();
   document.body.dataset.role = user.role;
   renderSidebar(current, user);
   return user;

@@ -181,6 +181,14 @@
           <span class="material-icons-round text-base">apps</span>
           <span>الأقسام والهيكلة</span>
         </button>
+        <button type="button" data-otab="profiles" class="owner-tab-btn px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+          <span class="material-icons-round text-base">storefront</span>
+          <span>نوع النشاط</span>
+        </button>
+        <button type="button" data-otab="labels" class="owner-tab-btn px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+          <span class="material-icons-round text-base">translate</span>
+          <span>المسميات</span>
+        </button>
         <button type="button" data-otab="security" class="owner-tab-btn px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
           <span class="material-icons-round text-base">shield</span>
           <span>الأمان وكلمة السر</span>
@@ -213,6 +221,36 @@
           </div>
         </div>
         <div id="modules-list" class="divide-y divide-slate-100 dark:divide-slate-800"></div>
+      </div>
+
+      <!-- Tab: Business Profiles -->
+      <div id="opane-profiles" class="hidden bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm flex flex-col gap-4">
+        <div>
+          <h3 class="font-bold text-base flex items-center gap-2">
+            <span class="material-icons-round text-primary">business</span>
+            <span>قوالب النشاط التجاري (Profiles)</span>
+          </h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">بدّل هيكلة الأقسام والمسميات لتناسب طبيعة النشاط. لا يتم حذف أي بيانات أو أقسام مخصصة عند التبديل.</p>
+        </div>
+        <div id="profiles-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        <div id="profile-preview-box" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-primary/30 flex flex-col gap-3"></div>
+      </div>
+
+      <!-- Tab: Labels -->
+      <div id="opane-labels" class="hidden bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="font-bold text-base flex items-center gap-2">
+              <span class="material-icons-round text-primary">edit_note</span>
+              <span>تخصيص المسميات الرئيسية في الواجهة</span>
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">اترك الحقل فارغاً لاستخدام الاسم الافتراضي.</p>
+          </div>
+          <button id="btn-clear-labels" type="button" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold hover:border-primary">
+            إرجاع جميع المسميات للافتراضي
+          </button>
+        </div>
+        <form id="form-labels" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5"></form>
       </div>
 
       <!-- Tab: Security -->
@@ -535,6 +573,101 @@
       $('modal-module-form').classList.remove('flex');
     }
 
+    const LABEL_TITLES = {
+      module_pos: 'عنوان قسم نقاط البيع',
+      module_inventory: 'عنوان قسم المخزون',
+      module_customers: 'عنوان قسم العملاء',
+      module_sales_quotes: 'عنوان المبيعات وعروض الأسعار',
+      module_repair: 'عنوان مركز الصيانة',
+      module_buy_used: 'عنوان شراء المستعمل',
+      product_singular: 'مفرد المنتج (مثال: صنف / دواء)',
+      products_plural: 'جمع المنتجات (مثال: الأصناف / الأدوية)',
+      customer_singular: 'مفرد العميل (مثال: مريض / عميل)',
+      customers_plural: 'جمع العملاء',
+      repair_center: 'مسمى مركز الصيانة',
+      used_devices: 'مسمى الأجهزة المستعملة',
+    };
+
+    async function loadProfiles() {
+      const list = await guard(() => api('profiles_list'));
+      if (!list) return;
+      $('profile-preview-box').classList.add('hidden');
+      $('profiles-grid').innerHTML = list.map((p) => `
+        <div class="p-4 rounded-2xl border ${p.is_current ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700'} flex flex-col justify-between gap-3">
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-1">
+              <span class="font-bold text-sm text-slate-900 dark:text-white">${esc(p.label)}</span>
+              ${p.is_current ? '<span class="text-[10px] px-2 py-0.5 rounded-lg bg-primary text-white font-bold">مُفعّل حالياً</span>' : ''}
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-2">${esc(p.description)}</p>
+            <div class="text-[11px] text-slate-500 font-num">الأقسام المفعلة: ${p.modules_enabled.length}</div>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" data-pprev="${esc(p.key)}" class="flex-1 py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary text-xs font-bold">
+              معاينة التغييرات
+            </button>
+            <button type="button" data-papply="${esc(p.key)}" class="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary-dark text-white text-xs font-bold">
+              تطبيق النشاط
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      $('profiles-grid').querySelectorAll('[data-pprev]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          const diff = await guard(() => api('profile_apply', { key: b.dataset.pprev, dry_run: true }));
+          if (!diff) return;
+          const box = $('profile-preview-box');
+          box.classList.remove('hidden');
+          box.innerHTML = `
+            <div class="flex items-center justify-between">
+              <h4 class="font-bold text-sm text-primary">معاينة التغييرات عند تطبيق: ${esc(diff.label)}</h4>
+              <button type="button" id="btn-confirm-prof-apply" class="px-4 py-1.5 rounded-xl bg-primary text-white text-xs font-bold">تأكيد وتطبيق الآن</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div><span class="font-bold text-emerald-600">سيتم تفعيل:</span> ${diff.to_enable.length ? diff.to_enable.map((x) => esc(x.title)).join('، ') : 'لا يوجد'}</div>
+              <div><span class="font-bold text-amber-600">سيتم تعطيل:</span> ${diff.to_disable.length ? diff.to_disable.map((x) => esc(x.title)).join('، ') : 'لا يوجد'}</div>
+              <div><span class="font-bold text-blue-600">تغييرات الأسماء:</span> ${diff.title_changes.length ? diff.title_changes.map((x) => `${esc(x.from)} ← ${esc(x.to)}`).join('، ') : 'لا يوجد'}</div>
+            </div>`;
+          $('btn-confirm-prof-apply').addEventListener('click', () => applyProfileNow(diff.profile));
+        });
+      });
+
+      $('profiles-grid').querySelectorAll('[data-papply]').forEach((b) => {
+        b.addEventListener('click', () => applyProfileNow(b.dataset.papply));
+      });
+    }
+
+    async function applyProfileNow(key) {
+      if (!confirm('تطبيق قالب النشاط المختار؟ لن تُحذف أي بيانات سابقة.')) return;
+      const res = await guard(() => api('profile_apply', { key, dry_run: false }));
+      if (res && res.applied) {
+        toast(`تم تطبيق نشاط «${res.label}» بنجاح`);
+        await loadProfiles();
+        await loadModules();
+      }
+    }
+
+    async function loadLabels() {
+      const cfg = await guard(() => api('ui_config'));
+      if (!cfg) return;
+      const defs = cfg.default_labels || DEFAULT_LABELS;
+      const cur = cfg.labels || {};
+      const form = $('form-labels');
+      form.innerHTML = Object.keys(defs).map((k) => `
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">${esc(LABEL_TITLES[k] || k)} <span class="text-[10px] text-slate-400">(${esc(defs[k])})</span></label>
+          <input data-lkey="${esc(k)}" type="text" maxlength="40" value="${esc(cur[k] || '')}" placeholder="${esc(defs[k])}"
+            class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm focus:outline-none focus:border-primary" />
+        </div>
+      `).join('') + `
+        <div class="sm:col-span-2 flex justify-end pt-2">
+          <button type="submit" class="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white text-xs font-bold">
+            حفظ المسميات
+          </button>
+        </div>`;
+    }
+
     async function loadAuditLog() {
       const rows = await guard(() => api('owner_audit_list', { limit: 100 }));
       if (!rows) return;
@@ -594,11 +727,13 @@
       btn.addEventListener('click', () => {
         const tab = btn.dataset.otab;
         document.querySelectorAll('[data-otab]').forEach((b) => b.classList.toggle('active', b === btn));
-        ['modules', 'security', 'audit'].forEach((p) => {
+        ['modules', 'profiles', 'labels', 'security', 'audit'].forEach((p) => {
           const el = $('opane-' + p);
           if (el) el.classList.toggle('hidden', p !== tab);
         });
         if (tab === 'modules') loadModules();
+        if (tab === 'profiles') loadProfiles();
+        if (tab === 'labels') loadLabels();
         if (tab === 'audit') loadAuditLog();
       });
     });
@@ -646,6 +781,30 @@
           closeModuleModal();
           await loadModules();
         }
+      }
+    });
+
+    $('form-labels').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {};
+      $('form-labels').querySelectorAll('[data-lkey]').forEach((inp) => {
+        payload[inp.dataset.lkey] = inp.value.trim();
+      });
+      const res = await guard(() => api('labels_save', { labels: payload }));
+      if (res) {
+        toast('تم حفظ المسميات بنجاح');
+        await loadLabels();
+      }
+    });
+
+    $('btn-clear-labels').addEventListener('click', async () => {
+      if (!confirm('إرجاع جميع المسميات إلى القيم الافتراضية؟')) return;
+      const payload = {};
+      $('form-labels').querySelectorAll('[data-lkey]').forEach((inp) => { payload[inp.dataset.lkey] = ''; });
+      const res = await guard(() => api('labels_save', { labels: payload }));
+      if (res) {
+        toast('تمت استعادة المسميات الافتراضية');
+        await loadLabels();
       }
     });
 

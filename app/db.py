@@ -481,6 +481,10 @@ CREATE TABLE IF NOT EXISTS modules (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ui_labels (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 """
 
 
@@ -958,6 +962,12 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
               clone_of TEXT,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS ui_labels (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
             )"""
         )
         seed_modules_if_empty(conn)
