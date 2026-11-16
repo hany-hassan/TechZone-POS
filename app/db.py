@@ -140,7 +140,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE TABLE IF NOT EXISTS categories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL UNIQUE
+  name TEXT NOT NULL UNIQUE,
+  demo_profile TEXT
 );
 CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,6 +156,7 @@ CREATE TABLE IF NOT EXISTS products (
   image TEXT,
   notes TEXT,
   active INTEGER NOT NULL DEFAULT 1,
+  demo_profile TEXT,
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS serials (
@@ -484,6 +486,20 @@ CREATE TABLE IF NOT EXISTS modules (
 CREATE TABLE IF NOT EXISTS ui_labels (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS business_profiles (
+  key TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  modules_enabled TEXT NOT NULL DEFAULT '[]',
+  module_titles TEXT NOT NULL DEFAULT '{}',
+  labels TEXT NOT NULL DEFAULT '{}',
+  demo_catalog TEXT NOT NULL DEFAULT '[]',
+  default_start_page TEXT NOT NULL DEFAULT 'pos',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_builtin INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 """
 
@@ -830,6 +846,12 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
         prod_cols = {c["name"] for c in conn.execute("PRAGMA table_info(products)").fetchall()}
         if "image" not in prod_cols:
             conn.execute("ALTER TABLE products ADD COLUMN image TEXT")
+        if "demo_profile" not in prod_cols:
+            conn.execute("ALTER TABLE products ADD COLUMN demo_profile TEXT")
+
+        cat_cols = {c["name"] for c in conn.execute("PRAGMA table_info(categories)").fetchall()}
+        if "demo_profile" not in cat_cols:
+            conn.execute("ALTER TABLE categories ADD COLUMN demo_profile TEXT")
 
         cust_cols = {c["name"] for c in conn.execute("PRAGMA table_info(customers)").fetchall()}
         for col in ("total_purchases", "credit_total", "paid_total", "debt"):
@@ -970,7 +992,24 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
               value TEXT NOT NULL
             )"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS business_profiles (
+              key TEXT PRIMARY KEY,
+              label TEXT NOT NULL,
+              description TEXT NOT NULL DEFAULT '',
+              modules_enabled TEXT NOT NULL DEFAULT '[]',
+              module_titles TEXT NOT NULL DEFAULT '{}',
+              labels TEXT NOT NULL DEFAULT '{}',
+              demo_catalog TEXT NOT NULL DEFAULT '[]',
+              default_start_page TEXT NOT NULL DEFAULT 'pos',
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              is_builtin INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )"""
+        )
         seed_modules_if_empty(conn)
+        seed_profiles_if_empty(conn)
 
         te = conn.execute("SELECT value FROM settings WHERE key='tax_enabled'").fetchone()
         if not te:
@@ -1231,10 +1270,53 @@ def seed_modules_if_empty(conn: sqlite3.Connection) -> None:
     )
 
 
+def seed_profiles_if_empty(conn: sqlite3.Connection) -> None:
+    """زرع قوالب النشاط الافتراضية في business_profiles ووسم بيانات البداية التجريبية."""
+    from profiles import DEFAULT_BUSINESS_PROFILES, DEFAULT_RETAIL_CATS, DEFAULT_RETAIL_SKUS
+
+    if DEFAULT_RETAIL_SKUS:
+        ph = ",".join("?" for _ in DEFAULT_RETAIL_SKUS)
+        conn.execute(
+            f"UPDATE products SET demo_profile='retail_electronics' WHERE demo_profile IS NULL AND sku IN ({ph})",
+            DEFAULT_RETAIL_SKUS,
+        )
+    if DEFAULT_RETAIL_CATS:
+        ph_c = ",".join("?" for _ in DEFAULT_RETAIL_CATS)
+        conn.execute(
+            f"UPDATE categories SET demo_profile='retail_electronics' WHERE demo_profile IS NULL AND name IN ({ph_c})",
+            DEFAULT_RETAIL_CATS,
+        )
+    if conn.execute("SELECT COUNT(*) c FROM business_profiles").fetchone()["c"] > 0:
+        return
+    t = now()
+    rows = [
+        (
+            k,
+            v["label"],
+            v.get("description", ""),
+            json.dumps(v.get("modules_enabled", []), ensure_ascii=False),
+            json.dumps(v.get("module_titles", {}), ensure_ascii=False),
+            json.dumps(v.get("labels", {}), ensure_ascii=False),
+            json.dumps(v.get("demo_catalog", []), ensure_ascii=False),
+            v.get("default_start_page", "pos"),
+            int(v.get("sort_order", 10)),
+            1,
+            t,
+            t,
+        )
+        for k, v in DEFAULT_BUSINESS_PROFILES.items()
+    ]
+    conn.executemany(
+        """INSERT INTO business_profiles
+           (key, label, description, modules_enabled, module_titles, labels, demo_catalog, default_start_page, sort_order, is_builtin, created_at, updated_at)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+        rows,
+    )
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     _seed(conn)
-    seed_modules_if_empty(conn)
     conn.commit()
 
 

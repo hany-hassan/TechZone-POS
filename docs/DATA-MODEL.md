@@ -536,5 +536,8 @@ The `data/` directory is always resolved relative to the executable (or project 
 | `modules` | Database-driven section registry replacing hardcoded `OS_APPS` / `NAV`; stores 13 built-ins + custom clones (`c_<slug>`) | `key`, `title`, `icon`, `color`, `url`, `params`, `perm_keys`, `sort_order`, `enabled`, `is_core`, `is_builtin`, `clone_of` |
 | `ui_labels` | Key-value overrides for localized UI terminology (`LABEL_KEYS` allowlist) | `key`, `value` |
 | `owner_audit_log` | Immutable log of structural changes made in Owner Mode | `ts`, `action`, `target`, `details` |
+| `business_profiles` | Customizable business activity templates (modules, module titles, labels, default start page & `demo_catalog` JSON in minor units) | `key`, `label`, `modules_enabled`, `module_titles`, `labels`, `demo_catalog`, `default_start_page`, `is_builtin` |
+
+`products.demo_profile` and `categories.demo_profile` tag profile-seeded demo records so switching business profiles toggles demo catalogs cleanly via `active=0/1` without breaking foreign keys or touching shop-owned records (`demo_profile IS NULL`).
 
 Settings keys managed by Owner Mode (outside the `settings_save` allowlist): `business_profile` (default `retail_electronics`), `structure_version`.

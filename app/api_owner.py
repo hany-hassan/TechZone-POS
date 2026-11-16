@@ -7,9 +7,9 @@ import secrets
 import time
 
 import db
-from api_common import ApiError, OWNER_SESSION_TTL, _STATE, _int
+from api_common import ApiError, OWNER_SESSION_TTL, _STATE, _int, _money
 from modules_map import MODULE_REQUIRES
-from profiles import BUSINESS_PROFILES, DEFAULT_LABELS, LABEL_KEYS
+from profiles import BUSINESS_PROFILES, DEFAULT_BUSINESS_PROFILES, DEFAULT_LABELS, DEFAULT_RETAIL_CATS, DEFAULT_RETAIL_SKUS, LABEL_KEYS
 
 OWNER_LOCK_MAX_ATTEMPTS = 5
 OWNER_LOCK_SECONDS = 15 * 60
@@ -18,6 +18,7 @@ _WEAK_PINS = {"1234", "0000", "1111"}
 _ICON_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 _COLOR_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|linear-gradient\([#0-9a-zA-Z,.%() -]{1,120}\))$")
 _PARAMS_RE = re.compile(r"^[A-Za-z0-9_=&.-]{0,120}$")
+_PROFILE_KEY_RE = re.compile(r"^[a-z0-9_]{2,40}$")
 
 
 def _validate_module_fields(title, icon, color, params="", perm_keys=None):
@@ -534,38 +535,351 @@ class OwnerMixin:
             self._modules_cache = None
             return True
 
-    # ---------------------------------------------------------- ملفات النشاط والمسميات (Phase 4)
+    # ---------------------------------------------------------- ملفات النشاط والمسميات (Phase 4+)
+    def _serialize_profile(self, r, cur_profile: str) -> dict:
+        d = dict(r)
+        for jf, default in (("modules_enabled", []), ("module_titles", {}), ("labels", {}), ("demo_catalog", [])):
+            try:
+                val = json.loads(d.get(jf) or json.dumps(default))
+                d[jf] = val if isinstance(val, type(default)) else default
+            except Exception:
+                d[jf] = default
+        d["is_builtin"] = bool(d.get("is_builtin", 1))
+        d["is_current"] = d["key"] == cur_profile
+        d["demo_count"] = len(d["demo_catalog"])
+        return d
+
     def profiles_list(self):
-        """عرض قوالب الأنشطة التجارية المتاحة مع حالة النشاط الحالي."""
+        """عرض قوالب الأنشطة التجارية المحفوظة في قاعدة البيانات مع حالة النشاط الحالي."""
         self._owner()
         with db.connect() as conn:
             cur = self._settings(conn).get("business_profile") or "retail_electronics"
-            return [
-                {
-                    "key": k,
-                    "label": v["label"],
-                    "description": v["description"],
-                    "modules_enabled": list(v["modules_enabled"]),
-                    "module_titles": dict(v.get("module_titles") or {}),
-                    "labels": dict(v.get("labels") or {}),
-                    "is_current": k == cur,
-                }
-                for k, v in BUSINESS_PROFILES.items()
-            ]
+            rows = conn.execute("SELECT * FROM business_profiles ORDER BY sort_order ASC, key ASC").fetchall()
+            return [self._serialize_profile(r, cur) for r in rows]
 
-    def profile_apply(self, key, dry_run=True):
-        """معاينة أو تطبيق ملف نشاط تجاري (يحدّث الأقسام المبنية والمسميات دون مساس بالبيانات أو النسخ المخصصة)."""
+    def owner_profile_save(
+        self,
+        key=None,
+        label="",
+        description="",
+        modules_enabled=None,
+        module_titles=None,
+        labels=None,
+        demo_catalog=None,
+        default_start_page="pos",
+        price_unit="le",
+    ):
+        """إنشاء قالب نشاط تجاري جديد أو تعديل قالب موجود (الأقسام، العناوين، المسميات، والبيانات التجريبية)."""
+        self._owner()
+        lbl = str(label or "").strip()
+        if not lbl or len(lbl) > 80:
+            raise ApiError("اسم قالب النشاط مطلوب (بحد أقصى 80 حرفاً)")
+        desc = str(description or "").strip()
+        if len(desc) > 300:
+            raise ApiError("وصف القالب طويل جداً (الحد الأقصى 300 حرف)")
+
+        builtin_keys = {r[0] for r in db.DEFAULT_MODULES}
+        core_keys = {r[0] for r in db.DEFAULT_MODULES if r[7]}
+        titles_map = {r[0]: r[1] for r in db.DEFAULT_MODULES}
+
+        if modules_enabled is None:
+            mods_en = [r[0] for r in db.DEFAULT_MODULES]
+        elif isinstance(modules_enabled, list):
+            mods_en = [str(x).strip() for x in modules_enabled if str(x).strip() in builtin_keys]
+            for ck in core_keys:
+                if ck not in mods_en:
+                    mods_en.append(ck)
+        else:
+            raise ApiError("قائمة الأقسام المفعلة غير صالحة")
+
+        mods_set = set(mods_en)
+        for mk in mods_en:
+            missing_deps = [titles_map.get(dep, dep) for dep in MODULE_REQUIRES.get(mk, []) if dep not in mods_set]
+            if missing_deps:
+                raise ApiError(f"القسم «{titles_map.get(mk, mk)}» يتطلب تفعيل: {'، '.join(missing_deps)}")
+
+        clean_mod_titles = {}
+        if isinstance(module_titles, dict):
+            for mk, mv in module_titles.items():
+                smk = str(mk or "").strip()
+                smv = str(mv or "").strip()
+                if smk in builtin_keys and smv:
+                    if len(smv) > 60:
+                        raise ApiError("عنوان القسم المخصص يجب ألا يتجاوز 60 حرفاً")
+                    clean_mod_titles[smk] = smv
+
+        clean_labels = {}
+        if isinstance(labels, dict):
+            for lk, lv in labels.items():
+                slk = str(lk or "").strip()
+                slv = str(lv or "").strip()
+                if slk not in LABEL_KEYS:
+                    raise ApiError(f"مفتاح مسمى غير مسموح: {slk}")
+                if slv:
+                    if len(slv) > 40:
+                        raise ApiError("طول المسمى يجب ألا يتجاوز 40 حرفاً")
+                    clean_labels[slk] = slv
+
+        dsp = str(default_start_page or "pos").strip()
+        if dsp != "desktop" and dsp not in mods_set:
+            dsp = mods_en[0] if mods_en else "desktop"
+
+        clean_catalog = []
+        seen_skus = set()
+        if demo_catalog is not None:
+            if not isinstance(demo_catalog, list):
+                raise ApiError("صيغة قائمة البيانات التجريبية غير صالحة")
+            if len(demo_catalog) > 200:
+                raise ApiError("الحد الأقصى للبيانات التجريبية في القالب الواحد 200 صنف")
+            for idx, it in enumerate(demo_catalog, start=1):
+                if not isinstance(it, dict):
+                    raise ApiError("عنصر بيانات تجريبية غير صالح")
+                sku = str(it.get("sku") or "").strip()
+                name = str(it.get("name") or "").strip()
+                cat = str(it.get("category") or "").strip()
+                if not sku or len(sku) > 40:
+                    raise ApiError(f"كود الصنف (SKU) غير صالح في السطر {idx}")
+                if sku in seen_skus:
+                    raise ApiError(f"تكرار كود الصنف (SKU) «{sku}» غير مسموح داخل نفس القالب")
+                seen_skus.add(sku)
+                if not name or len(name) > 120:
+                    raise ApiError(f"اسم الصنف غير صالح في السطر {idx}")
+                if not cat or len(cat) > 60:
+                    raise ApiError(f"اسم الفئة غير صالح في السطر {idx}")
+                price_q = _int(it.get("price"), 0) if price_unit == "minor" else _money(it.get("price"), 0)
+                cost_q = _int(it.get("cost"), 0) if price_unit == "minor" else _money(it.get("cost"), 0)
+                qty = max(0, _int(it.get("qty"), 0))
+                min_qty = max(0, _int(it.get("min_qty"), 5))
+                if price_q < 0 or cost_q < 0:
+                    raise ApiError(f"الأسعار يجب أن تكون قيماً غير سالبة في السطر {idx}")
+                clean_catalog.append({
+                    "sku": sku,
+                    "name": name,
+                    "category": cat,
+                    "price": price_q,
+                    "cost": cost_q,
+                    "qty": qty,
+                    "min_qty": min_qty,
+                })
+
+        raw_key = str(key or "").strip().lower()
+        with db.connect() as conn:
+            self._owner_backup_once()
+            ts = db.now()
+            cur_prof = self._settings(conn).get("business_profile") or "retail_electronics"
+            if raw_key:
+                if not _PROFILE_KEY_RE.match(raw_key):
+                    raise ApiError("مفتاح القالب يجب أن يتكون من أحرف إنجليزية صغيرة وأرقام و _ فقط (2 إلى 40 محرفاً)")
+                existing = conn.execute("SELECT * FROM business_profiles WHERE key=?", (raw_key,)).fetchone()
+                if existing:
+                    final_catalog = clean_catalog if demo_catalog is not None else json.loads(existing["demo_catalog"] or "[]")
+                    conn.execute(
+                        """UPDATE business_profiles
+                           SET label=?, description=?, modules_enabled=?, module_titles=?, labels=?, demo_catalog=?, default_start_page=?, updated_at=?
+                           WHERE key=?""",
+                        (
+                            lbl,
+                            desc,
+                            json.dumps(mods_en, ensure_ascii=False),
+                            json.dumps(clean_mod_titles, ensure_ascii=False),
+                            json.dumps(clean_labels, ensure_ascii=False),
+                            json.dumps(final_catalog, ensure_ascii=False),
+                            dsp,
+                            ts,
+                            raw_key,
+                        ),
+                    )
+                    final_key = raw_key
+                else:
+                    max_ord = conn.execute("SELECT COALESCE(MAX(sort_order), 0) m FROM business_profiles").fetchone()["m"]
+                    conn.execute(
+                        """INSERT INTO business_profiles
+                           (key, label, description, modules_enabled, module_titles, labels, demo_catalog, default_start_page, sort_order, is_builtin, created_at, updated_at)
+                           VALUES(?,?,?,?,?,?,?,?,?,0,?,?)""",
+                        (
+                            raw_key,
+                            lbl,
+                            desc,
+                            json.dumps(mods_en, ensure_ascii=False),
+                            json.dumps(clean_mod_titles, ensure_ascii=False),
+                            json.dumps(clean_labels, ensure_ascii=False),
+                            json.dumps(clean_catalog, ensure_ascii=False),
+                            dsp,
+                            int(max_ord) + 10,
+                            ts,
+                            ts,
+                        ),
+                    )
+                    final_key = raw_key
+            else:
+                slug = re.sub(r"[^a-z0-9]+", "_", lbl.lower()).strip("_") or "profile"
+                existing_keys = {r["key"] for r in conn.execute("SELECT key FROM business_profiles")}
+                idx = 1
+                final_key = f"p_{slug[:24]}"
+                while final_key in existing_keys or not _PROFILE_KEY_RE.match(final_key):
+                    idx += 1
+                    final_key = f"p_{slug[:20]}_{idx}"
+                max_ord = conn.execute("SELECT COALESCE(MAX(sort_order), 0) m FROM business_profiles").fetchone()["m"]
+                conn.execute(
+                    """INSERT INTO business_profiles
+                       (key, label, description, modules_enabled, module_titles, labels, demo_catalog, default_start_page, sort_order, is_builtin, created_at, updated_at)
+                       VALUES(?,?,?,?,?,?,?,?,?,0,?,?)""",
+                    (
+                        final_key,
+                        lbl,
+                        desc,
+                        json.dumps(mods_en, ensure_ascii=False),
+                        json.dumps(clean_mod_titles, ensure_ascii=False),
+                        json.dumps(clean_labels, ensure_ascii=False),
+                        json.dumps(clean_catalog, ensure_ascii=False),
+                        dsp,
+                        int(max_ord) + 10,
+                        ts,
+                        ts,
+                    ),
+                )
+            self._audit(conn, "profile_save", final_key, {"label": lbl, "demo_items": len(clean_catalog)})
+            conn.commit()
+            row = conn.execute("SELECT * FROM business_profiles WHERE key=?", (final_key,)).fetchone()
+            return self._serialize_profile(row, cur_prof)
+
+    def owner_profile_delete(self, key):
+        """حذف قالب نشاط غير نشط مع منع حذف القالب المفعّل حالياً أو آخر قالب بالنظام."""
         self._owner()
         key = str(key or "").strip()
-        prof = BUSINESS_PROFILES.get(key)
-        if not prof:
-            raise ApiError("ملف النشاط التجاري غير معروف")
-
-        target_set = set(prof["modules_enabled"])
-        prof_titles = prof.get("module_titles") or {}
-        default_titles = {row[0]: row[1] for row in db.DEFAULT_MODULES}
-
         with db.connect() as conn:
+            row = conn.execute("SELECT * FROM business_profiles WHERE key=?", (key,)).fetchone()
+            if not row:
+                raise ApiError("قالب النشاط غير موجود")
+            cur_prof = self._settings(conn).get("business_profile") or "retail_electronics"
+            if key == cur_prof:
+                raise ApiError("لا يمكن حذف قالب النشاط المفعّل حالياً — فعّل قالباً آخر أولاً")
+            cnt = conn.execute("SELECT COUNT(*) c FROM business_profiles").fetchone()["c"]
+            if cnt <= 1:
+                raise ApiError("يجب الإبقاء على قالب نشاط واحد على الأقل في النظام")
+            self._owner_backup_once()
+            conn.execute("DELETE FROM business_profiles WHERE key=?", (key,))
+            self._audit(conn, "profile_delete", key, {"label": row["label"]})
+            conn.commit()
+            return True
+
+    def owner_profiles_reset_defaults(self):
+        """استعادة قوالب النشاط الافتراضية الأربعة (مع الإبقاء على القوالب المخصصة)."""
+        self._owner()
+        self._owner_backup_once()
+        ts = db.now()
+        with db.connect() as conn:
+            cur_prof = self._settings(conn).get("business_profile") or "retail_electronics"
+            for k, v in DEFAULT_BUSINESS_PROFILES.items():
+                conn.execute(
+                    """INSERT INTO business_profiles
+                       (key, label, description, modules_enabled, module_titles, labels, demo_catalog, default_start_page, sort_order, is_builtin, created_at, updated_at)
+                       VALUES(?,?,?,?,?,?,?,?,?,1,?,?)
+                       ON CONFLICT(key) DO UPDATE SET
+                         label=excluded.label,
+                         description=excluded.description,
+                         modules_enabled=excluded.modules_enabled,
+                         module_titles=excluded.module_titles,
+                         labels=excluded.labels,
+                         demo_catalog=excluded.demo_catalog,
+                         default_start_page=excluded.default_start_page,
+                         sort_order=excluded.sort_order,
+                         is_builtin=1,
+                         updated_at=excluded.updated_at""",
+                    (
+                        k,
+                        v["label"],
+                        v.get("description", ""),
+                        json.dumps(v.get("modules_enabled", []), ensure_ascii=False),
+                        json.dumps(v.get("module_titles", {}), ensure_ascii=False),
+                        json.dumps(v.get("labels", {}), ensure_ascii=False),
+                        json.dumps(v.get("demo_catalog", []), ensure_ascii=False),
+                        v.get("default_start_page", "pos"),
+                        int(v.get("sort_order", 10)),
+                        ts,
+                        ts,
+                    ),
+                )
+            self._audit(conn, "profiles_reset_defaults", None, {})
+            conn.commit()
+            rows = conn.execute("SELECT * FROM business_profiles ORDER BY sort_order ASC, key ASC").fetchall()
+            return [self._serialize_profile(r, cur_prof) for r in rows]
+
+    def _apply_profile_demo_catalog(self, conn, profile_key: str, demo_catalog: list, exclusive_demo: bool = False) -> int:
+        """تفعيل البيانات التجريبية لقالب النشاط وإخفاء بيانات القوالب التجريبية الأخرى بأمان (active=0)."""
+        if DEFAULT_RETAIL_SKUS:
+            ph = ",".join("?" for _ in DEFAULT_RETAIL_SKUS)
+            conn.execute(
+                f"UPDATE products SET demo_profile='retail_electronics' WHERE demo_profile IS NULL AND sku IN ({ph})",
+                DEFAULT_RETAIL_SKUS,
+            )
+        if DEFAULT_RETAIL_CATS:
+            ph_c = ",".join("?" for _ in DEFAULT_RETAIL_CATS)
+            conn.execute(
+                f"UPDATE categories SET demo_profile='retail_electronics' WHERE demo_profile IS NULL AND name IN ({ph_c})",
+                DEFAULT_RETAIL_CATS,
+            )
+
+        if exclusive_demo:
+            conn.execute("UPDATE products SET active=0 WHERE demo_profile IS NULL OR demo_profile != ?", (profile_key,))
+        else:
+            conn.execute("UPDATE products SET active=0 WHERE demo_profile IS NOT NULL AND demo_profile != ?", (profile_key,))
+
+        ts = db.now()
+        applied_count = 0
+        for item in demo_catalog:
+            cat_name = str(item.get("category") or "").strip()
+            sku = str(item.get("sku") or "").strip()
+            name = str(item.get("name") or "").strip()
+            if not (cat_name and sku and name):
+                continue
+            cat_row = conn.execute("SELECT id FROM categories WHERE name=?", (cat_name,)).fetchone()
+            if cat_row:
+                cat_id = cat_row["id"]
+            else:
+                cur_c = conn.execute("INSERT INTO categories(name, demo_profile) VALUES(?, ?)", (cat_name, profile_key))
+                cat_id = cur_c.lastrowid
+
+            price_q = max(0, _int(item.get("price"), 0))
+            cost_q = max(0, _int(item.get("cost"), 0))
+            qty = max(0, _int(item.get("qty"), 0))
+            min_qty = max(0, _int(item.get("min_qty"), 5))
+
+            prod_row = conn.execute("SELECT id FROM products WHERE sku=?", (sku,)).fetchone()
+            if prod_row:
+                conn.execute(
+                    """UPDATE products
+                       SET name=?, category_id=?, price=?, cost=?, qty=?, min_qty=?, active=1, demo_profile=?
+                       WHERE id=?""",
+                    (name, cat_id, price_q, cost_q, qty, min_qty, profile_key, prod_row["id"]),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO products
+                       (sku, name, category_id, price, cost, qty, min_qty, tracked, active, demo_profile, created_at)
+                       VALUES(?,?,?,?,?,?,?,0,1,?,?)""",
+                    (sku, name, cat_id, price_q, cost_q, qty, min_qty, profile_key, ts),
+                )
+            applied_count += 1
+        return applied_count
+
+    def profile_apply(self, key, dry_run=True, apply_demo=True, exclusive_demo=False):
+        """معاينة أو تطبيق ملف نشاط تجاري (الأقسام + المسميات + البيانات التجريبية) دون فقد بيانات."""
+        self._owner()
+        key = str(key or "").strip()
+        with db.connect() as conn:
+            cur_prof = self._settings(conn).get("business_profile") or "retail_electronics"
+            prof_row = conn.execute("SELECT * FROM business_profiles WHERE key=?", (key,)).fetchone()
+            if not prof_row:
+                raise ApiError("ملف النشاط التجاري غير معروف")
+            prof = self._serialize_profile(prof_row, cur_prof)
+
+            target_set = set(prof["modules_enabled"])
+            prof_titles = prof.get("module_titles") or {}
+            default_titles = {row[0]: row[1] for row in db.DEFAULT_MODULES}
+            demo_catalog = prof.get("demo_catalog") or []
+            demo_cats = sorted({str(x.get("category") or "").strip() for x in demo_catalog if str(x.get("category") or "").strip()})
+
             self._modules_cache = None
             rows = self._modules_rows(conn)
             to_enable = []
@@ -593,6 +907,10 @@ class OwnerMixin:
                     "to_disable": to_disable,
                     "title_changes": title_changes,
                     "labels": dict(prof.get("labels") or {}),
+                    "demo_count": len(demo_catalog),
+                    "demo_categories": len(demo_cats),
+                    "apply_demo": bool(apply_demo),
+                    "exclusive_demo": bool(exclusive_demo),
                 }
 
             self._owner_backup_once()
@@ -612,6 +930,10 @@ class OwnerMixin:
                 if lk in LABEL_KEYS and str(lv).strip():
                     conn.execute("INSERT INTO ui_labels(key, value) VALUES(?,?)", (lk, str(lv).strip()[:40]))
 
+            demo_seeded = 0
+            if apply_demo:
+                demo_seeded = self._apply_profile_demo_catalog(conn, key, demo_catalog, exclusive_demo=bool(exclusive_demo))
+
             st = self._settings(conn)
             ver = _int(st.get("structure_version", "1"), 1) + 1
             conn.execute(
@@ -629,7 +951,12 @@ class OwnerMixin:
                     (prof.get("default_start_page") or "pos",),
                 )
 
-            self._audit(conn, "profile_apply", key, {"enabled": len(target_set), "disabled": len(to_disable)})
+            self._audit(
+                conn,
+                "profile_apply",
+                key,
+                {"enabled": len(target_set), "disabled": len(to_disable), "demo_seeded": demo_seeded},
+            )
             conn.commit()
             self._modules_cache = None
             self._settings_cache = None
@@ -642,6 +969,7 @@ class OwnerMixin:
                 "to_disable": to_disable,
                 "title_changes": title_changes,
                 "labels": dict(prof.get("labels") or {}),
+                "demo_seeded": demo_seeded,
             }
 
     def labels_save(self, labels):

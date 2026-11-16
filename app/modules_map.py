@@ -41,6 +41,9 @@ CORE_METHODS = {
     "module_reorder",
     "modules_reset_defaults",
     "profiles_list",
+    "owner_profile_save",
+    "owner_profile_delete",
+    "owner_profiles_reset_defaults",
     "profile_apply",
     "labels_save",
 }

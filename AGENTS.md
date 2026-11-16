@@ -55,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (190 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (192 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
@@ -73,7 +73,7 @@ project001/
 │   ├── api_auth.py      # AuthSettingsMixin: login, users, permissions, profile & settings/backups
 │   ├── api_owner.py     # OwnerMixin: owner auth, module registry, profiles, labels & audit log
 │   ├── modules_map.py   # API_MODULE_MAP, CORE_METHODS & MODULE_REQUIRES server guard map
-│   ├── profiles.py      # BUSINESS_PROFILES presets & DEFAULT_LABELS/LABEL_KEYS allowlist
+│   ├── profiles.py      # DEFAULT_BUSINESS_PROFILES (with demo_catalog) & DEFAULT_LABELS/LABEL_KEYS
 │   ├── api_inventory.py # InventoryMixin: categories, products, serials & stock adjustments
 │   ├── api_customers.py # CustomersMixin: customer CRM, debt summary, ledger history & vouchers
 │   ├── api_installments.py # InstallmentsMixin: installment contracts, schedules, collections, alerts & WhatsApp reminders
@@ -81,8 +81,8 @@ project001/
 │   ├── api_quotes.py    # QuotesMixin: B2B quotations, A4 invoices & conversion to sales
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
-│   ├── db.py            # SQLite schema (27 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (190 checks)
+│   ├── db.py            # SQLite schema (28 tables), connection wrapper, seed, migration & backups
+│   └── selfcheck.py     # Comprehensive automated regression suite (192 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
@@ -149,12 +149,22 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 190 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 192 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-16 — Owner Control Enhancement (Isolated Worktree): Editable Business Profiles CRUD & Per-Profile Demo Catalogs
+- **Database Schema (`app/db.py`, `app/profiles.py`, `app/api_inventory.py`)**:
+  1. Added `business_profiles` table seeded idempotently from `DEFAULT_BUSINESS_PROFILES` with realistic Egyptian-market `demo_catalog` datasets (stored in minor units) for `retail_electronics` (14 items), `generic_shop` (10 items), `restaurant` (11 items), and `pharmacy` (11 items).
+  2. Added `demo_profile` column on `products` and `categories` (plus non-destructive `ALTER TABLE` migration) and updated `InventoryMixin.categories()` so inactive demo categories stay hidden while shop-created categories (`demo_profile IS NULL`) remain visible.
+- **Full Profile CRUD & Demo Switching (`app/api_owner.py`, `app/modules_map.py`)**:
+  1. Added `owner_profile_save()` (create/edit any profile: enabled modules with `MODULE_REQUIRES` validation, custom per-module titles, label overrides, default start page, and editable `demo_catalog` items), `owner_profile_delete()` (guards active/last profile), and `owner_profiles_reset_defaults()`.
+  2. Updated `profile_apply()` to support `apply_demo` and `exclusive_demo` flags, toggling profile demo products safely via `active=0/1` without breaking invoice/repair foreign keys.
+- **Owner UI (`web/owner.html`, `web/app.css`)**: Added "إضافة قالب نشاط جديد", "تعديل" (full modal `#modal-profile-form` for modules, module titles, labels, and demo catalog rows), "حذف", "استعادة القوالب الافتراضية", and demo-mode checkboxes in the apply preview; recompiled `web/app.css`.
+- **Verification (`app/selfcheck.py`)**: Added checks for per-profile demo switching and full profile create/edit/apply/delete/reset; `192/192` checks pass (`contract ok (107 names)`).
 
 ### 2026-11-16 — Owner Control Phase 5 (Isolated Worktree): Hardening, CSS Rebuild & Documentation
 - **Hardening (`app/main.py`, `web/owner.html`, `web/app.css`)**:

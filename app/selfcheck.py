@@ -1019,7 +1019,8 @@ call(a, "owner_logout")
 # 13e) ملفات النشاط التجاري والمسميات — المرحلة 4
 call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
 profs = call(a, "profiles_list")
-check("profiles_list returns 4 business profiles", profs["ok"] and len(profs["data"]) == 4)
+check("profiles_list returns 4 business profiles with demo catalogs",
+      profs["ok"] and len(profs["data"]) == 4 and all(p["demo_count"] >= 10 for p in profs["data"]))
 # إضافة نسخة مخصصة قبل تغيير النشاط للتأكد من بقائها، وضبط صفحة البداية على repair لاختبار التراجع التلقائي
 _custom_keep = call(a, "module_clone", {"source_key": "inventory", "title": "نسخة دائمة"})["data"]["key"]
 call(a, "settings_save", {"default_start_page": "repair"})
@@ -1029,11 +1030,14 @@ check("profile_apply dry_run=True previews diff without modifying DB",
       dry["ok"]
       and dry["data"]["dry_run"]
       and not dry["data"]["applied"]
+      and dry["data"]["demo_count"] >= 10
       and ui_before_dry["profile"] == "retail_electronics"
       and any(m["key"] == "repair" for m in ui_before_dry["modules"]))
-ph_apply = call(a, "profile_apply", {"key": "pharmacy", "dry_run": False})
+ph_apply = call(a, "profile_apply", {"key": "pharmacy", "dry_run": False, "apply_demo": True})
 ui_ph = call(a, "ui_config")["data"]
 st_ph = call(a, "settings")["data"]
+ph_prods = call(a, "products_search", {"q": "", "limit": 100})["data"]
+ph_cats = [c["name"] for c in call(a, "categories")["data"]]
 check("profile_apply pharmacy configures modules/labels, preserves clones & resets disabled start page",
       ph_apply["ok"]
       and ph_apply["data"]["applied"]
@@ -1042,13 +1046,71 @@ check("profile_apply pharmacy configures modules/labels, preserves clones & rese
       and any(m["key"] == _custom_keep for m in ui_ph["modules"])
       and ui_ph["labels"].get("module_inventory") == "الأدوية والمستلزمات"
       and st_ph.get("default_start_page") == "pos")
-rst_prof = call(a, "profile_apply", {"key": "retail_electronics", "dry_run": False})
+check("pharmacy apply seeds pharmacy demo products & hides electronics demo items/categories",
+      any(p["sku"] == "PHM-PAN-EX" for p in ph_prods)
+      and not any(p["sku"] == "MBP-M2-16" for p in ph_prods)
+      and "مسكنات وخافض حرارة" in ph_cats
+      and "لابتوبات" not in ph_cats)
+# إضافة وتعديل وحذف قالب مخصص بالكامل مع بياناته التجريبية
+_bad_dep_prof = call(a, "owner_profile_save", {"label": "قالب ناقص", "modules_enabled": ["pos"]})
+_dup_sku_prof = call(a, "owner_profile_save", {
+    "label": "قالب مكرر",
+    "modules_enabled": ["pos", "inventory"],
+    "demo_catalog": [
+        {"sku": "DUP-1", "name": "صنف 1", "category": "فئة", "price": "10", "cost": "5", "qty": 5},
+        {"sku": "DUP-1", "name": "صنف 2", "category": "فئة", "price": "20", "cost": "10", "qty": 5},
+    ],
+})
+_new_prof = call(a, "owner_profile_save", {
+    "key": "p_bakery",
+    "label": "مخبز وحلواني",
+    "description": "مخبوزات طازجة",
+    "modules_enabled": ["pos", "inventory", "history", "reports"],
+    "module_titles": {"inventory": "المخبوزات والخامات"},
+    "labels": {"product_singular": "قطعة"},
+    "default_start_page": "pos",
+    "demo_catalog": [
+        {"sku": "BKR-CRS-1", "name": "كرواسون زبدة", "category": "مخبوزات", "price": "35.50", "cost": "18.00", "qty": 25, "min_qty": 5},
+    ],
+})
+_edit_prof = call(a, "owner_profile_save", {
+    "key": "p_bakery",
+    "label": "مخبز وحلواني محدث",
+    "modules_enabled": ["pos", "inventory", "history"],
+    "module_titles": {"inventory": "أصناف المخبز"},
+    "labels": {"product_singular": "صنف"},
+    "demo_catalog": [
+        {"sku": "BKR-CRS-1", "name": "كرواسون زبدة فرنساوي", "category": "مخبوزات", "price": "40", "cost": "20", "qty": 30, "min_qty": 5},
+    ],
+})
+_apply_bakery = call(a, "profile_apply", {"key": "p_bakery", "dry_run": False, "apply_demo": True})
+_bakery_prods = call(a, "products_search", {"q": "BKR-CRS-1"})["data"]
+check("owner_profile_save validates dependencies/SKUs, creates, edits & applies custom profile with demo items",
+      (not _bad_dep_prof["ok"])
+      and (not _dup_sku_prof["ok"])
+      and _new_prof["ok"]
+      and _edit_prof["ok"]
+      and _edit_prof["data"]["label"] == "مخبز وحلواني محدث"
+      and _apply_bakery["ok"]
+      and len(_bakery_prods) == 1
+      and _bakery_prods[0]["price"] == 4000
+      and call(a, "ui_config")["data"]["labels"].get("product_singular") == "صنف")
+_del_active_refused = call(a, "owner_profile_delete", {"key": "p_bakery"})
+rst_prof = call(a, "profile_apply", {"key": "retail_electronics", "dry_run": False, "apply_demo": True})
+_del_inactive_ok = call(a, "owner_profile_delete", {"key": "p_bakery"})
+_rst_defs_ok = call(a, "owner_profiles_reset_defaults")
 ui_ret = call(a, "ui_config")["data"]
-check("switching back to retail_electronics restores all 13 builtins & clears overrides",
-      rst_prof["ok"]
+ret_prods = call(a, "products_search", {"q": "", "limit": 100})["data"]
+check("switching back to retail_electronics restores electronics catalog, owner_profile_delete guards active & deletes inactive",
+      (not _del_active_refused["ok"])
+      and rst_prof["ok"]
+      and _del_inactive_ok["ok"]
+      and _rst_defs_ok["ok"]
       and ui_ret["profile"] == "retail_electronics"
       and len([m for m in ui_ret["modules"] if m["is_builtin"]]) == 13
-      and ui_ret["labels"] == {})
+      and ui_ret["labels"] == {}
+      and any(p["sku"] == "MBP-M2-16" for p in ret_prods)
+      and not any(p["sku"] == "BKR-CRS-1" for p in ret_prods))
 check("labels_save validates keys/length and updates ui_config labels",
       (not call(a, "labels_save", {"labels": {"unknown_key": "X"}})["ok"])
       and (not call(a, "labels_save", {"labels": {"product_singular": "x" * 41}})["ok"])
@@ -1065,7 +1127,7 @@ _idx_html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 _desk_html = (ROOT / "web" / "desktop.html").read_text(encoding="utf-8")
 _main_py = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
 check("owner.html contains setup, recovery, tabs (modules/profiles/labels/security/audit) & idle timer",
-      all(tok in _own_html for tok in ("view-setup", "view-recovery-reveal", "opane-modules", "opane-profiles", "opane-labels", "opane-security", "opane-audit", "syncOwnerTimer")))
+      all(tok in _own_html for tok in ("view-setup", "view-recovery-reveal", "opane-modules", "opane-profiles", "opane-labels", "opane-security", "opane-audit", "modal-profile-form", "syncOwnerTimer")))
 check("index.html & desktop.html wire long-press owner entry, reset-admin modal & dynamic UI_CONFIG",
       "modal-reset-admin-pin" in _idx_html and "owner.html" in _idx_html and "start-owner-trigger" in _desk_html and "UI_CONFIG.modules" in _desk_html)
 check("pages include data-label hooks and main.py clears owner state on window close",

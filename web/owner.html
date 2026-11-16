@@ -225,12 +225,24 @@
 
       <!-- Tab: Business Profiles -->
       <div id="opane-profiles" class="hidden bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm flex flex-col gap-4">
-        <div>
-          <h3 class="font-bold text-base flex items-center gap-2">
-            <span class="material-icons-round text-primary">business</span>
-            <span>قوالب النشاط التجاري (Profiles)</span>
-          </h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400">بدّل هيكلة الأقسام والمسميات لتناسب طبيعة النشاط. لا يتم حذف أي بيانات أو أقسام مخصصة عند التبديل.</p>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="font-bold text-base flex items-center gap-2">
+              <span class="material-icons-round text-primary">business</span>
+              <span>قوالب النشاط التجاري (Profiles)</span>
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">بدّل هيكلة الأقسام والمسميات والبيانات التجريبية لتناسب طبيعة النشاط، أو أضف وعدّل أي قالب بحرية كاملة.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="btn-add-profile" type="button" class="px-3.5 py-2 rounded-xl bg-primary text-white hover:bg-primary-dark text-xs font-bold flex items-center gap-1.5 shadow-sm">
+              <span class="material-icons-round text-base">add_business</span>
+              <span>إضافة قالب نشاط جديد</span>
+            </button>
+            <button id="btn-reset-profiles" type="button" class="px-3.5 py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
+              <span class="material-icons-round text-base">restart_alt</span>
+              <span>استعادة القوالب الافتراضية</span>
+            </button>
+          </div>
         </div>
         <div id="profiles-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
         <div id="profile-preview-box" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-primary/30 flex flex-col gap-3"></div>
@@ -370,6 +382,97 @@
         <div class="flex justify-end gap-2 pt-2">
           <button id="btn-cancel-mod-modal" type="button" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">إلغاء</button>
           <button type="submit" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold">حفظ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Full Profile Editor (Add / Edit) -->
+  <div id="modal-profile-form" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-700 max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="p-4 md:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <h3 id="prof-modal-title" class="font-bold text-base">تخصيص قالب النشاط التجاري</h3>
+        <button id="btn-close-prof-modal" type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>
+      <form id="form-profile-modal" class="flex-1 min-h-0 overflow-y-auto p-4 md:p-5 space-y-5">
+        <input type="hidden" id="prof-form-mode" value="create" />
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-bold mb-1">اسم القالب (بالعربية)</label>
+            <input id="prof-label" type="text" maxlength="80" required class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm" placeholder="مثال: مكتبة وأدوات مكتبية" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">المعرّف البرمجي (إنجليزي اختياري)</label>
+            <input id="prof-key" type="text" dir="ltr" maxlength="40" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-num" placeholder="مثال: p_stationery" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">صفحة البداية الافتراضية</label>
+            <select id="prof-start-page" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold"></select>
+          </div>
+          <div class="md:col-span-3">
+            <label class="block text-xs font-bold mb-1">وصف مختصر للنشاط</label>
+            <input id="prof-desc" type="text" maxlength="300" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs" placeholder="وصف مختصر للأقسام والبيانات..." />
+          </div>
+        </div>
+
+        <!-- أقسام القالب وعناوينها -->
+        <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-3.5">
+          <h4 class="font-bold text-xs mb-2 flex items-center gap-1.5 text-primary">
+            <span class="material-icons-round text-base">apps</span>
+            <span>تخصيص الأقسام المفعلة وعناوينها داخل القالب</span>
+          </h4>
+          <div id="prof-modules-grid" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+        </div>
+
+        <!-- مسميات الواجهة في القالب -->
+        <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-3.5">
+          <h4 class="font-bold text-xs mb-2 flex items-center gap-1.5 text-primary">
+            <span class="material-icons-round text-base">translate</span>
+            <span>مسميات الواجهة لهذا القالب (اختياري)</span>
+          </h4>
+          <div id="prof-labels-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5"></div>
+        </div>
+
+        <!-- البيانات التجريبية للقالب -->
+        <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 flex flex-col gap-2.5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h4 class="font-bold text-xs flex items-center gap-1.5 text-primary">
+              <span class="material-icons-round text-base">inventory_2</span>
+              <span>البيانات التجريبية (الأصناف والفئات التي تظهر عند تطبيق القالب)</span>
+            </h4>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="prof-copy-demo-src" class="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-[11px] font-bold"></select>
+              <button id="btn-copy-demo-from" type="button" class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-bold hover:border-primary">نسخ الأصناف</button>
+              <button id="btn-add-demo-row" type="button" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold flex items-center gap-1">
+                <span class="material-icons-round text-sm">add</span>
+                <span>إضافة صنف تجريبي</span>
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto max-h-60 border border-slate-100 dark:border-slate-800 rounded-lg">
+            <table class="w-full text-[11px] text-right">
+              <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 sticky top-0">
+                <tr>
+                  <th class="p-2">كود (SKU)</th>
+                  <th class="p-2">اسم الصنف / الدواء / الوجبة</th>
+                  <th class="p-2">الفئة</th>
+                  <th class="p-2">سعر البيع (ج.م)</th>
+                  <th class="p-2">التكلفة (ج.م)</th>
+                  <th class="p-2">الكمية</th>
+                  <th class="p-2">حد النواقص</th>
+                  <th class="p-2"></th>
+                </tr>
+              </thead>
+              <tbody id="prof-demo-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <button id="btn-cancel-prof-modal" type="button" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">إلغاء</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold">حفظ قالب النشاط</button>
         </div>
       </form>
     </div>
@@ -596,27 +699,43 @@
       used_devices: 'مسمى الأجهزة المستعملة',
     };
 
+    let ALL_PROFILES = [];
+
     async function loadProfiles() {
       const list = await guard(() => api('profiles_list'));
       if (!list) return;
+      ALL_PROFILES = list;
       syncOwnerTimer();
       $('profile-preview-box').classList.add('hidden');
       $('profiles-grid').innerHTML = list.map((p) => `
         <div class="p-4 rounded-2xl border ${p.is_current ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-slate-700'} flex flex-col justify-between gap-3">
           <div>
-            <div class="flex items-center justify-between gap-2 mb-1">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
               <span class="font-bold text-sm text-slate-900 dark:text-white">${esc(p.label)}</span>
-              ${p.is_current ? '<span class="text-[10px] px-2 py-0.5 rounded-lg bg-primary text-white font-bold">مُفعّل حالياً</span>' : ''}
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] px-2 py-0.5 rounded-lg ${p.is_builtin ? 'bg-slate-100 dark:bg-slate-800 text-slate-500' : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'} font-bold">${p.is_builtin ? 'أساسي' : 'مخصص'}</span>
+                ${p.is_current ? '<span class="text-[10px] px-2 py-0.5 rounded-lg bg-primary text-white font-bold">مُفعّل حالياً</span>' : ''}
+              </div>
             </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-2">${esc(p.description)}</p>
-            <div class="text-[11px] text-slate-500 font-num">الأقسام المفعلة: ${p.modules_enabled.length}</div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-2">${esc(p.description || '')}</p>
+            <div class="flex flex-wrap gap-3 text-[11px] text-slate-500 font-num">
+              <span>الأقسام المفعلة: ${p.modules_enabled.length}</span>
+              <span>الأصناف التجريبية: ${p.demo_count || 0}</span>
+              <span class="opacity-75">${esc(p.key)}</span>
+            </div>
           </div>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <button type="button" data-pprev="${esc(p.key)}" class="flex-1 py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary text-xs font-bold">
               معاينة التغييرات
             </button>
             <button type="button" data-papply="${esc(p.key)}" class="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-primary-dark text-white text-xs font-bold">
               تطبيق النشاط
+            </button>
+            <button type="button" data-pedit="${esc(p.key)}" class="py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary text-xs font-bold">
+              تعديل
+            </button>
+            <button type="button" data-pdel="${esc(p.key)}" ${p.is_current || list.length <= 1 ? 'disabled' : ''} class="py-2 px-3 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-600 hover:text-white text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed">
+              حذف
             </button>
           </div>
         </div>
@@ -629,29 +748,142 @@
           const box = $('profile-preview-box');
           box.classList.remove('hidden');
           box.innerHTML = `
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <h4 class="font-bold text-sm text-primary">معاينة التغييرات عند تطبيق: ${esc(diff.label)}</h4>
               <button type="button" id="btn-confirm-prof-apply" class="px-4 py-1.5 rounded-xl bg-primary text-white text-xs font-bold">تأكيد وتطبيق الآن</button>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
               <div><span class="font-bold text-emerald-600">سيتم تفعيل:</span> ${diff.to_enable.length ? diff.to_enable.map((x) => esc(x.title)).join('، ') : 'لا يوجد'}</div>
               <div><span class="font-bold text-amber-600">سيتم تعطيل:</span> ${diff.to_disable.length ? diff.to_disable.map((x) => esc(x.title)).join('، ') : 'لا يوجد'}</div>
               <div><span class="font-bold text-blue-600">تغييرات الأسماء:</span> ${diff.title_changes.length ? diff.title_changes.map((x) => `${esc(x.from)} ← ${esc(x.to)}`).join('، ') : 'لا يوجد'}</div>
+              <div><span class="font-bold text-purple-600">البيانات التجريبية:</span> ${diff.demo_count || 0} صنف في ${diff.demo_categories || 0} فئة</div>
+            </div>
+            <div class="flex flex-wrap gap-4 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs font-bold">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="chk-apply-demo" type="checkbox" checked class="w-4 h-4 accent-blue-600" />
+                <span>تفعيل الأصناف والفئات التجريبية لهذا النشاط</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="chk-exclusive-demo" type="checkbox" class="w-4 h-4 accent-blue-600" />
+                <span>إخفاء باقي المنتجات مؤقتاً لعرض منتجات هذا النشاط فقط</span>
+              </label>
             </div>`;
-          $('btn-confirm-prof-apply').addEventListener('click', () => applyProfileNow(diff.profile));
+          $('btn-confirm-prof-apply').addEventListener('click', () => {
+            const applyDemo = $('chk-apply-demo') ? $('chk-apply-demo').checked : true;
+            const exclDemo = $('chk-exclusive-demo') ? $('chk-exclusive-demo').checked : false;
+            applyProfileNow(diff.profile, applyDemo, exclDemo);
+          });
         });
       });
 
       $('profiles-grid').querySelectorAll('[data-papply]').forEach((b) => {
-        b.addEventListener('click', () => applyProfileNow(b.dataset.papply));
+        b.addEventListener('click', () => applyProfileNow(b.dataset.papply, true, false));
+      });
+      $('profiles-grid').querySelectorAll('[data-pedit]').forEach((b) => {
+        b.addEventListener('click', () => openProfileModal(b.dataset.pedit));
+      });
+      $('profiles-grid').querySelectorAll('[data-pdel]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          const p = ALL_PROFILES.find((x) => x.key === b.dataset.pdel);
+          if (!confirm(`حذف قالب النشاط «${p ? p.label : b.dataset.pdel}»؟`)) return;
+          if (await guard(() => api('owner_profile_delete', { key: b.dataset.pdel }))) {
+            toast('تم حذف قالب النشاط');
+            await loadProfiles();
+          }
+        });
       });
     }
 
-    async function applyProfileNow(key) {
-      if (!confirm('تطبيق قالب النشاط المختار؟ لن تُحذف أي بيانات سابقة.')) return;
-      const res = await guard(() => api('profile_apply', { key, dry_run: false }));
+    function addDemoRow(item = {}) {
+      const tbody = $('prof-demo-tbody');
+      const tr = document.createElement('tr');
+      const priceVal = item.price != null ? (Number(item.price) / 100).toFixed(2) : '0.00';
+      const costVal = item.cost != null ? (Number(item.cost) / 100).toFixed(2) : '0.00';
+      tr.innerHTML = `
+        <td class="p-1.5"><input data-df="sku" type="text" dir="ltr" maxlength="40" value="${esc(item.sku || '')}" placeholder="SKU-1" class="w-24 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-num" /></td>
+        <td class="p-1.5"><input data-df="name" type="text" maxlength="120" value="${esc(item.name || '')}" placeholder="اسم الصنف" class="w-44 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700" /></td>
+        <td class="p-1.5"><input data-df="category" type="text" maxlength="60" value="${esc(item.category || '')}" placeholder="الفئة" class="w-28 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700" /></td>
+        <td class="p-1.5"><input data-df="price" type="number" min="0" step="0.01" dir="ltr" value="${priceVal}" class="w-20 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-num" /></td>
+        <td class="p-1.5"><input data-df="cost" type="number" min="0" step="0.01" dir="ltr" value="${costVal}" class="w-20 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-num" /></td>
+        <td class="p-1.5"><input data-df="qty" type="number" min="0" step="1" dir="ltr" value="${Number(item.qty != null ? item.qty : 10)}" class="w-16 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-num" /></td>
+        <td class="p-1.5"><input data-df="min_qty" type="number" min="0" step="1" dir="ltr" value="${Number(item.min_qty != null ? item.min_qty : 5)}" class="w-16 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-num" /></td>
+        <td class="p-1.5"><button type="button" data-ddel class="text-red-500 hover:text-red-700 font-bold px-1.5">×</button></td>
+      `;
+      tr.querySelector('[data-ddel]').addEventListener('click', () => tr.remove());
+      tbody.appendChild(tr);
+    }
+
+    async function openProfileModal(editKey = null) {
+      if (!ALL_MODULES.length) await loadModules();
+      const builtins = ALL_MODULES.filter((m) => m.is_builtin);
+      const prof = editKey ? ALL_PROFILES.find((x) => x.key === editKey) : null;
+      $('prof-modal-title').textContent = prof ? `تعديل وتخصيص القالب: ${prof.label}` : 'إضافة قالب نشاط تجاري جديد';
+      $('prof-form-mode').value = prof ? 'edit' : 'create';
+      $('prof-key').value = prof ? prof.key : '';
+      $('prof-key').readOnly = !!prof;
+      $('prof-key').classList.toggle('opacity-60', !!prof);
+      $('prof-label').value = prof ? prof.label : '';
+      $('prof-desc').value = prof ? (prof.description || '') : '';
+
+      const enabledSet = new Set(prof ? prof.modules_enabled : builtins.map((m) => m.key));
+      const modTitles = (prof && prof.module_titles) || {};
+      $('prof-modules-grid').innerHTML = builtins.map((m) => `
+        <div class="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+          <input type="checkbox" data-pmod="${esc(m.key)}" ${enabledSet.has(m.key) || m.is_core ? 'checked' : ''} ${m.is_core ? 'disabled' : ''} class="w-4 h-4 accent-blue-600 shrink-0" />
+          <div class="flex-1 min-w-0">
+            <div class="text-[11px] font-bold truncate">${esc(m.title)} ${m.is_core ? '<span class="text-blue-500">(أساسي)</span>' : ''}</div>
+            <input type="text" data-pmtitle="${esc(m.key)}" maxlength="60" value="${esc(modTitles[m.key] || '')}" placeholder="اسم مخصص لهذا القسم (اختياري)"
+              class="w-full mt-1 px-2 py-1 rounded-lg bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-700 text-[11px]" />
+          </div>
+        </div>
+      `).join('');
+
+      const refreshStartSelect = (preferred) => {
+        const checkedKeys = [...$('prof-modules-grid').querySelectorAll('[data-pmod]:checked')].map((c) => c.dataset.pmod);
+        const sel = $('prof-start-page');
+        sel.innerHTML = checkedKeys.map((k) => {
+          const m = builtins.find((x) => x.key === k);
+          return `<option value="${esc(k)}">${esc(m ? m.title : k)}</option>`;
+        }).join('') + '<option value="desktop">سطح المكتب فقط</option>';
+        sel.value = (preferred && (preferred === 'desktop' || checkedKeys.includes(preferred))) ? preferred : (checkedKeys[0] || 'desktop');
+      };
+      refreshStartSelect(prof ? prof.default_start_page : 'pos');
+      $('prof-modules-grid').querySelectorAll('[data-pmod]').forEach((c) => {
+        c.addEventListener('change', () => refreshStartSelect($('prof-start-page').value));
+      });
+
+      const profLabels = (prof && prof.labels) || {};
+      $('prof-labels-grid').innerHTML = Object.keys(DEFAULT_LABELS).map((lk) => `
+        <div>
+          <label class="block text-[11px] font-bold mb-0.5">${esc(LABEL_TITLES[lk] || lk)}</label>
+          <input type="text" data-plbl="${esc(lk)}" maxlength="40" value="${esc(profLabels[lk] || '')}" placeholder="${esc(DEFAULT_LABELS[lk])}"
+            class="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs" />
+        </div>
+      `).join('');
+
+      $('prof-copy-demo-src').innerHTML = '<option value="">-- نسخ أصناف من قالب --</option>' +
+        ALL_PROFILES.map((p) => `<option value="${esc(p.key)}">${esc(p.label)} (${p.demo_count || 0})</option>`).join('');
+
+      $('prof-demo-tbody').innerHTML = '';
+      const items = (prof && Array.isArray(prof.demo_catalog)) ? prof.demo_catalog : [];
+      if (items.length) items.forEach((it) => addDemoRow(it));
+      else addDemoRow({ sku: 'ITM-001', name: '', category: '', price: 0, cost: 0, qty: 10, min_qty: 5 });
+
+      $('modal-profile-form').classList.remove('hidden');
+      $('modal-profile-form').classList.add('flex');
+    }
+
+    function closeProfileModal() {
+      $('modal-profile-form').classList.add('hidden');
+      $('modal-profile-form').classList.remove('flex');
+    }
+
+    async function applyProfileNow(key, applyDemo = true, exclusiveDemo = false) {
+      if (!confirm('تطبيق قالب النشاط المختار؟ لن تُحذف أي فواتير أو عملاء سابقين.')) return;
+      const res = await guard(() => api('profile_apply', { key, dry_run: false, apply_demo: applyDemo, exclusive_demo: exclusiveDemo }));
       if (res && res.applied) {
-        toast(`تم تطبيق نشاط «${res.label}» بنجاح`);
+        const extra = res.demo_seeded ? ` وتفعيل ${res.demo_seeded} صنفاً تجريبياً` : '';
+        toast(`تم تطبيق نشاط «${res.label}»${extra} بنجاح`);
         await loadProfiles();
         await loadModules();
       }
@@ -926,6 +1158,74 @@
     });
 
     $('btn-refresh-audit').addEventListener('click', loadAuditLog);
+
+    $('btn-add-profile').addEventListener('click', () => openProfileModal(null));
+    $('btn-close-prof-modal').addEventListener('click', closeProfileModal);
+    $('btn-cancel-prof-modal').addEventListener('click', closeProfileModal);
+    $('btn-add-demo-row').addEventListener('click', () => addDemoRow({ qty: 10, min_qty: 5 }));
+    $('btn-copy-demo-from').addEventListener('click', () => {
+      const k = $('prof-copy-demo-src').value;
+      const src = ALL_PROFILES.find((x) => x.key === k);
+      if (!src || !Array.isArray(src.demo_catalog)) return;
+      $('prof-demo-tbody').innerHTML = '';
+      src.demo_catalog.forEach((it) => addDemoRow(it));
+      toast(`تم نسخ ${src.demo_catalog.length} صنفاً تجريبياً من «${src.label}»`);
+    });
+    $('btn-reset-profiles').addEventListener('click', async () => {
+      if (!confirm('استعادة قوالب النشاط الافتراضية الأربعة وبياناتها التجريبية الأصلية؟ (تبقى القوالب المخصصة كما هي)')) return;
+      const res = await guard(() => api('owner_profiles_reset_defaults'));
+      if (res) {
+        toast('تمت استعادة القوالب الافتراضية بنجاح');
+        await loadProfiles();
+      }
+    });
+    $('form-profile-modal').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const modules_enabled = [...$('prof-modules-grid').querySelectorAll('[data-pmod]:checked')].map((c) => c.dataset.pmod);
+      const module_titles = {};
+      $('prof-modules-grid').querySelectorAll('[data-pmtitle]').forEach((inp) => {
+        const v = inp.value.trim();
+        if (v) module_titles[inp.dataset.pmtitle] = v;
+      });
+      const labels = {};
+      $('prof-labels-grid').querySelectorAll('[data-plbl]').forEach((inp) => {
+        const v = inp.value.trim();
+        if (v) labels[inp.dataset.plbl] = v;
+      });
+      const demo_catalog = [];
+      $('prof-demo-tbody').querySelectorAll('tr').forEach((tr) => {
+        const get = (f) => tr.querySelector(`[data-df="${f}"]`).value.trim();
+        const sku = get('sku');
+        const name = get('name');
+        const category = get('category');
+        if (!sku && !name && !category) return;
+        demo_catalog.push({
+          sku,
+          name,
+          category,
+          price: get('price') || '0',
+          cost: get('cost') || '0',
+          qty: parseInt(get('qty') || '0', 10) || 0,
+          min_qty: parseInt(get('min_qty') || '5', 10) || 5,
+        });
+      });
+      const payload = {
+        key: $('prof-key').value.trim() || null,
+        label: $('prof-label').value.trim(),
+        description: $('prof-desc').value.trim(),
+        default_start_page: $('prof-start-page').value || 'pos',
+        modules_enabled,
+        module_titles,
+        labels,
+        demo_catalog,
+      };
+      const saved = await guard(() => api('owner_profile_save', payload));
+      if (saved) {
+        toast(`تم حفظ قالب النشاط «${saved.label}» بنجاح`);
+        closeProfileModal();
+        await loadProfiles();
+      }
+    });
 
     initOwnerPage();
   </script>

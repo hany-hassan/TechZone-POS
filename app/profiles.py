@@ -1,4 +1,4 @@
-"""ملفات التشغيل حسب نوع النشاط التجاري والمسميات القابلة للتخصيص."""
+"""ملفات التشغيل حسب نوع النشاط التجاري والمسميات القابلة للتخصيص والبيانات التجريبية."""
 
 DEFAULT_LABELS = {
     "module_pos": "نقاط البيع (الكاشير)",
@@ -17,44 +17,67 @@ DEFAULT_LABELS = {
 
 LABEL_KEYS = set(DEFAULT_LABELS.keys())
 
-BUSINESS_PROFILES = {
+# قائمة SKUs وفئات البداية الافتراضية للإلكترونيات لتمييزها كبيانات تجريبية عند التبديل
+DEFAULT_RETAIL_SKUS = (
+    "MBP-M2-16", "LGM-MX3S", "KB-RGB-002", "TP-SWITCH-8", "CAM-WIFI-01",
+    "DL-OPTI-P4", "CPU-I7-12", "GPU-3060TI", "DX-15-2023", "SM-SSD-T7",
+    "SN-HP-XM4", "CH-25W-USBC", "BAT-14-LT", "SCR-14-LT",
+)
+
+DEFAULT_RETAIL_CATS = (
+    "أجهزة كمبيوتر", "لابتوبات", "إكسسوارات", "شبكات", "كاميرات",
+    "صيانة", "أجهزة لوحية", "صوتيات", "تخزين",
+)
+
+
+def _item(sku: str, name: str, category: str, price_qirsh: int, cost_qirsh: int, qty: int, min_qty: int = 5) -> dict:
+    return {
+        "sku": sku,
+        "name": name,
+        "category": category,
+        "price": price_qirsh,
+        "cost": cost_qirsh,
+        "qty": qty,
+        "min_qty": min_qty,
+    }
+
+
+DEFAULT_BUSINESS_PROFILES = {
     "retail_electronics": {
         "label": "محل إلكترونيات وموبايلات (الوضع الافتراضي)",
         "description": "يشمل كافة الأقسام: نقاط البيع، المخزون والسيريالات، الأقساط، الصيانة، وشراء المستعمل.",
+        "sort_order": 10,
         "modules_enabled": [
-            "pos",
-            "sales_quotes",
-            "customers",
-            "installments",
-            "inventory",
-            "history",
-            "repair",
-            "buy_used",
-            "reports",
-            "staff",
-            "settings",
-            "profile",
-            "receipt",
+            "pos", "sales_quotes", "customers", "installments", "inventory",
+            "history", "repair", "buy_used", "reports", "staff", "settings", "profile", "receipt",
         ],
         "module_titles": {},
         "labels": {},
         "default_start_page": "pos",
+        "demo_catalog": [
+            _item("MBP-M2-16", "ماك بوك برو M2، ذاكرة 16 جيجا، 512 SSD", "لابتوبات", 549900, 480000, 18, 5),
+            _item("LGM-MX3S", "ماوس لوجيتك لاسلكي MX Master 3S", "إكسسوارات", 45000, 30000, 25, 5),
+            _item("KB-RGB-002", "كيبورد ميكانيكي RGB للألعاب", "إكسسوارات", 29900, 18000, 12, 5),
+            _item("TP-SWITCH-8", "سويتش شبكة تي بي لينك 8 منافذ", "شبكات", 12000, 8000, 30, 5),
+            _item("CAM-WIFI-01", "كاميرا مراقبة خارجية واي فاي", "كاميرات", 35000, 22000, 15, 5),
+            _item("DL-OPTI-P4", "جهاز مكتبي ديل أوبتيبليكس", "أجهزة كمبيوتر", 210000, 160000, 3, 2),
+            _item("CPU-I7-12", "معالج إنتل كور i7 الجيل 12", "صيانة", 165000, 130000, 10, 3),
+            _item("GPU-3060TI", "كرت شاشة RTX 3060 Ti", "صيانة", 189900, 150000, 6, 2),
+            _item("DX-15-2023", "Dell XPS 15 لابتوب (i7, 16GB, 512GB)", "لابتوبات", 549900, 480000, 2, 5),
+            _item("SM-SSD-T7", "Samsung T7 SSD 1TB", "تخزين", 42000, 30000, 1, 5),
+            _item("SN-HP-XM4", "سماعات سوني WH-1000XM4", "صوتيات", 119900, 90000, 24, 5),
+            _item("CH-25W-USBC", "شاحن 25W USB-C", "إكسسوارات", 5000, 2500, 40, 5),
+            _item("BAT-14-LT", "بطارية لابتوب 14 إنش", "صيانة", 25000, 15000, 8, 3),
+            _item("SCR-14-LT", "شاشة لابتوب 14 بوصة", "صيانة", 45000, 30000, 5, 3),
+        ],
     },
     "generic_shop": {
         "label": "محل تجاري عام / سوبر ماركت",
         "description": "يعطّل الصيانة وشراء الأجهزة المستعملة مع الإبقاء على البيع والمخزون والعملاء والأقساط والتقارير.",
+        "sort_order": 20,
         "modules_enabled": [
-            "pos",
-            "sales_quotes",
-            "customers",
-            "installments",
-            "inventory",
-            "history",
-            "reports",
-            "staff",
-            "settings",
-            "profile",
-            "receipt",
+            "pos", "sales_quotes", "customers", "installments", "inventory",
+            "history", "reports", "staff", "settings", "profile", "receipt",
         ],
         "module_titles": {},
         "labels": {
@@ -62,20 +85,26 @@ BUSINESS_PROFILES = {
             "products_plural": "الأصناف",
         },
         "default_start_page": "pos",
+        "demo_catalog": [
+            _item("SHP-SUG-1K", "سكر أبيض ناعم 1 كجم", "مواد غذائية", 3500, 2900, 60, 10),
+            _item("SHP-OIL-1L", "زيت ذرة نقي 1 لتر", "مواد غذائية", 9500, 8200, 40, 8),
+            _item("SHP-RIC-1K", "أرز مصري فاخر 1 كجم", "مواد غذائية", 3800, 3100, 55, 10),
+            _item("SHP-TEA-250", "شاي أسود ناعم 250 جم", "مشروبات وعصائر", 6500, 5200, 35, 6),
+            _item("SHP-JUC-1L", "عصير مانجو طبيعي 1 لتر", "مشروبات وعصائر", 4200, 3200, 28, 6),
+            _item("SHP-CHS-500", "جبنة بيضاء فيتا 500 جم", "ألبان وأجبان", 4800, 3800, 32, 8),
+            _item("SHP-MLK-1L", "حليب كامل الدسم 1 لتر", "ألبان وأجبان", 4500, 3600, 45, 10),
+            _item("SHP-DET-2K", "مسحوق غسيل أوتوماتيك 2.5 كجم", "منظفات وعناية", 16500, 13500, 20, 4),
+            _item("SHP-SHP-400", "شامبو عناية بالشعر 400 مل", "منظفات وعناية", 11000, 8500, 18, 4),
+            _item("SHP-CHC-100", "شوكولاتة داكنة بالحليب 100 جم", "حلويات وسناكس", 5500, 4100, 50, 10),
+        ],
     },
     "restaurant": {
         "label": "مطعم / كافيه",
         "description": "يعطّل العملاء والأقساط والصيانة والمستعمل ويركز على نقطة البيع والأصناف والتقارير.",
+        "sort_order": 30,
         "modules_enabled": [
-            "pos",
-            "sales_quotes",
-            "history",
-            "inventory",
-            "reports",
-            "staff",
-            "settings",
-            "profile",
-            "receipt",
+            "pos", "sales_quotes", "history", "inventory", "reports",
+            "staff", "settings", "profile", "receipt",
         ],
         "module_titles": {
             "inventory": "الأصناف والخامات",
@@ -89,20 +118,27 @@ BUSINESS_PROFILES = {
             "products_plural": "الأصناف والوجبات",
         },
         "default_start_page": "pos",
+        "demo_catalog": [
+            _item("RST-BRG-CL", "برجر لحم مشوي كلاسيك + بطاطس", "سندوتشات وبرجر", 14500, 7500, 50, 10),
+            _item("RST-SHW-CH", "ساندوتش شاورما دجاج سوري", "سندوتشات وبرجر", 9500, 4800, 60, 10),
+            _item("RST-GRL-MX", "وجبة مشويات مشكلة (كفتة + شيش طاووق)", "مشويات وأطباق رئيسية", 28000, 15500, 30, 5),
+            _item("RST-CHK-PN", "وجبة بانيه مقرمش مع أرز بسمتي", "مشويات وأطباق رئيسية", 17500, 9000, 35, 5),
+            _item("RST-PIZ-MG", "بيتزا مارجريتا وسط", "بيتزا ومعجنات", 13500, 6000, 40, 8),
+            _item("RST-PIZ-PP", "بيتزا بيبروني وسط", "بيتزا ومعجنات", 18500, 8800, 35, 8),
+            _item("RST-COF-ES", "قهوة إسبريسو / تركي سادة", "مشروبات ساخنة", 4500, 1200, 100, 15),
+            _item("RST-COF-LT", "كابتشينو / لاتيه ساخن", "مشروبات ساخنة", 7500, 2200, 80, 15),
+            _item("RST-JUC-MG", "عصير مانجو فريش", "مشروبات باردة وعصائر", 6500, 2500, 60, 10),
+            _item("RST-SFT-CL", "مشروب غازي بارد 330 مل", "مشروبات باردة وعصائر", 2500, 1500, 120, 20),
+            _item("RST-DES-CH", "تشيز كيك كراميل", "حلويات", 9000, 4000, 25, 5),
+        ],
     },
     "pharmacy": {
         "label": "صيدلية / مستلزمات طبية",
         "description": "يعطّل عروض الأسعار والأقساط والصيانة والمستعمل مع إعادة تسمية المخزون إلى الأدوية والمستلزمات.",
+        "sort_order": 40,
         "modules_enabled": [
-            "pos",
-            "inventory",
-            "customers",
-            "history",
-            "reports",
-            "staff",
-            "settings",
-            "profile",
-            "receipt",
+            "pos", "inventory", "customers", "history", "reports",
+            "staff", "settings", "profile", "receipt",
         ],
         "module_titles": {
             "inventory": "الأدوية والمستلزمات",
@@ -117,5 +153,21 @@ BUSINESS_PROFILES = {
             "customers_plural": "المرضى والعملاء",
         },
         "default_start_page": "pos",
+        "demo_catalog": [
+            _item("PHM-PAN-EX", "بانادول إكسترا 24 قرص", "مسكنات وخافض حرارة", 6500, 5000, 45, 10),
+            _item("PHM-CAT-50", "كتافلام 50 مجم مسكن 20 قرص", "مسكنات وخافض حرارة", 5800, 4400, 35, 8),
+            _item("PHM-CON-20", "كونجستال للبرد والإنفلونزا 20 قرص", "مسكنات وخافض حرارة", 4500, 3400, 50, 10),
+            _item("PHM-AUG-1G", "أوجمنتين 1 جم مضاد حيوي 14 قرص", "مضادات حيوية", 13500, 10800, 28, 6),
+            _item("PHM-ZIT-500", "زيثروماكس 500 مجم 3 كبسولات", "مضادات حيوية", 11000, 8600, 24, 5),
+            _item("PHM-VIT-C1", "فيتامين سي فوار 1000 مجم", "فيتامينات ومكملات", 8500, 6200, 40, 8),
+            _item("PHM-OME-3", "أوميجا 3 بلس 30 كبسولة", "فيتامينات ومكملات", 16000, 12200, 22, 5),
+            _item("PHM-SUN-50", "واقي شمس SPF 50 للبشرة الحساسة", "عناية بالبشرة والشعر", 32000, 24500, 14, 3),
+            _item("PHM-ALC-70", "كحول طبي مطهر 70% - 250 مل", "مستلزمات طبية", 4000, 2600, 55, 10),
+            _item("PHM-BP-DIG", "جهاز قياس ضغط ديجيتال أوتوماتيك", "مستلزمات طبية", 95000, 72000, 6, 2),
+            _item("PHM-PED-SYR", "شراب خافض حرارة للأطفال 120 مل", "أدوية أطفال", 4800, 3600, 30, 6),
+        ],
     },
 }
+
+# للتوافق الخلفي مع أي استيراد مباشر
+BUSINESS_PROFILES = DEFAULT_BUSINESS_PROFILES

@@ -38,6 +38,8 @@ class InventoryMixin:
             rows = conn.execute(
                 """SELECT c.id, c.name, COUNT(p.id) n FROM categories c
                    LEFT JOIN products p ON p.category_id=c.id AND p.active=1
+                   WHERE c.demo_profile IS NULL
+                      OR EXISTS (SELECT 1 FROM products p2 WHERE p2.category_id=c.id AND p2.active=1)
                    GROUP BY c.id ORDER BY c.name"""
             ).fetchall()
             return [dict(r) for r in rows]
