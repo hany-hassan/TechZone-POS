@@ -58,6 +58,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Execute Automated Selfcheck (195 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
+| Build Windows Setup Installer | Double-click `build-installer.bat` or run `.\build-installer.bat` (outputs `dist/TechZone-Setup-v2.0.0.exe` + `SHA256SUMS.txt`) |
 | Push Updates to GitHub | Double-click `push-github.bat` or run `.\push-github.bat` |
 
 ---
@@ -110,10 +111,12 @@ project001/
 │   ├── backups/         # Automated (startup + shift close) & manual ACID SQLite snapshots
 │   └── receipts/        # Generated PDF invoices and vouchers (git-ignored)
 ├── docs/                # Comprehensive engineering and requirements documentation
+├── installer/           # Inno Setup 6 Windows installer script (TechZone.iss)
 ├── tools/               # Data import and screenshot automation utilities
 ├── icon.ico             # Official application executable and window icon
 ├── TechZone.spec        # PyInstaller packaging configuration
 ├── build-exe.bat        # Automated single-click EXE builder
+├── build-installer.bat  # Full release builder (EXE + Inno Setup + SHA256SUMS.txt)
 └── push-github.bat      # Automated single-click Git/GitHub synchronization
 ```
 
@@ -156,6 +159,13 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 ---
 
 ## 8. Changelog
+
+### 2026-11-16 — Windows Setup Installer (Inno Setup 6) & GitHub Release v2.0.0 (`main`)
+- **Installer (`installer/TechZone.iss`, `build-installer.bat`)**:
+  1. Created Inno Setup 6 installer script producing `dist/TechZone-Setup-v2.0.0.exe` (Arabic + English wizard, `icon.ico`, `WizardStyle=modern`, LZMA2/ultra64 compression, consistent `AppId` for seamless in-place upgrades preserving `data/`).
+  2. Configured `PrivilegesRequired=lowest` with optional all-users elevation dialog (`PrivilegesRequiredOverridesAllowed=dialog`), `users-modify` permissions on `data/`, `data/backups/`, and `data/receipts/`, Desktop/Start Menu/optional autostart shortcuts, and WebView2 Runtime availability check.
+  3. Added `build-installer.bat` automating PyInstaller EXE build + Inno Setup compile + `dist/SHA256SUMS.txt` checksum generation.
+- **Verification & Release**: Built `dist/TechZone.exe` (`20,265,326` bytes) and `dist/TechZone-Setup-v2.0.0.exe` (`21,572,929` bytes) with verified `icon.ico`, confirmed `python app/selfcheck.py` passes (`195/195`), and published GitHub Release `v2.0.0`.
 
 ### 2026-11-16 — Documentation Sync, 20-Screen Preview Pack & Layout Polish (`main`)
 - **UI & Tooling (`web/buy_used.html`, `web/owner.html`, `tools/take_screenshots.py`)**:
