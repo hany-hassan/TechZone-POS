@@ -16,7 +16,11 @@
 <h2 data-label="module_inventory" class="text-2xl font-bold text-slate-900 dark:text-white mb-1">إدارة المخزون</h2>
 <p class="text-slate-500 dark:text-slate-400 text-sm">تتبع المنتجات، رفع الصور، تحديث الكميات، وإدارة الأسعار.</p>
 </div>
-<div class="flex gap-3">
+<div class="flex flex-wrap gap-3">
+<button id="btn-stocktake" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-sm">
+<span class="material-icons-outlined text-[20px]">fact_check</span>
+<span class="text-sm font-bold">جرد المخزون (الموجود والمنتهي)</span>
+</button>
 <button id="btn-serials" class="bg-white dark:bg-surface-dark text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm">
 <span class="material-icons-outlined text-[20px]">qr_code</span>
 <span class="text-sm font-medium">الأرقام التسلسلية</span>
@@ -54,12 +58,20 @@
 <option value="">كل الفئات</option>
 </select>
 <select id="stock" class="px-4 py-2.5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer">
-<option value="">حالة المخزون</option>
-<option value="low">منخفض</option>
-<option value="out">نفدت الكمية</option>
-<option value="in">متوفر</option>
+<option value="">كل المنتجات (الجرد الكامل)</option>
+<option value="available">الموجود في المخزن (أكبر من 0)</option>
+<option value="out">المنتهي / نفدت الكمية (0)</option>
+<option value="low">مخزون منخفض (قارب على الانتهاء)</option>
+<option value="in">متوفر فوق حد التنبيه</option>
 </select>
 </div>
+</div>
+<!-- شريط الجرد السريع (تبديل بضغطة واحدة بين الموجود والمنتهي) -->
+<div class="px-4 pb-3 flex flex-wrap items-center gap-2" id="stock-quick-pills">
+  <button type="button" data-qstock="" class="qstock-btn px-3 py-1 rounded-full text-xs font-bold border border-primary bg-primary text-white">كل الأصناف</button>
+  <button type="button" data-qstock="available" class="qstock-btn px-3 py-1 rounded-full text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20">الموجود بالمخزن (&gt; 0)</button>
+  <button type="button" data-qstock="low" class="qstock-btn px-3 py-1 rounded-full text-xs font-bold border border-slate-200 dark:border-slate-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20">مخزون منخفض</button>
+  <button type="button" data-qstock="out" class="qstock-btn px-3 py-1 rounded-full text-xs font-bold border border-slate-200 dark:border-slate-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">المنتهي / نفدت الكمية (0)</button>
 </div>
 <!-- Table -->
 <div class="overflow-x-auto">
@@ -135,10 +147,51 @@
 </div>
 </div>
 </div>
+<!-- Stocktake (جرد المخزون) Modal -->
+<div id="modal-stocktake" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] flex flex-col">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div>
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><span class="material-icons-outlined text-emerald-600">fact_check</span>جرد المخزون — الموجود مقابل المنتهي</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400">اعرف الأصناف المتوفرة في المحل والأصناف المنتهية واطبع كشف جرد للمطابقة الفعلية</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="st-print" class="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold flex items-center gap-1.5 hover:bg-blue-600"><span class="material-icons-outlined text-sm">print</span>طباعة كشف الجرد (A4)</button>
+        <button id="st-close" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">إغلاق</button>
+      </div>
+    </div>
+    <div id="st-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <button type="button" data-sttab="all" class="st-tab px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-white">كل الأصناف</button>
+      <button type="button" data-sttab="available" class="st-tab px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 text-emerald-700 dark:text-emerald-400">الموجود فقط</button>
+      <button type="button" data-sttab="low" class="st-tab px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 text-amber-600 dark:text-amber-400">منخفض / قارب على الانتهاء</button>
+      <button type="button" data-sttab="out" class="st-tab px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 text-red-600 dark:text-red-400">المنتهي (نفدت الكمية)</button>
+      <input id="st-search" type="text" class="mr-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs w-56" placeholder="فلترة بالاسم أو SKU..."/>
+    </div>
+    <div class="flex-1 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-slate-50 dark:bg-slate-800 sticky top-0">
+          <tr>
+            <th class="px-3 py-2.5 font-bold">#</th>
+            <th class="px-3 py-2.5 font-bold">المنتج</th>
+            <th class="px-3 py-2.5 font-bold">SKU</th>
+            <th class="px-3 py-2.5 font-bold">الفئة</th>
+            <th class="px-3 py-2.5 font-bold">الكمية الموجودة</th>
+            <th class="px-3 py-2.5 font-bold">حد التنبيه</th>
+            <th class="px-3 py-2.5 font-bold">سعر البيع</th>
+            <th class="px-3 py-2.5 font-bold">إجمالي القيمة</th>
+            <th class="px-3 py-2.5 font-bold">الحالة</th>
+          </tr>
+        </thead>
+        <tbody id="st-rows" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 <script src="app.js"></script>
 <script>
 let PAGE = 0; const PER = 12; let EDIT = null; let M2_MODE = null, M2_ID = null;
-let CAN_EDIT = false;
+let CAN_EDIT = false, CAN_ADJUST = false, CAN_SERIALS = false;
 let PENDING_IMAGE = undefined; // undefined = لم تتغير، '' = حذف، 'data:image/...' = صورة جديدة
 
 function setPreviewImage(src) {
@@ -217,22 +270,37 @@ document.getElementById('nc-add').addEventListener('click', async () => {
 async function stats() {
   const s = (await guard(() => api('stock_stats'))) || {};
   document.getElementById('stats').innerHTML = `
-  <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-start justify-between">
-    <div><p class="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">إجمالي المنتجات</p><h3 class="text-2xl font-bold text-slate-900 dark:text-white font-num">${n(s.count)}</h3></div>
+  <div data-stat-stock="" class="cursor-pointer bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:ring-2 hover:ring-primary/30 transition flex items-start justify-between" title="عرض كل المنتجات">
+    <div><p class="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">إجمالي الأصناف (الموجود: ${n(s.in_stock ?? ((s.count || 0) - (s.out || 0)))})</p><h3 class="text-2xl font-bold text-slate-900 dark:text-white font-num">${n(s.count)}</h3></div>
     <div class="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg"><span class="material-icons-outlined text-xl">dns</span></div>
   </div>
-  <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-start justify-between">
-    <div><p class="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">القيمة الإجمالية</p><h3 class="text-2xl font-bold text-slate-900 dark:text-white font-num">${fmt(s.value)} ${CURRENCY}</h3></div>
+  <div data-stat-stock="available" class="cursor-pointer bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm hover:ring-2 hover:ring-emerald-400/40 transition flex items-start justify-between" title="تصفية المنتجات الموجودة فقط">
+    <div><p class="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">القيمة الإجمالية (${n(s.total_qty)} قطعة)</p><h3 class="text-2xl font-bold text-slate-900 dark:text-white font-num">${fmt(s.value)} ${CURRENCY}</h3></div>
     <div class="p-2 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-lg"><span class="material-icons-outlined text-xl">payments</span></div>
   </div>
-  <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm ring-1 ring-red-100 dark:ring-red-900/30 flex items-start justify-between">
-    <div><p class="text-red-500 dark:text-red-400 text-xs font-medium mb-1">مخزون منخفض</p><h3 class="text-2xl font-bold text-red-600 dark:text-red-400 font-num">${n(s.low)}</h3></div>
-    <div class="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg"><span class="material-icons-outlined text-xl">warning</span></div>
+  <div data-stat-stock="low" class="cursor-pointer bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm ring-1 ring-amber-200 dark:ring-amber-900/40 hover:ring-2 hover:ring-amber-400 transition flex items-start justify-between" title="تصفية المخزون المنخفض">
+    <div><p class="text-amber-600 dark:text-amber-400 text-xs font-medium mb-1">مخزون منخفض</p><h3 class="text-2xl font-bold text-amber-600 dark:text-amber-400 font-num">${n(s.low)}</h3></div>
+    <div class="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 rounded-lg"><span class="material-icons-outlined text-xl">warning</span></div>
   </div>
-  <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-start justify-between">
-    <div><p class="text-slate-500 dark:text-slate-400 text-xs font-medium mb-1">نفدت الكمية</p><h3 class="text-2xl font-bold text-slate-900 dark:text-white font-num">${n(s.out)}</h3></div>
-    <div class="p-2 bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 rounded-lg"><span class="material-icons-outlined text-xl">remove_shopping_cart</span></div>
+  <div data-stat-stock="out" class="cursor-pointer bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm ring-1 ring-red-200 dark:ring-red-900/40 hover:ring-2 hover:ring-red-400 transition flex items-start justify-between" title="عرض الأصناف المنتهية فقط">
+    <div><p class="text-red-500 dark:text-red-400 text-xs font-medium mb-1">منتهي / نفدت الكمية</p><h3 class="text-2xl font-bold text-red-600 dark:text-red-400 font-num">${n(s.out)}</h3></div>
+    <div class="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg"><span class="material-icons-outlined text-xl">remove_shopping_cart</span></div>
   </div>`;
+  document.querySelectorAll('[data-stat-stock]').forEach((card) => {
+    card.addEventListener('click', () => setStockFilter(card.dataset.statStock || ''));
+  });
+}
+
+function setStockFilter(val) {
+  document.getElementById('stock').value = val;
+  document.querySelectorAll('.qstock-btn').forEach((btn) => {
+    const active = (btn.dataset.qstock || '') === val;
+    btn.classList.toggle('bg-primary', active);
+    btn.classList.toggle('text-white', active);
+    btn.classList.toggle('border-primary', active);
+  });
+  PAGE = 0;
+  load();
 }
 
 function stockBadge(p) {
@@ -249,7 +317,7 @@ async function load() {
     limit: PER, offset: PAGE * PER,
   }))) || { rows: [], total: 0 };
   document.getElementById('count').textContent = `عرض ${r.total ? PAGE * PER + 1 : 0} إلى ${Math.min(r.total, (PAGE + 1) * PER)} من ${n(r.total)} نتيجة`;
-  document.getElementById('rows').innerHTML = r.rows.map((p) => `
+  document.getElementById('rows').innerHTML = r.rows.length ? r.rows.map((p) => `
     <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group ${p.stock_state === 'low' || p.stock_state === 'out' ? 'bg-red-50/10 dark:bg-red-900/5' : ''}">
       <td class="px-6 py-4 whitespace-nowrap"><div class="flex items-center gap-3">
         <div class="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800 text-primary flex items-center justify-center flex-shrink-0 border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -268,7 +336,7 @@ async function load() {
         ${CAN_SERIALS ? `<button data-sn="${p.id}" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-primary transition-colors" title="الأرقام التسلسلية"><span class="material-icons-outlined text-[18px]">qr_code</span></button>` : ''}
         ${CAN_EDIT ? `<button data-del="${p.id}" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-red-500 transition-colors" title="حذف"><span class="material-icons-outlined text-[18px]">delete</span></button>` : ''}
       </div></td>
-    </tr>`).join('');
+    </tr>`).join('') : `<tr><td colspan="7" class="px-6 py-10 text-center text-sm text-slate-400">لا توجد منتجات مطابقة للتصفية الحالية</td></tr>`;
   document.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openEdit(+b.dataset.edit)));
   document.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
     if (!confirm('حذف هذا المنتج؟')) return;
@@ -341,7 +409,7 @@ async function openSerials(defaultPid = null) {
   document.getElementById('m2-title').textContent = 'الأرقام التسلسلية للمنتج';
   document.getElementById('m2-body').innerHTML = `
     <select id="m2-pid" class="w-full rounded-lg border px-3 py-2 mb-3 text-sm">${opts}</select>
-    ${CAN_EDIT ? `<input id="m2-sn" class="w-full rounded-lg border px-3 py-2 font-num mb-3 text-sm" placeholder="إضافة رقم تسلسلي جديد..."/>` : ''}
+    ${(CAN_EDIT || CAN_ADJUST) ? `<input id="m2-sn" class="w-full rounded-lg border px-3 py-2 font-num mb-3 text-sm" placeholder="إضافة رقم تسلسلي جديد..."/>` : ''}
     <div id="m2-sn-list" class="max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 text-xs border border-slate-100 dark:border-slate-800 rounded-lg p-2"></div>`;
   openModal(document.getElementById('modal2'));
   const sel = document.getElementById('m2-pid');
@@ -361,7 +429,8 @@ async function openSerials(defaultPid = null) {
 document.getElementById('btn-serials').addEventListener('click', () => openSerials(null));
 document.getElementById('m2-x').addEventListener('click', () => closeModal(document.getElementById('modal2')));
 document.getElementById('m2-ok').addEventListener('click', async () => {
-  if (!CAN_EDIT) { closeModal(document.getElementById('modal2')); return; }
+  if (M2_MODE === 'adj' && !CAN_ADJUST) { closeModal(document.getElementById('modal2')); return; }
+  if (M2_MODE !== 'adj' && !(CAN_EDIT || CAN_ADJUST)) { closeModal(document.getElementById('modal2')); return; }
   let ok = false;
   if (M2_MODE === 'adj') {
     const reason = (document.getElementById('m2-reason') && document.getElementById('m2-reason').value.trim()) || 'تعديل يدوي';
@@ -379,9 +448,116 @@ document.getElementById('prev').addEventListener('click', () => { if (PAGE > 0) 
 document.getElementById('next').addEventListener('click', () => { PAGE++; load(); });
 document.getElementById('q').addEventListener('input', () => { clearTimeout(window._t); window._t = setTimeout(() => { PAGE = 0; load(); }, 300); });
 document.getElementById('cat').addEventListener('change', () => { PAGE = 0; load(); });
-document.getElementById('stock').addEventListener('change', () => { PAGE = 0; load(); });
+document.getElementById('stock').addEventListener('change', (e) => setStockFilter(e.target.value));
+document.querySelectorAll('.qstock-btn').forEach((btn) => {
+  btn.addEventListener('click', () => setStockFilter(btn.dataset.qstock || ''));
+});
 
-let CAN_EDIT = false, CAN_ADJUST = false, CAN_SERIALS = false;
+let ST_ALL = [];
+let ST_TAB = 'all';
+
+function renderStocktakeTable() {
+  const q = (document.getElementById('st-search').value || '').trim().toLowerCase();
+  const filtered = ST_ALL.filter((p) => {
+    if (ST_TAB === 'available' && !(p.qty > 0)) return false;
+    if (ST_TAB === 'low' && !(p.qty > 0 && p.qty <= p.min_qty)) return false;
+    if (ST_TAB === 'out' && !(p.qty <= 0)) return false;
+    if (q && !`${p.name} ${p.sku} ${p.category || ''}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  document.getElementById('st-rows').innerHTML = filtered.length ? filtered.map((p, idx) => `
+    <tr class="${p.qty <= 0 ? 'bg-red-50/40 dark:bg-red-900/10' : (p.qty <= p.min_qty ? 'bg-amber-50/40 dark:bg-amber-900/10' : '')}">
+      <td class="px-3 py-2 font-num text-slate-400">${idx + 1}</td>
+      <td class="px-3 py-2 font-bold text-slate-800 dark:text-slate-100">${esc(p.name)}</td>
+      <td class="px-3 py-2 font-num text-slate-500">${esc(p.sku)}</td>
+      <td class="px-3 py-2">${esc(p.category || '—')}</td>
+      <td class="px-3 py-2 font-num font-bold ${p.qty <= 0 ? 'text-red-600' : 'text-emerald-700 dark:text-emerald-400'}">${n(p.qty)}</td>
+      <td class="px-3 py-2 font-num text-slate-500">${n(p.min_qty)}</td>
+      <td class="px-3 py-2 font-num">${fmt(p.price)} ${CURRENCY}</td>
+      <td class="px-3 py-2 font-num font-bold">${fmt(Math.max(0, p.qty) * p.price)} ${CURRENCY}</td>
+      <td class="px-3 py-2">${stockBadge(p)}</td>
+    </tr>`).join('') : '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-400">لا توجد أصناف في هذا القسم</td></tr>';
+  return filtered;
+}
+
+async function openStocktakeModal() {
+  const catId = document.getElementById('cat').value || null;
+  const res = (await guard(() => api('products', { category_id: catId, limit: 2000, offset: 0 }))) || { rows: [] };
+  ST_ALL = res.rows || [];
+  ST_TAB = document.getElementById('stock').value || 'all';
+  if (!['all', 'available', 'low', 'out'].includes(ST_TAB)) ST_TAB = 'all';
+  document.getElementById('st-search').value = '';
+  const availCnt = ST_ALL.filter((p) => p.qty > 0).length;
+  const lowCnt = ST_ALL.filter((p) => p.qty > 0 && p.qty <= p.min_qty).length;
+  const outCnt = ST_ALL.filter((p) => p.qty <= 0).length;
+  const units = ST_ALL.reduce((acc, p) => acc + Math.max(0, p.qty), 0);
+  const val = ST_ALL.reduce((acc, p) => acc + Math.max(0, p.qty) * p.price, 0);
+  document.getElementById('st-summary').innerHTML = `
+    <div class="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800"><div class="text-[11px] text-blue-700 dark:text-blue-300 font-bold">إجمالي الأصناف</div><div class="text-xl font-bold font-num">${n(ST_ALL.length)}</div></div>
+    <div class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800"><div class="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold">الأصناف الموجودة</div><div class="text-xl font-bold font-num">${n(availCnt)} <span class="text-xs font-normal">(${n(units)} قطعة)</span></div></div>
+    <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800"><div class="text-[11px] text-amber-700 dark:text-amber-300 font-bold">مخزون منخفض</div><div class="text-xl font-bold font-num">${n(lowCnt)}</div></div>
+    <div class="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800"><div class="text-[11px] text-red-700 dark:text-red-300 font-bold">المنتهي (نفدت)</div><div class="text-xl font-bold font-num">${n(outCnt)}</div></div>`;
+  document.querySelectorAll('.st-tab').forEach((b) => {
+    const act = b.dataset.sttab === ST_TAB;
+    b.classList.toggle('bg-primary', act);
+    b.classList.toggle('text-white', act);
+  });
+  renderStocktakeTable();
+  openModal(document.getElementById('modal-stocktake'));
+}
+
+document.getElementById('btn-stocktake').addEventListener('click', openStocktakeModal);
+document.getElementById('st-close').addEventListener('click', () => closeModal(document.getElementById('modal-stocktake')));
+document.getElementById('st-search').addEventListener('input', renderStocktakeTable);
+document.querySelectorAll('.st-tab').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    ST_TAB = btn.dataset.sttab;
+    document.querySelectorAll('.st-tab').forEach((b) => {
+      const act = b.dataset.sttab === ST_TAB;
+      b.classList.toggle('bg-primary', act);
+      b.classList.toggle('text-white', act);
+    });
+    renderStocktakeTable();
+  });
+});
+
+document.getElementById('st-print').addEventListener('click', async () => {
+  const rows = renderStocktakeTable();
+  const labels = { all: 'كامل الأصناف', available: 'الأصناف الموجودة فقط', low: 'الأصناف منخفضة الرصيد', out: 'الأصناف المنتهية (نفدت الكمية)' };
+  const storeName = (SETTINGS && SETTINGS.store_name) || 'تك زون';
+  const totalUnits = rows.reduce((a, p) => a + Math.max(0, p.qty), 0);
+  const totalVal = rows.reduce((a, p) => a + Math.max(0, p.qty) * p.price, 0);
+  const trs = rows.map((p, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${esc(p.name)}</td>
+      <td>${esc(p.sku)}</td>
+      <td>${esc(p.category || '—')}</td>
+      <td><b>${n(p.qty)}</b></td>
+      <td>${fmt(p.price)} ${CURRENCY}</td>
+      <td>${fmt(Math.max(0, p.qty) * p.price)} ${CURRENCY}</td>
+      <td>${p.qty <= 0 ? 'منتهي' : (p.qty <= p.min_qty ? 'منخفض' : 'متوفر')}</td>
+      <td style="width:70px"></td>
+    </tr>`).join('');
+  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>
+    body{font-family:Cairo,Arial,sans-serif;padding:18px;color:#0f172a;font-size:12px}
+    h2{margin:0 0 4px} .meta{color:#475569;margin-bottom:12px;font-size:11px}
+    table{width:100%;border-collapse:collapse} th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:right}
+    th{background:#f1f5f9;font-weight:700} .tot{margin-top:12px;font-weight:700;display:flex;gap:24px}
+  </style></head><body>
+    <h2>كشف جرد المخزون — ${esc(storeName)}</h2>
+    <div class="meta">النطاق: ${esc(labels[ST_TAB] || 'كامل الأصناف')} | التاريخ: ${new Date().toLocaleString('ar-EG')} | عدد الأصناف: ${rows.length}</div>
+    <table><thead><tr><th>#</th><th>المنتج</th><th>SKU</th><th>الفئة</th><th>الرصيد الدفتري</th><th>السعر</th><th>القيمة</th><th>الحالة</th><th>العد الفعلي</th></tr></thead>
+    <tbody>${trs}</tbody></table>
+    <div class="tot"><span>إجمالي القطع الموجودة: ${n(totalUnits)}</span><span>إجمالي القيمة: ${fmt(totalVal)} ${CURRENCY}</span></div>
+  </body></html>`;
+  if (window.parent && window.parent !== window && window.parent.TZOS && window.parent.TZOS.printHtml) {
+    await window.parent.TZOS.printHtml(html, 'a4');
+  } else {
+    await tzPrintPage('a4');
+  }
+});
+
 (async () => {
   if (!(await pageInit('inventory', { perm: ['inventory_view', 'inventory_edit', 'inventory_adjust'] }))) return;
   CAN_EDIT = hasPerm('inventory_edit');
@@ -390,6 +566,9 @@ let CAN_EDIT = false, CAN_ADJUST = false, CAN_SERIALS = false;
   if (!CAN_EDIT) {
     document.getElementById('btn-new').classList.add('hidden');
     document.getElementById('cat-add-box').classList.add('hidden');
+  }
+  if (!CAN_SERIALS && !CAN_EDIT) {
+    document.getElementById('btn-serials').classList.add('hidden');
   }
   if (!hasPerm('cost_view')) {
     document.getElementById('f-cost').classList.add('hidden');

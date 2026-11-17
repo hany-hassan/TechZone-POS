@@ -1250,10 +1250,11 @@ check("pos.html & settings.html & app.js wire print preview modal, silent print 
 
 # 13i) فحص نظام الصلاحيات الصارم الجديد (49 صلاحية / 10 مجموعات / الكاشير الصارم / الجرد الأعمى / تعطيل الحسابات / الترحيل التلقائي)
 _desk_ctx_html = (ROOT / "web" / "desktop.html").read_text(encoding="utf-8")
-check("desktop.html context menu dynamically mirrors PERMITTED_APPS & honors .hidden specificity",
+check("desktop.html context menu dynamically mirrors PERMITTED_APPS & preserves responsive topbar buttons",
       "renderCtxMenu()" in _desk_ctx_html
       and 'id="os-ctx-apps"' in _desk_ctx_html
-      and ".top-btn.hidden, .ctx-item.hidden" in _desk_ctx_html
+      and "#top-settings-btn.hidden" in _desk_ctx_html
+      and ".top-btn.hidden" not in _desk_ctx_html
       and 'data-ctx-app="sales_quotes"' not in _desk_ctx_html)
 _ps = call(a, "permissions_schema")
 check("permissions_schema returns 49 perms, 10 groups, 7 presets",
@@ -1395,6 +1396,42 @@ with db.connect() as _mc:
           and _migr_flag == "1")
     _mc.execute("DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE username='legacy_u')")
     _mc.execute("DELETE FROM users WHERE username='legacy_u'")
+
+# 13j) فحص جرد المخزون (الموجود مقابل المنتهي) وسلامة سكربتات كل صفحات HTML
+_out_prod_id = call(a, "product_save", {
+    "sku": "OUT-ZERO-1", "name": "صنف منتهي للفحص", "category_id": _rbac_cat_id,
+    "price": 50, "cost": 30, "tracked": 0,
+})["data"]["id"]
+_st_avail = call(a, "products", {"stock": "available", "limit": 200})
+_st_out = call(a, "products", {"stock": "out", "limit": 200})
+_st_stats = call(a, "stock_stats")
+check("inventory stocktake filters available vs out & stock_stats totals",
+      _st_avail["ok"] and _st_out["ok"] and _st_stats["ok"]
+      and all(r["qty"] > 0 for r in _st_avail["data"]["rows"])
+      and any(r["id"] == _out_prod_id for r in _st_out["data"]["rows"])
+      and all(r["qty"] <= 0 for r in _st_out["data"]["rows"])
+      and "in_stock" in _st_stats["data"] and "total_qty" in _st_stats["data"])
+
+_inv_html = (ROOT / "web" / "inventory.html").read_text(encoding="utf-8")
+_js_syntax_errs = []
+import shutil as _shutil, subprocess as _sp
+if _shutil.which("node"):
+    for _hp in sorted((ROOT / "web").glob("*.html")):
+        for _idx, _sc in enumerate(re.findall(r"<script(?![^>]*src=)[^>]*>(.*?)</script>", _hp.read_text(encoding="utf-8"), flags=re.S | re.I)):
+            with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as _tf:
+                _tf.write(_sc)
+                _tp = _tf.name
+            try:
+                _res = _sp.run(["node", "--check", _tp], capture_output=True, text=True)
+                if _res.returncode != 0:
+                    _js_syntax_errs.append(f"{_hp.name}#{_idx}: {_res.stderr.strip()}")
+            finally:
+                pathlib.Path(_tp).unlink(missing_ok=True)
+check("inventory stocktake modal wired & all web/*.html inline JS pass syntax check",
+      "modal-stocktake" in _inv_html
+      and "openStocktakeModal" in _inv_html
+      and _inv_html.count("CAN_EDIT = false") == 1
+      and not _js_syntax_errs)
 
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()

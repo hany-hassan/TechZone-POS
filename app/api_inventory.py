@@ -126,6 +126,8 @@ class InventoryMixin:
             args.append(_int(category_id))
         if stock == "out":
             where.append("p.qty<=0")
+        elif stock == "available":
+            where.append("p.qty>0")
         elif stock == "low":
             where.append("p.qty>0 AND p.qty<=p.min_qty")
         elif stock == "in":

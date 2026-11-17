@@ -30,7 +30,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 31 tables schema, minor-unit money rules, and 49-permission matrix | English |
 | [`docs/STACK.md`](docs/STACK.md) | Pinned runtime stack, versions, and upgrade policies | English |
 | [`docs/CODING-STANDARDS.md`](docs/CODING-STANDARDS.md) | Coding style, SQL guidelines, money formatting, and RTL conventions | English |
-| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (232 checks), test gates, and manual QA | English |
+| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (234 checks), test gates, and manual QA | English |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, PBKDF2 hashing, lockout rules, and Egyptian PDPL | English |
 | [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | TechZone OS color tokens, Arabic typography, layout, and invoice specs | English |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Standalone .exe compilation (PyInstaller), backup routines, and setup | English |
@@ -55,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (232 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (234 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Build Windows Setup Installer | Double-click `build-installer.bat` or run `.\build-installer.bat` (outputs `dist/TechZone-Setup-v2.0.0.exe` + `SHA256SUMS.txt`) |
@@ -85,7 +85,7 @@ project001/
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
 │   ├── db.py            # SQLite schema (31 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (232 checks)
+│   └── selfcheck.py     # Comprehensive automated regression suite (234 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
@@ -150,12 +150,22 @@ The administrator (`role='admin'`) possesses unrestricted system access (for ena
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api*.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 232 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 234 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-17 — Inventory Display Fix & Stocktake Report (`main`)
+- **Inventory Blank Page Root-Cause Fix (`web/inventory.html`)**:
+  1. Fixed fatal `SyntaxError: Identifier 'CAN_EDIT' has already been declared` where line 141 (`let CAN_EDIT = false;`) and line 384 (`let CAN_EDIT = false, ...`) both declared `CAN_EDIT`, aborting the entire `<script>` so stats, categories, and products never loaded.
+  2. Fixed `m2-ok` and `openSerials()` permission guards to recognize `CAN_ADJUST` (`inventory_adjust`), hid `#btn-serials` when lacking both `serials_view`/`inventory_adjust`/`inventory_edit`, and added an empty-state table fallback.
+- **Stocktake / Available vs. Out-of-Stock Filtering & Print Sheet (`app/api_inventory.py`, `app/api_reports.py`, `web/inventory.html`, `web/app.css`)**:
+  1. Added `stock="available"` (`qty > 0`) filter in `InventoryMixin.products()` and `in_stock` / `total_qty` counters in `ReportsMixin.stock_stats()`.
+  2. Added one-click quick stocktake filter pills (`الكل`, `الموجود (> 0)`, `مخزون منخفض`, `المنتهي (0)`), clickable KPI summary cards, and `#modal-stocktake` ("جرد المخزون — الموجود مقابل المنتهي") with live search, summary counters, and printable A4 stocktake sheet via `TZOS.printHtml` / `tzPrintPage`.
+- **Verification (`app/selfcheck.py`)**: Added stocktake filter/stats tests and full `web/*.html` inline JS `node --check` validation (`234/234` passing, `contract ok (112 names)`).
+- **Responsive Topbar Gap Fix (`web/desktop.html`)**: Narrowed `.hidden` override from `.top-btn.hidden` to `#top-settings-btn.hidden, #os-shift-pill.hidden, .ctx-item.hidden` so `#top-tile-btn`, `#top-showdesk-btn`, and `#top-wp-btn` (`hidden sm:inline-flex` / `hidden md:inline-flex`) render normally on desktop topbar without leaving empty space.
 
 ### 2026-11-17 — Desktop Context Menu & Topbar Settings Visibility Sync (`main`)
 - **Desktop Context Menu Mirroring Start Menu (`web/desktop.html`, `web/app.css`, `app/selfcheck.py`)**:

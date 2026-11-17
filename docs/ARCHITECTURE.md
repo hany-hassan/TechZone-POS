@@ -284,7 +284,7 @@ Produces `dist/TechZone.exe` — a single self-contained executable. On launch:
 python app/selfcheck.py
 ```
 
-Runs **232 assertion-based checks** covering:
+Runs **234 assertion-based checks** covering:
 
 - Database schema integrity (all 31 tables, indices, required columns, constraints)
 - API method existence (`114` public methods), `modules_map.py` classification, and frontend contract validation (`112` names)
@@ -319,7 +319,7 @@ project001/
 │   ├── api_services.py     — ServicesMixin: repair tickets & used device purchases
 │   ├── api_reports.py      — ReportsMixin: daily/monthly financials & top-selling reports
 │   ├── db.py               — Schema (31 tables), connection, seed, auto-migration & backups
-│   └── selfcheck.py        — 232 automated integrity & contract checks
+│   └── selfcheck.py        — 234 automated integrity & contract checks
 ├── web/
 │   ├── index.html          — Smart login screen (PIN auto-detect + owner recovery modal)
 │   ├── owner.html          — Hidden Owner Control panel (modules, profiles, labels, security, audit)

@@ -195,7 +195,9 @@ class ReportsMixin:
         self._perm("inventory_view")
         with db.connect() as conn:
             n = conn.execute("SELECT COUNT(*) c FROM products WHERE active=1").fetchone()["c"]
-            val = conn.execute("SELECT COALESCE(SUM(qty*price),0) v FROM products WHERE active=1").fetchone()["v"]
+            val = conn.execute("SELECT COALESCE(SUM(CASE WHEN qty>0 THEN qty*price ELSE 0 END),0) v FROM products WHERE active=1").fetchone()["v"]
+            total_qty = conn.execute("SELECT COALESCE(SUM(CASE WHEN qty>0 THEN qty ELSE 0 END),0) q FROM products WHERE active=1").fetchone()["q"]
+            in_stock = conn.execute("SELECT COUNT(*) c FROM products WHERE active=1 AND qty>0").fetchone()["c"]
             low = conn.execute("SELECT COUNT(*) c FROM products WHERE active=1 AND qty>0 AND qty<=min_qty").fetchone()["c"]
             out = conn.execute("SELECT COUNT(*) c FROM products WHERE active=1 AND qty<=0").fetchone()["c"]
-            return {"count": n, "value": val, "low": low, "out": out}
+            return {"count": n, "value": val, "total_qty": total_qty, "in_stock": in_stock, "low": low, "out": out}

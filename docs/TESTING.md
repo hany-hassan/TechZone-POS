@@ -1,6 +1,6 @@
 # TechZone Testing Strategy
 
-## Current: `selfcheck.py` (232 Assertions)
+## Current: `selfcheck.py` (234 Assertions)
 
 TechZone ships with a single integration-level test suite in `app/selfcheck.py`. It validates the database schema, API functions, permission boundaries, business logic, owner controls, and static frontend-to-backend contracts in one pass.
 
@@ -13,7 +13,7 @@ python app/selfcheck.py
 A successful run prints each check with a ✓ and ends with:
 
 ```
-ALL 232 CHECKS PASSED
+ALL 234 CHECKS PASSED
 ```
 
 Any failure raises `AssertionError` with a descriptive message identifying the broken invariant.
@@ -42,7 +42,7 @@ Any failure raises `AssertionError` with a descriptive message identifying the b
 
 ### Running selfcheck After Every Change
 
-Every code or schema change **must** pass all 232 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
+Every code or schema change **must** pass all 234 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
 
 ---
 
