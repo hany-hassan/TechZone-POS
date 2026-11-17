@@ -415,7 +415,11 @@ document.addEventListener('click', (e) => {
 });
 
 (async () => {
-  if (!(await pageInit('buy_used', { perm: 'used_manage' }))) return;
+  if (!(await pageInit('buy_used', { perm: ['used_view', 'used_manage'] }))) return;
+  if (!hasPerm('used_manage')) {
+    const fc = document.getElementById('used-form-col');
+    if (fc) fc.classList.add('hidden');
+  }
   document.getElementById('cur').textContent = CURRENCY;
   document.getElementById('store-lbl').textContent = SETTINGS.store_name || 'تك زون للإلكترونيات';
   await load();

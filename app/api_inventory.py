@@ -33,7 +33,7 @@ from api_common import (
 class InventoryMixin:
     # ---------------------------------------------------------- فئات
     def categories(self):
-        self._user()
+        self._perm_any("pos_sell", "inventory_view", "inventory_edit", "quotes_view", "quotes_create_edit", "repair_edit")
         with db.connect() as conn:
             hide_empty = self._settings(conn).get("hide_empty_categories") == "1"
             having = "HAVING COUNT(p.id) > 0" if hide_empty else ""
@@ -88,7 +88,7 @@ class InventoryMixin:
 
     def pos_categories_config_save(self, config=None):
         """حفظ ترتيب وتخصيص الفئات المعروضة في شاشة نقاط البيع (POS)."""
-        self._user()
+        self._perm("pos_categories_manage")
         if config is None:
             config = ""
         if isinstance(config, (list, dict)):
@@ -114,7 +114,7 @@ class InventoryMixin:
         return d
 
     def products(self, q=None, category_id=None, stock=None, limit=200, offset=0):
-        self._user()
+        self._perm("inventory_view")
         show_cost = self._has_perm("cost_view")
         limit, offset = _int(limit, 200), _int(offset, 0)
         where, args = ["p.active=1"], []
@@ -140,7 +140,7 @@ class InventoryMixin:
             return {"rows": [self._product_row(r, show_cost) for r in rows], "total": total}
 
     def product(self, id):
-        self._user()
+        self._perm("inventory_view")
         show_cost = self._has_perm("cost_view")
         with db.connect() as conn:
             r = conn.execute(
@@ -214,7 +214,7 @@ class InventoryMixin:
             return True
 
     def products_search(self, q=None, limit=60, category_id=None):
-        self._user()
+        self._perm_any("pos_sell", "inventory_view", "quotes_view", "quotes_create_edit", "repair_edit")
         q = (q or "").strip()
         limit = _int(limit, 60)
         cat = _int(category_id) if category_id not in (None, "") else None
@@ -239,7 +239,7 @@ class InventoryMixin:
             return [dict(r) for r in rows]
 
     def product_adjust(self, id, qty_change, reason="تعديل يدوي"):
-        u = self._perm("inventory_edit")
+        u = self._perm("inventory_adjust")
         pid, delta = _int(id), _int(qty_change)
         if delta == 0:
             raise ApiError("تغيير الكمية صفري")
@@ -258,7 +258,7 @@ class InventoryMixin:
             return {"qty": newq}
 
     def serials(self, product_id):
-        self._user()
+        self._perm_any("serials_view", "inventory_view", "pos_sell")
         with db.connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM serials WHERE product_id=? ORDER BY id DESC", (_int(product_id),)
@@ -266,7 +266,7 @@ class InventoryMixin:
             return [dict(r) for r in rows]
 
     def serial_add(self, product_id, serial):
-        self._perm("inventory_edit")
+        self._perm("inventory_adjust")
         serial = (serial or "").strip()
         if not serial:
             raise ApiError("الرقم التسلسلي مطلوب")

@@ -656,11 +656,14 @@ class _BaseApiMixin:
         u = _STATE["user"]
         if not u:
             raise ApiError("يجب تسجيل الدخول أولاً")
+        if not u.get("is_active", True):
+            _STATE["user"] = None
+            raise ApiError("تم إيقاف هذا الحساب من قبل الإدارة")
         return u
 
     def _has_perm(self, key: str) -> bool:
         u = _STATE["user"]
-        if not u:
+        if not u or not u.get("is_active", True):
             return False
         if u["role"] == "admin":
             return True
@@ -682,6 +685,23 @@ class _BaseApiMixin:
         if not any(perms.get(k, False) for k in keys):
             raise ApiError("ممنوع: للمدير أو لمن يملك الصلاحية فقط")
         return u
+
+    def _perm_all(self, *keys):
+        u = self._user()
+        if u["role"] == "admin":
+            return u
+        perms = u.get("permissions") or {}
+        if not all(perms.get(k, False) for k in keys):
+            raise ApiError("ممنوع: للمدير أو لمن يملك جميع الصلاحيات المطلوبة")
+        return u
+
+    def _scope_check(self, record_user_id, all_perm: str, own_perm: str | None = None, err_msg: str = "ممنوع: لا يمكنك عرض سجلات موظفين آخرين"):
+        u = self._user()
+        if u["role"] == "admin" or self._has_perm(all_perm):
+            return u
+        if record_user_id == u["id"] and (own_perm is None or self._has_perm(own_perm)):
+            return u
+        raise ApiError(err_msg)
 
     def _admin(self):
         u = self._user()

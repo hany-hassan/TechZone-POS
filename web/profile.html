@@ -192,15 +192,15 @@ const $ = (id) => document.getElementById(id);
 
 const ALL_START_PAGES = [
   { id: 'pos', label: 'نقاط البيع السريعة (الكاشير)', perm: 'pos_sell' },
-  { id: 'sales_quotes', label: 'قسم المبيعات وعروض الأسعار وفواتير A4', perm: 'pos_sell' },
-  { id: 'inventory', label: 'إدارة المخزون والمنتجات', perm: ['inventory_view', 'inventory_edit'] },
-  { id: 'customers', label: 'العملاء والمديونيات وكشف الحساب', perm: ['customers_view', 'customers_edit'] },
-  { id: 'repair', label: 'مركز الصيانة وتذاكر الإصلاح', perm: ['repair_view', 'repair_edit'] },
-  { id: 'history', label: 'سجل المبيعات والمرتجعات' },
-  { id: 'buy_used', label: 'شراء الأجهزة المستعملة', perm: 'used_manage' },
-  { id: 'reports', label: 'التقارير والتحليلات المالية', perm: 'reports_view' },
-  { id: 'staff', label: 'إدارة الموظفين والصلاحيات', perm: 'settings_manage' },
-  { id: 'settings', label: 'إعدادات النظام', perm: 'settings_manage' },
+  { id: 'sales_quotes', label: 'قسم المبيعات وعروض الأسعار وفواتير A4', perm: ['quotes_view', 'quotes_create_edit'] },
+  { id: 'inventory', label: 'إدارة المخزون والمنتجات', perm: ['inventory_view', 'inventory_edit', 'inventory_adjust'] },
+  { id: 'customers', label: 'العملاء والمديونيات وكشف الحساب', perm: ['customers_view', 'customers_debt_view', 'customers_edit', 'customers_payment'] },
+  { id: 'repair', label: 'مركز الصيانة وتذاكر الإصلاح', perm: ['repair_view', 'repair_create', 'repair_edit'] },
+  { id: 'history', label: 'سجل المبيعات والمرتجعات', perm: ['history_view_own', 'history_view_all', 'sales_return_own', 'sales_return', 'sales_post_discount'] },
+  { id: 'buy_used', label: 'شراء الأجهزة المستعملة', perm: ['used_view', 'used_manage'] },
+  { id: 'reports', label: 'التقارير والتحليلات المالية', perm: ['reports_sales_view', 'reports_profit_view', 'reports_shifts_view', 'reports_movements_view'] },
+  { id: 'staff', label: 'إدارة الموظفين والصلاحيات', perm: ['staff_view', 'staff_manage'] },
+  { id: 'settings', label: 'إعدادات النظام', perm: ['settings_view_edit', 'templates_manage', 'backups_manage'] },
   { id: 'desktop', label: 'سطح المكتب فقط (بدون فتح نافذة تلقائياً)' },
 ];
 

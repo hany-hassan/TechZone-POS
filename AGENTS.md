@@ -27,10 +27,10 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | [`docs/OWNER-CONTROL-PLAN.md`](docs/OWNER-CONTROL-PLAN.md) | Owner mode, module registry, business profiles & recovery key implementation plan | English |
 | [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md) | Pending architectural questions and design decisions | Arabic |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System architecture, IPC bridge, sequence flows, and directory tree | English |
-| [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 28 tables schema, minor-unit money rules, and 18-permission matrix | English |
+| [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 31 tables schema, minor-unit money rules, and 49-permission matrix | English |
 | [`docs/STACK.md`](docs/STACK.md) | Pinned runtime stack, versions, and upgrade policies | English |
 | [`docs/CODING-STANDARDS.md`](docs/CODING-STANDARDS.md) | Coding style, SQL guidelines, money formatting, and RTL conventions | English |
-| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (200 checks), test gates, and manual QA | English |
+| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (232 checks), test gates, and manual QA | English |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, PBKDF2 hashing, lockout rules, and Egyptian PDPL | English |
 | [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | TechZone OS color tokens, Arabic typography, layout, and invoice specs | English |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Standalone .exe compilation (PyInstaller), backup routines, and setup | English |
@@ -55,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (200 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (232 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Build Windows Setup Installer | Double-click `build-installer.bat` or run `.\build-installer.bat` (outputs `dist/TechZone-Setup-v2.0.0.exe` + `SHA256SUMS.txt`) |
@@ -71,20 +71,21 @@ project001/
 │   ├── main.py          # Entry point: pywebview window setup, branding & session cleanup on close
 │   ├── api.py           # Facade Api class composing 8 domain mixins (plus re-exports)
 │   ├── api_common.py    # Shared state, money/format helpers, phone normalization, PDF/WhatsApp Win32 & ledger helpers
-│   ├── api_auth.py      # AuthSettingsMixin: login, users, permissions, profile & settings/backups
+│   ├── api_auth.py      # AuthSettingsMixin: login, users, permissions/presets/audit, profile & settings/backups
 │   ├── api_owner.py     # OwnerMixin: owner auth, module registry, profiles, labels & audit log
+│   ├── permissions.py   # Canonical 49-permission registry, 10 groups, 7 role presets & strict cashier baseline
 │   ├── modules_map.py   # API_MODULE_MAP, CORE_METHODS & MODULE_REQUIRES server guard map
 │   ├── profiles.py      # DEFAULT_BUSINESS_PROFILES (with demo_catalog) & DEFAULT_LABELS/LABEL_KEYS
 │   ├── fresh_db.py      # Clean per-profile DB builder with selective data carry-over & safety backup
 │   ├── api_inventory.py # InventoryMixin: categories, products, serials & stock adjustments
 │   ├── api_customers.py # CustomersMixin: customer CRM, debt summary, ledger history & vouchers
 │   ├── api_installments.py # InstallmentsMixin: installment contracts, schedules, collections, alerts & WhatsApp reminders
-│   ├── api_sales.py     # SalesMixin: shifts, POS checkout, returns, modifications & WhatsApp invoice
+│   ├── api_sales.py     # SalesMixin: shifts (incl. Blind Close), POS checkout, returns, modifications & WhatsApp invoice
 │   ├── api_quotes.py    # QuotesMixin: B2B quotations, A4 invoices & conversion to sales
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
-│   ├── db.py            # SQLite schema (28 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (200 checks)
+│   ├── db.py            # SQLite schema (31 tables), connection wrapper, seed, migration & backups
+│   └── selfcheck.py     # Comprehensive automated regression suite (232 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
@@ -99,7 +100,7 @@ project001/
 │   ├── buy_used.html    # Used device purchasing, trade-ins, and anti-theft IDs
 │   ├── history.html     # Operations history, returns, and multi-filter ledger
 │   ├── reports.html     # Daily/monthly financials, shift logs, and net profits
-│   ├── staff.html       # Employee administration & 18-permission matrix
+│   ├── staff.html       # Employee administration, 7 job presets, perm audit log & 49-permission console
 │   ├── profile.html     # Employee personal profile, PIN, and desktop theme setup
 │   ├── settings.html    # Store info, tax toggle, login mode, invoice studio & database backups/restore hub
 │   ├── receipt.html     # Thermal 80mm & A4 preview and WhatsApp sharing
@@ -122,27 +123,23 @@ project001/
 
 ---
 
-## 6. Permissions Matrix (18 Granular Keys)
+## 6. Permissions Matrix (49 Granular Keys in 10 Groups)
 
-The administrator (`role='admin'`) possesses unrestricted system access. All other staff members (`role='cashier'`) have individual booleans stored in `users.permissions`:
-1. `pos_sell`: Process POS transactions and checkout.
-2. `pos_price`: Modify item sale prices on the fly in the cart.
-3. `pos_item_discount`: Apply per-item discounts in the cart.
-4. `sales_return`: Process returns on existing invoices.
-5. `sales_all`: View all employee sales in the operations ledger.
-6. `inventory_view`: Open and inspect inventory catalog.
-7. `inventory_edit`: Create, edit, and delete products and categories.
-8. `cost_view`: View wholesale purchase costs and profit margins.
-9. `customers_view`: Access customer list and account summaries.
-10. `customers_edit`: Add/edit customers and create payment vouchers.
-11. `customers_delete`: Delete customer records and payment vouchers.
-12. `repair_view`: Access maintenance workshop tickets.
-13. `repair_edit`: Receive devices, update repair status, and deliver.
-14. `used_manage`: Purchase and evaluate used customer devices.
-15. `reports_view`: Access financial summaries, profits, and shift audits.
-16. `settings_manage`: Edit store profile, tax rules, and employee accounts.
-17. `installments_view`: View installment contracts, schedules, and reminders.
-18. `installments_manage`: Create, collect payments on, and cancel installment contracts.
+The administrator (`role='admin'`) possesses unrestricted system access (for enabled modules). All non-admin staff (`role='cashier'`) have normalized boolean flags synchronized between `users.permissions` (JSON cache), the normalized `user_permissions` table, and `users.is_active` / `users.job_preset`. Canonical definitions live in `app/permissions.py`:
+
+- **Strict Cashier Baseline (`cashier_strict`, default for new cashiers and v2 migration):** `pos_sell`, `shift_manage`, `receipt_view`, `customers_quick_pick` (`True`); all other 45 keys `False` (includes **Blind Close** mode where `shift_summary_view=False` hides expected cash/diff, and name/phone-only customer quick-pick with zero debt exposure).
+- **7 Built-in Job Presets (`permission_roles`):** `cashier_strict`, `senior_cashier`, `sales_b2b`, `inventory_clerk`, `technician`, `accountant`, `store_manager`.
+
+1. **POS & Shifts (`pos`, 9):** `pos_sell`, `shift_manage`, `shift_summary_view`, `pos_item_discount`, `pos_invoice_discount`, `pos_price`, `pos_credit_sale`, `pos_whatsapp`, `pos_categories_manage`.
+2. **History, Returns & Receipts (`history`, 6):** `receipt_view`, `history_view_own`, `history_view_all`, `sales_return_own`, `sales_return`, `sales_post_discount`.
+3. **B2B Sales & Quotes (`quotes`, 4):** `quotes_view`, `quotes_create_edit`, `quotes_convert`, `quotes_cancel_delete`.
+4. **Customers & Debt (`customers`, 6):** `customers_quick_pick`, `customers_view`, `customers_debt_view`, `customers_edit`, `customers_payment`, `customers_delete`.
+5. **Installments (`installments`, 4):** `installments_view`, `installments_collect`, `installments_create`, `installments_cancel`.
+6. **Inventory & Costs (`inventory`, 5):** `inventory_view`, `inventory_edit`, `inventory_adjust`, `serials_view`, `cost_view`.
+7. **Repair Workshop (`repair`, 4):** `repair_view`, `repair_create`, `repair_edit`, `repair_delete`.
+8. **Used Devices (`buy_used`, 2):** `used_view`, `used_manage`.
+9. **Reports (`reports`, 4):** `reports_sales_view`, `reports_profit_view`, `reports_shifts_view`, `reports_movements_view`.
+10. **Staff, Settings & Backups (`admin`, 5):** `staff_view`, `staff_manage`, `settings_view_edit`, `templates_manage`, `backups_manage`.
 
 ---
 
@@ -150,15 +147,33 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 
 1. **All Money in Minor Units:** Always store and compute currency as `INTEGER` minor units (`1 LE = 100 qirsh`). Never use floating-point types for financial transactions.
 2. **100% Parameterized SQL:** Never concatenate or interpolate raw user strings into SQL queries. Always use `?` placeholders.
-3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
+3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api*.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 200 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 232 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-17 — Desktop Context Menu & Topbar Settings Visibility Sync (`main`)
+- **Desktop Context Menu Mirroring Start Menu (`web/desktop.html`, `web/app.css`, `app/selfcheck.py`)**:
+  1. Fixed CSS specificity override where `.top-btn { display: inline-flex; }` and `.ctx-item { display: flex; }` appeared after `app.css` and overrode `.hidden`, keeping `#top-settings-btn` and unpermitted context items visible; added `.top-btn.hidden, .ctx-item.hidden { display: none !important; }` plus `max-height`/`overflow-y` on `#os-ctx-menu`.
+  2. Replaced hardcoded `[data-ctx-app]` shortcuts in `#os-ctx-menu` (including duplicate bottom `settings`) with dynamic `TZOS.renderCtxMenu()` rendering `#os-ctx-apps` directly from `PERMITTED_APPS` so the right-click menu matches the Start Menu (`renderStartMenu`) and active module/user permissions identically. Rebuilt `web/app.css` and added selfcheck assertion (`232/232` passing).
+
+### 2026-11-17 — Granular RBAC Overhaul (49 Permissions, 10 Groups, Blind Close, Zero-Leak Hardening & Staff Console) (`main`)
+- **Canonical Permission Registry & Schema (`app/permissions.py`, `app/db.py`, `app/fresh_db.py`)**:
+  1. Created `app/permissions.py` defining **49 granular permissions** across **10 groups**, `STRICT_CASHIER_PERMS` (`pos_sell`, `shift_manage`, `receipt_view`, `customers_quick_pick`), and **7 built-in job presets** (`cashier_strict`, `senior_cashier`, `sales_b2b`, `inventory_clerk`, `technician`, `accountant`, `store_manager`).
+  2. Restructured SQLite schema to **31 tables**: added `user_permissions`, `permission_roles`, and `perm_audit_log`, added `users.is_active` and `users.job_preset`, updated `DEFAULT_MODULES` `perm_keys`, and added idempotent `_migrate_strict_permissions_v2()` (resetting existing non-admin accounts to `cashier_strict`). Updated `app/fresh_db.py` to carry over `user_permissions`, `permission_roles`, and `perm_audit_log`.
+- **Backend Zero-Leak Enforcement (`app/api_common.py`, `app/api_auth.py`, `app/api_sales.py`, `app/api_customers.py`, `app/api_inventory.py`, `app/api_quotes.py`, `app/api_services.py`, `app/api_installments.py`, `app/api_reports.py`, `app/modules_map.py`)**:
+  1. Enforced `is_active` session/login checks, added `_perm_all()` / `_scope_check()`, and added `permissions_schema()`, `user_toggle_active()`, and `perm_audit_list()`.
+  2. Eliminated cross-employee/module data leaks: `shift()` hides store-wide `today` sales without `history_view_all`/`reports_sales_view`; `sale()`/`quotation()`/`sale_discount()`/`sale_modify_from_cart()`/`sale_return()` enforce record ownership unless `history_view_all`/`sales_return` is held; `sale_create()` validates server-side catalog prices (`pos_price`), invoice discount (`pos_invoice_discount`), and credit sales (`pos_credit_sale`).
+  3. Implemented **name/phone-only customer quick-pick** (`customers_quick_pick` without `customers_debt_view` redacts `debt` and ledger fields) and **Blind Close (الجرد الأعمى)** when `shift_summary_view=False` (added `cash_inst` to `shift_close` expected cash, stores accurate `expected_cash`/`diff` for admins, redacts from response).
+- **Frontend Security Guards & Comprehensive Staff Console (`web/staff.html`, `web/app.js`, `web/desktop.html`, `web/pos.html`, `web/history.html`, `web/repair.html`, `web/receipt.html`, `web/*.html`, `web/app.css`)**:
+  1. Fixed `CURRENT_USER.permissions.includes(...)` TypeError bugs in `history.html` and `repair.html`, added `pageInit()` guards across `sales_quotes.html`, `history.html`, `repair.html`, and `receipt.html`, filtered desktop KPIs/context menu by permissions, and added Blind Close + debt redaction in `pos.html`.
+  2. Rewrote `web/staff.html` with preset selector buttons, perm-copy between staff, live permission search, 10 collapsible categorized groups with dependency resolution & risk badges, active/suspended account toggling, and permission audit log tab; recompiled `web/app.css`.
+- **Verification (`app/selfcheck.py`)**: Updated permission expectations and added strict-RBAC, zero-leak, Blind Close, account activation, audit log, and v2 migration tests (`231/231` passing, `contract ok (112 names)`).
 
 ### 2026-11-17 — Cashier Tax Settings Fix, In-App POS Print Preview & Silent Direct Print (`main`)
 - **Cashier Tax / Runtime Settings Fix (`app/api_auth.py`, `web/pos.html`, `web/settings.html`)**:

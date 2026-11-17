@@ -453,7 +453,9 @@ async function openTicket(id) {
   document.getElementById('a-btn-del').classList.toggle('hidden', !canDel);
 
   const tr = document.getElementById('a-transitions');
-  if (r.transitions.length) {
+  const canEdit = hasPerm('repair_edit');
+  const canDelete = hasPerm('repair_delete');
+  if (r.transitions.length && canEdit) {
     tr.innerHTML = r.transitions.map((s) => {
       const [tlbl] = STATUS_META[s] || [s];
       return `<button data-to="${s}" class="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-dark">تحويل إلى: ${tlbl}</button>`;
@@ -463,15 +465,17 @@ async function openTicket(id) {
       if (ok) { toast('تم تحديث حالة التذكرة'); await openTicket(ACTIVE_ID); await loadList(); }
     }));
   } else {
-    tr.innerHTML = `<span class="text-xs text-slate-400">التذكرة في حالتها النهائية (${lbl}) — يمكنك طباعة التذكرة في أي وقت</span>`;
+    tr.innerHTML = `<span class="text-xs text-slate-400">${r.transitions.length ? `حالة التذكرة: ${lbl}` : `التذكرة في حالتها النهائية (${lbl}) — يمكنك طباعة التذكرة في أي وقت`}</span>`;
   }
+  document.getElementById('a-btn-edit').classList.toggle('hidden', !canEdit);
+  document.getElementById('a-btn-del').classList.toggle('hidden', !canDelete);
 
   document.getElementById('a-parts').innerHTML = r.parts.length
     ? `<div class="font-bold text-slate-500 mb-1">قطع الغيار المركبة على التذكرة:</div>` +
       r.parts.map((p) => `<div class="flex justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800"><span>${esc(p.name)} × ${p.qty}</span><span class="font-num font-bold">${fmt(p.line_total)}</span></div>`).join('')
     : '<div class="text-slate-400">لم تُضف قطع غيار إضافية لهذه التذكرة</div>';
 
-  const canAddParts = !['delivered', 'rejected'].includes(r.status) && (!CURRENT_USER.permissions || CURRENT_USER.permissions.includes('repair_edit'));
+  const canAddParts = !['delivered', 'rejected'].includes(r.status) && canEdit;
   document.getElementById('a-part-row').classList.toggle('hidden', !canAddParts);
   loadList();
 }
@@ -598,16 +602,22 @@ document.addEventListener('click', (e) => {
 });
 
 (async () => {
-  const u = await pageInit('repair');
+  const u = await pageInit('repair', { perm: ['repair_view', 'repair_create', 'repair_edit'] });
   if (!u) return;
+  if (!hasPerm('repair_create') && !hasPerm('repair_edit')) {
+    const fEl = document.getElementById('r-form');
+    if (fEl) fEl.closest('section, div')?.classList.add('hidden');
+  }
   try {
     const tpls = await api('templates_get');
     if (tpls && tpls.pos) POS_TPL = tpls.pos;
   } catch (e) {}
-  const prods = await guard(() => api('products', { limit: 200 }));
-  if (prods) {
-    document.getElementById('a-part-sel').innerHTML = prods.rows.filter((p) => p.qty > 0)
-      .map((p) => `<option value="${p.id}">${esc(p.name)} (${fmt(p.cost || p.price)} - متاح ${p.qty})</option>`).join('');
+  if (hasPerm('repair_edit')) {
+    const prods = await guard(() => api('products_search', { q: '', limit: 200 }));
+    if (prods) {
+      document.getElementById('a-part-sel').innerHTML = prods.filter((p) => p.qty > 0)
+        .map((p) => `<option value="${p.id}">${esc(p.name)} (${fmt(p.price)} - متاح ${p.qty})</option>`).join('');
+    }
   }
   await loadList();
 })();

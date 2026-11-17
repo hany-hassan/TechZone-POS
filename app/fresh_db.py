@@ -68,11 +68,17 @@ def build_fresh_profile_db(
             dst.execute("DELETE FROM settings")
             dst.execute("DELETE FROM modules")
             dst.execute("DELETE FROM business_profiles")
+            dst.execute("DELETE FROM user_permissions")
+            dst.execute("DELETE FROM permission_roles")
+            dst.execute("DELETE FROM perm_audit_log")
 
             ts = db.now()
             # 1) فتح اتصال القراءة من القاعدة الحالية ثم إغلاقه قبل الاستبدال لتفادي أي قفل
             with db.connect() as src_conn:
                 _copy_table(src_conn, dst, "users")
+                _copy_table(src_conn, dst, "user_permissions")
+                _copy_table(src_conn, dst, "permission_roles")
+                _copy_table(src_conn, dst, "perm_audit_log")
                 _copy_table(src_conn, dst, "owner_auth")
                 _copy_table(src_conn, dst, "owner_audit_log")
                 _copy_table(src_conn, dst, "business_profiles")

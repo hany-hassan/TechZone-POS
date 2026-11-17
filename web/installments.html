@@ -496,7 +496,7 @@
   let CURRENT_STATUS = 'all';
   let CURRENT_OFFSET = 0;
   let TOTAL_PLANS = 0;
-  let CAN_MANAGE = false;
+  let CAN_CREATE = false, CAN_COLLECT = false, CAN_CANCEL = false;
   let STORE_SETTINGS = {};
   let CREATE_MODE = 'direct';
   let SELECTED_CUST = null;
@@ -928,9 +928,10 @@
     if (!extras.length) extras.push('<span class="text-slate-400">لا توجد بيانات ضامن أو ملاحظات إضافية مسجلة.</span>');
     $('dt-extra-info').innerHTML = extras.join('');
 
-    $('dt-pay-btn').classList.toggle('hidden', p.status !== 'active' || p.remaining_total <= 0);
-    $('dt-cancel-plan-btn').classList.toggle('hidden', !(CAN_MANAGE && p.status === 'active' && p.paid_total === 0));
+    $('dt-pay-btn').classList.toggle('hidden', !CAN_COLLECT || p.status !== 'active' || p.remaining_total <= 0);
+    $('dt-cancel-plan-btn').classList.toggle('hidden', !(CAN_CANCEL && p.status === 'active' && p.paid_total === 0));
     $('dt-cust-link').href = `customer_details.html?id=${p.customer_id}`;
+    if (!hasPerm('customers_debt_view')) $('dt-cust-link').classList.add('hidden');
 
     const items = det.items || [];
     $('dt-items-count').textContent = `${items.length} قسط`;
@@ -941,7 +942,7 @@
       else if (it.is_overdue) badge = `<span class="px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold">متأخر (${it.days_overdue} يوم)</span>`;
       else if (it.status === 'partial') badge = '<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-bold">مدفوع جزئياً</span>';
 
-      const canPayItem = p.status === 'active' && it.remaining > 0;
+      const canPayItem = CAN_COLLECT && p.status === 'active' && it.remaining > 0;
       return `
       <tr class="${it.is_overdue ? 'bg-red-50/40 dark:bg-red-900/10' : ''}">
         <td class="px-4 py-2.5 font-num font-bold">#${it.seq_no}</td>
@@ -1149,10 +1150,12 @@
   });
 
   (async () => {
-    const user = await pageInit('installments', { perm: ['installments_view', 'installments_manage'] });
+    const user = await pageInit('installments', { perm: ['installments_view', 'installments_collect', 'installments_create'] });
     if (!user) return;
-    CAN_MANAGE = hasPerm('installments_manage');
-    if (!CAN_MANAGE) $('btn-new-plan').classList.add('hidden');
+    CAN_CREATE = hasPerm('installments_create');
+    CAN_COLLECT = hasPerm('installments_collect');
+    CAN_CANCEL = hasPerm('installments_cancel');
+    if (!CAN_CREATE) $('btn-new-plan').classList.add('hidden');
     try { STORE_SETTINGS = await api('settings') || {}; } catch (_) {}
 
     await loadPlans();
@@ -1162,7 +1165,7 @@
     const custId = params.get('customer_id');
     if (planId) {
       await openDetail(+planId);
-    } else if (custId && CAN_MANAGE) {
+    } else if (custId && CAN_CREATE && hasPerm('customers_debt_view')) {
       const hist = await guard(() => api('customer_history', { id: +custId }));
       if (hist && hist.customer) openCreateModal(hist.customer);
     }

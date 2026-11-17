@@ -210,8 +210,10 @@ class QuotesMixin:
         auto_convert=False,
     ):
         """إنشاء أو تعديل عرض سعر (quote) أو إصدار فاتورة مبيعات A4 مباشرة (invoice)."""
-        u = self._perm("pos_sell")
+        u = self._perm("quotes_create_edit")
         doc_type = "invoice" if doc_type == "invoice" else "quote"
+        if doc_type == "invoice" or auto_convert:
+            self._perm("quotes_convert")
         items = items or []
         if not items:
             raise ApiError("يرجى إضافة بند واحد على الأقل في الجدول")
@@ -324,6 +326,7 @@ class QuotesMixin:
                 existing = conn.execute("SELECT * FROM quotations WHERE id=?", (qid,)).fetchone()
                 if not existing:
                     raise ApiError("المستند غير موجود")
+                self._scope_check(existing["user_id"], "history_view_all", err_msg="ممنوع: لا يمكنك تعديل مستندات موظف آخر")
                 if existing["status"] == "converted":
                     raise ApiError("تم تحويل هذا المستند إلى فاتورة مبيعات معتمدة ولا يمكن تعديله كعرض سعر")
                 src_val = (source_ref or "").strip() or existing["source_ref"] or f"{src_prefix}{qid:04d}"
@@ -387,12 +390,13 @@ class QuotesMixin:
 
     def quotation_convert_to_sale(self, id, paid_amount=None, payment_method="cash", payment_date=None, payment_method_label=None, payment_plan_note=None):
         """تحويل عرض سعر قائم إلى فاتورة مبيعات رسمية معتمدة مع خصم المخزون وتسجيل الدفعة والمديونية."""
-        u = self._perm("pos_sell")
+        u = self._perm("quotes_convert")
         qid = _int(id)
         with db.connect() as conn:
             q_row = conn.execute("SELECT * FROM quotations WHERE id=?", (qid,)).fetchone()
             if not q_row:
                 raise ApiError("عرض السعر غير موجود")
+            self._scope_check(q_row["user_id"], "history_view_all", err_msg="ممنوع: لا يمكنك تحويل عرض سعر لموظف آخر")
             if q_row["status"] == "converted" and q_row["converted_sale_id"]:
                 raise ApiError("تم تحويل عرض السعر هذا مسبقاً إلى فاتورة مبيعات")
             q_items = conn.execute("SELECT * FROM quotation_items WHERE quote_id=?", (qid,)).fetchall()
@@ -403,7 +407,7 @@ class QuotesMixin:
 
     def quotation(self, id):
         """جلب بيانات عرض سعر أو فاتورة مبيعات A4 بالتفصيل."""
-        self._perm_any("pos_sell", "sales_all")
+        self._perm("quotes_view")
         qid = _int(id)
         with db.connect() as conn:
             r = conn.execute(
@@ -414,6 +418,7 @@ class QuotesMixin:
             ).fetchone()
             if not r:
                 raise ApiError("المستند غير موجود")
+            self._scope_check(r["user_id"], "history_view_all", err_msg="ممنوع: لا يمكنك عرض مستندات موظف آخر")
             d = dict(r)
             d["items"] = [
                 dict(x) for x in conn.execute("SELECT * FROM quotation_items WHERE quote_id=? ORDER BY id", (qid,)).fetchall()
@@ -444,9 +449,13 @@ class QuotesMixin:
 
     def quotations(self, doc_type=None, status=None, q=None, limit=100, offset=0):
         """قائمة عروض الأسعار وفواتير المبيعات الرسمية A4 مع إحصائيات شاملة."""
-        self._user()
+        u = self._perm("quotes_view")
+        see_all = self._has_perm("history_view_all")
         limit, offset = _int(limit, 100), _int(offset, 0)
         where, args = ["1=1"], []
+        if not see_all:
+            where.append("q.user_id=?")
+            args.append(u["id"])
         if doc_type in ("quote", "invoice"):
             where.append("q.doc_type=?")
             args.append(doc_type)
@@ -487,11 +496,15 @@ class QuotesMixin:
                 d["due_amount"] = max(0, d["total"] - (d.get("paid_amount") or 0))
                 out.append(d)
 
+            sum_user_sql = "" if see_all else " AND user_id=?"
+            sum_args = [] if see_all else [u["id"]]
             stats_quotes = conn.execute(
-                "SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM quotations WHERE doc_type='quote' AND status!='converted'"
+                f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM quotations WHERE doc_type='quote' AND status!='converted'{sum_user_sql}",
+                sum_args,
             ).fetchone()
             stats_invs = conn.execute(
-                "SELECT COUNT(*) n, COALESCE(SUM(total),0) t, COALESCE(SUM(paid_amount),0) p FROM quotations WHERE doc_type='invoice' OR status='converted'"
+                f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t, COALESCE(SUM(paid_amount),0) p FROM quotations WHERE (doc_type='invoice' OR status='converted'){sum_user_sql}",
+                sum_args,
             ).fetchone()
             return {
                 "rows": out,
@@ -508,12 +521,13 @@ class QuotesMixin:
 
     def quotation_cancel(self, id):
         """إلغاء عرض سعر (تحويل حالته إلى cancelled) مع منع إلغاء الفواتير المعتمدة حفاظاً على الدورة المالية."""
-        self._perm("pos_sell")
+        self._perm("quotes_cancel_delete")
         qid = _int(id)
         with db.connect() as conn:
-            r = conn.execute("SELECT id, doc_type, status, converted_sale_id FROM quotations WHERE id=?", (qid,)).fetchone()
+            r = conn.execute("SELECT id, user_id, doc_type, status, converted_sale_id FROM quotations WHERE id=?", (qid,)).fetchone()
             if not r:
                 raise ApiError("عرض السعر غير موجود")
+            self._scope_check(r["user_id"], "history_view_all", err_msg="ممنوع: لا يمكنك إلغاء عرض سعر لموظف آخر")
             if r["doc_type"] == "invoice" or r["status"] == "converted" or r["converted_sale_id"]:
                 raise ApiError("لا يمكن إلغاء فاتورة مبيعات معتمدة لأن ذلك يؤثر على الدورة المالية؛ يمكنك عمل استرجاع (مرتجع) من الفاتورة")
             conn.execute("UPDATE quotations SET status='cancelled' WHERE id=?", (qid,))
@@ -521,12 +535,13 @@ class QuotesMixin:
 
     def quotation_delete(self, id):
         """حذف عرض سعر غير محول إلى فاتورة مبيعات."""
-        self._perm("pos_sell")
+        self._perm("quotes_cancel_delete")
         qid = _int(id)
         with db.connect() as conn:
-            r = conn.execute("SELECT doc_type, status, converted_sale_id FROM quotations WHERE id=?", (qid,)).fetchone()
+            r = conn.execute("SELECT user_id, doc_type, status, converted_sale_id FROM quotations WHERE id=?", (qid,)).fetchone()
             if not r:
                 raise ApiError("عرض السعر غير موجود")
+            self._scope_check(r["user_id"], "history_view_all", err_msg="ممنوع: لا يمكنك حذف عرض سعر لموظف آخر")
             if r["doc_type"] == "invoice" or r["status"] == "converted" or r["converted_sale_id"]:
                 raise ApiError("لا يمكن حذف فاتورة مبيعات معتمدة؛ استخدم شاشة المرتجعات عند الحاجة")
             conn.execute("DELETE FROM quotations WHERE id=?", (qid,))
@@ -537,6 +552,8 @@ class QuotesMixin:
         import base64
         import urllib.parse
         import webbrowser
+
+        self._perm("pos_whatsapp")
 
         with db.connect() as conn:
             st = self._settings(conn)

@@ -216,13 +216,13 @@ function repairStatusColor(s) {
 }
 
 (async () => {
-  const user = await pageInit('customers', { perm: ['customers_view', 'customers_edit'] });
+  const user = await pageInit('customers', { perm: ['customers_debt_view'] });
   if (!user) return;
 
-  const canEdit = hasPerm('customers_edit');
+  const canPay = hasPerm('customers_payment');
   const canDelete = hasPerm('customers_delete');
-  const canManageInst = hasPerm('installments_manage');
-  if (!canEdit) document.getElementById('btn-voucher').classList.add('hidden');
+  const canManageInst = hasPerm('installments_create');
+  if (!canPay) document.getElementById('btn-voucher').classList.add('hidden');
   if (!canManageInst) document.getElementById('btn-new-installment').classList.add('hidden');
 
   const params = new URLSearchParams(window.location.search);

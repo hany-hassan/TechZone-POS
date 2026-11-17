@@ -101,7 +101,7 @@ When packaged with PyInstaller (`sys.frozen` is `True`), `web/` assets are read 
 | `buy_used.html` | Used device purchasing |
 | `receipt.html` | Invoice/receipt preview, print, and WhatsApp sharing |
 | `settings.html` | System settings (4 tabs: store, login, invoice designer, and database backups/restore hub) |
-| `staff.html` | Employee management and 18-permission assignment |
+| `staff.html` | Employee management, 7 job presets, audit log & 49-permission console |
 | `profile.html` | Personal profile and per-user desktop preferences |
 | `reports.html` | Financial reports and analytics |
 
@@ -118,7 +118,7 @@ The shared JavaScript module provides:
 | Subsystem | Purpose |
 |-----------|---------|
 | **Bridge** (`api(name, payload)`) | Wraps `window.pywebview.api.call(name, payload)`. Automatically detects whether it runs inside an iframe and resolves the bridge from the parent frame. Falls back to an HTTP POST mock (`/api/call`) only when running under a plain browser for screenshot tooling — never in production. |
-| **Permissions** (`hasPerm(key)`) | Client-side guard that mirrors the 18 server-side permission keys. Pages hide or disable UI elements based on the current user's permission set returned by `session`. |
+| **Permissions** (`hasPerm(key)`) | Client-side guard that mirrors the 49 server-side permission keys in 10 groups (`app/permissions.py`). Pages hide or disable UI elements based on the current user's permission set returned by `session`. |
 | **Labels & Modules** (`t(key)`, `UI_CONFIG`) | `app.js` fetches `ui_config` once at bootstrap, dynamically builds navigation from enabled `modules`, enforces the module-disabled page guard, and translates customizable UI labels (`ui_labels`). |
 | **Theme sync** (`applyThemeEverywhere`) | Propagates light/dark mode changes to `desktop.html` and every open iframe simultaneously. `applyAccentColorEverywhere` does the same for the user's chosen accent colour. |
 | **Invoice rendering** | `buildA4InvoiceHtml()` and `buildPosThermalReceiptHtml()` generate complete HTML documents for A4 and 80 mm/58 mm thermal receipts. `renderA4DocumentToJpeg()` and `renderInvoiceToJpeg()` rasterise them. `sendInvoicePdfToWhatsapp()` and `sendQuoteOrA4PdfToWhatsapp()` trigger Python-side PDF generation and Win32 clipboard injection. |
@@ -231,7 +231,7 @@ flowchart TD
     APPJS -->|"pywebview bridge"| API["app/api.py (Facade + 8 Mixins)"]
     API --> MODMAP["app/modules_map.py + profiles.py + fresh_db.py"]
     API --> DB["app/db.py"]
-    DB --> SQLITE[("SQLite — data/shop.db (28 tables)")]
+    DB --> SQLITE[("SQLite — data/shop.db (31 tables)")]
     API --> PDF["PDF generation (api_common.py / api_sales.py)"]
     API --> WIN32["ctypes Win32 (api_common.py)"]
     MAIN["app/main.py"] --> API
@@ -284,10 +284,10 @@ Produces `dist/TechZone.exe` — a single self-contained executable. On launch:
 python app/selfcheck.py
 ```
 
-Runs **195 assertion-based checks** covering:
+Runs **232 assertion-based checks** covering:
 
-- Database schema integrity (all 28 tables, indices, required columns, constraints)
-- API method existence, `modules_map.py` classification, and frontend contract validation (`107` names)
+- Database schema integrity (all 31 tables, indices, required columns, constraints)
+- API method existence (`114` public methods), `modules_map.py` classification, and frontend contract validation (`112` names)
 - Owner Mode auth, lockout, recovery key rotation, admin PIN reset, module CRUD/cloning, business profile CRUD/demo catalogs, and `fresh_db.py` clean rebuilds
 - Default seed data presence (admin user, default settings, templates, `modules`, `business_profiles`)
 - File system structure (all 17 HTML pages, fonts, icons)
@@ -303,22 +303,23 @@ Runs **195 assertion-based checks** covering:
 project001/
 ├── app/
 │   ├── main.py             — Entry point: window creation, icon, startup, window close cleanup
-│   ├── api.py              — Facade Api class composing 8 domain mixins (107 public methods)
+│   ├── api.py              — Facade Api class composing 8 domain mixins (114 public methods)
 │   ├── api_common.py       — Shared session/owner state, money helpers, PDF & Win32 CF_HDROP
-│   ├── api_auth.py         — AuthSettingsMixin: login modes, users, permissions, settings & backups
+│   ├── api_auth.py         — AuthSettingsMixin: login modes, users, permissions/presets/audit, settings & backups
 │   ├── api_owner.py        — OwnerMixin: owner auth, modules registry, profiles, labels & audit log
+│   ├── permissions.py      — Canonical 49-permission registry, 10 groups & 7 role presets
 │   ├── modules_map.py      — Server-side API_MODULE_MAP, CORE_METHODS & MODULE_REQUIRES guard
 │   ├── profiles.py         — DEFAULT_BUSINESS_PROFILES (with demo_catalog) & DEFAULT_LABELS
 │   ├── fresh_db.py         — Atomic per-profile clean DB builder with selective carry-over
 │   ├── api_inventory.py    — InventoryMixin: categories, products, serials & stock adjustments
 │   ├── api_customers.py    — CustomersMixin: customer CRM, unified ledger & vouchers
 │   ├── api_installments.py — InstallmentsMixin: contracts, schedules, collections & WhatsApp alerts
-│   ├── api_sales.py        — SalesMixin: shifts, POS checkout, returns & PDF invoices
+│   ├── api_sales.py        — SalesMixin: shifts (incl. Blind Close), POS checkout, returns & PDF invoices
 │   ├── api_quotes.py       — QuotesMixin: B2B quotations & conversion to sales
 │   ├── api_services.py     — ServicesMixin: repair tickets & used device purchases
 │   ├── api_reports.py      — ReportsMixin: daily/monthly financials & top-selling reports
-│   ├── db.py               — Schema (28 tables), connection, seed, auto-migration & backups
-│   └── selfcheck.py        — 195 automated integrity & contract checks
+│   ├── db.py               — Schema (31 tables), connection, seed, auto-migration & backups
+│   └── selfcheck.py        — 232 automated integrity & contract checks
 ├── web/
 │   ├── index.html          — Smart login screen (PIN auto-detect + owner recovery modal)
 │   ├── owner.html          — Hidden Owner Control panel (modules, profiles, labels, security, audit)
@@ -334,7 +335,7 @@ project001/
 │   ├── buy_used.html       — Used device purchasing
 │   ├── receipt.html        — Receipt preview, print, WhatsApp share
 │   ├── settings.html       — System settings (4 tabs: store, login, invoices, backups)
-│   ├── staff.html          — Employee & 18-permission management
+│   ├── staff.html          — Employee, preset, audit log & 49-permission management
 │   ├── profile.html        — Personal profile & desktop prefs
 │   ├── reports.html        — Financial reports & analytics
 │   ├── app.js              — JS bridge, permissions, labels t(), dynamic NAV, invoice renderer

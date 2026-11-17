@@ -1270,6 +1270,11 @@ async function loadDocsList() {
     return;
   }
   const cur = A4_TPL.currency_symbol || 'LE';
+  const canEditDoc = hasPerm('quotes_create_edit');
+  const canConvertDoc = hasPerm('quotes_convert');
+  const canDelDoc = hasPerm('quotes_cancel_delete');
+  const canRetSale = hasPerm(['sales_return', 'sales_return_own']);
+  const canWaDoc = whatsappEnabled() && hasPerm('pos_whatsapp');
   tb.innerHTML = res.rows.map((r) => {
     const isInv = r.doc_type === 'invoice' || r.status === 'converted';
     const isCancelledQuote = !isInv && r.status === 'cancelled';
@@ -1306,34 +1311,34 @@ async function loadDocsList() {
               <span class="material-icons-round text-sm">print</span>
               <span>معاينة</span>
             </button>
-            <button type="button" data-wa-id="${r.id}" data-wa-toggle class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-[11px] flex items-center gap-1" title="إرسال PDF عبر واتساب">
+            ${canWaDoc ? `<button type="button" data-wa-id="${r.id}" data-wa-toggle class="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-[11px] flex items-center gap-1" title="إرسال PDF عبر واتساب">
               <span class="material-icons-round text-sm">send</span>
               <span>PDF</span>
-            </button>
+            </button>` : ''}
             ${!isInv ? `
-              <button type="button" data-edit-id="${r.id}" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 font-bold text-[11px] flex items-center gap-1" title="تعديل عرض السعر">
+              ${canEditDoc ? `<button type="button" data-edit-id="${r.id}" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 font-bold text-[11px] flex items-center gap-1" title="تعديل عرض السعر">
                 <span class="material-icons-round text-sm">edit</span>
                 <span>تعديل</span>
-              </button>
+              </button>` : ''}
               ${!isCancelledQuote ? `
-              <button type="button" data-conv-id="${r.id}" class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] flex items-center gap-1" title="تحويل عرض السعر إلى فاتورة مبيعات معتمدة">
+              ${canConvertDoc ? `<button type="button" data-conv-id="${r.id}" class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] flex items-center gap-1" title="تحويل عرض السعر إلى فاتورة مبيعات معتمدة">
                 <span class="material-icons-round text-sm">transform</span>
                 <span>تحويل لفاتورة</span>
-              </button>
-              <button type="button" data-cancel-id="${r.id}" class="px-2.5 py-1.5 rounded-lg bg-orange-500/15 text-orange-700 dark:text-orange-300 hover:bg-orange-600 hover:text-white font-bold text-[11px] flex items-center gap-1" title="إلغاء عرض السعر">
+              </button>` : ''}
+              ${canDelDoc ? `<button type="button" data-cancel-id="${r.id}" class="px-2.5 py-1.5 rounded-lg bg-orange-500/15 text-orange-700 dark:text-orange-300 hover:bg-orange-600 hover:text-white font-bold text-[11px] flex items-center gap-1" title="إلغاء عرض السعر">
                 <span class="material-icons-round text-sm">block</span>
                 <span>إلغاء العرض</span>
-              </button>` : ''}
-              <button type="button" data-del-id="${r.id}" class="px-2 py-1.5 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-600 hover:text-white font-bold text-[11px] flex items-center gap-0.5" title="حذف عرض السعر نهائياً">
+              </button>` : ''}` : ''}
+              ${canDelDoc ? `<button type="button" data-del-id="${r.id}" class="px-2 py-1.5 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-600 hover:text-white font-bold text-[11px] flex items-center gap-0.5" title="حذف عرض السعر نهائياً">
                 <span class="material-icons-round text-sm">delete</span>
                 <span>حذف</span>
-              </button>
+              </button>` : ''}
             ` : `
-              ${(r.converted_sale_id && saleSt !== 'returned') ? `
+              ${(r.converted_sale_id && saleSt !== 'returned' && canRetSale) ? `
               <button type="button" data-ret-sale="${r.converted_sale_id}" data-ret-no="${esc(r.quote_no)}" class="px-2.5 py-1.5 rounded-lg bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-600 hover:text-white font-bold text-[11px] flex items-center gap-1" title="عمل استرجاع (مرتجع) للفاتورة بدون إلغاء التسلسل المالي">
                 <span class="material-icons-round text-sm">assignment_return</span>
                 <span>عمل استرجاع</span>
-              </button>` : `<span class="text-[11px] text-slate-400 font-bold px-2">مرتجع بالكامل</span>`}
+              </button>` : (saleSt === 'returned' ? `<span class="text-[11px] text-slate-400 font-bold px-2">مرتجع بالكامل</span>` : '')}
             `}
           </div>
         </td>
@@ -1428,9 +1433,11 @@ function openDocModal(doc) {
   const isInv = doc.doc_type === 'invoice' || doc.status === 'converted';
   const isCancelled = !isInv && doc.status === 'cancelled';
   $('modal-doc-title').textContent = `${isInv ? 'فاتورة مبيعات' : (isCancelled ? 'عرض سعر (ملغي)' : 'عرض سعر')}: ${doc.quote_no}`;
-  $('modal-btn-convert').classList.toggle('hidden', isInv || isCancelled);
-  $('modal-btn-cancel-quote').classList.toggle('hidden', isInv || isCancelled);
-  $('modal-btn-return-inv').classList.toggle('hidden', !isInv || !doc.converted_sale_id || doc.sale_status === 'returned');
+  $('modal-btn-convert').classList.toggle('hidden', isInv || isCancelled || !hasPerm('quotes_convert'));
+  $('modal-btn-cancel-quote').classList.toggle('hidden', isInv || isCancelled || !hasPerm('quotes_cancel_delete'));
+  $('modal-btn-return-inv').classList.toggle('hidden', !isInv || !doc.converted_sale_id || doc.sale_status === 'returned' || !hasPerm(['sales_return', 'sales_return_own']));
+  const mWa = $('modal-btn-wa');
+  if (mWa) mWa.classList.toggle('hidden', !(whatsappEnabled() && hasPerm('pos_whatsapp')));
   $('modal-doc-body').innerHTML = buildA4InvoiceHtml(doc, A4_TPL);
   const modal = $('doc-modal');
   modal.classList.remove('hidden');
@@ -1510,18 +1517,23 @@ $('modal-btn-return-inv').addEventListener('click', () => {
 });
 
 (async () => {
-  const user = await pageInit('sales_quotes');
+  const user = await pageInit('sales_quotes', { perm: ['quotes_view', 'quotes_create_edit'] });
   if (!user) return;
+  if (!hasPerm('quotes_create_edit')) {
+    document.querySelectorAll('[data-sq-tab="create"], #sq-create-pane').forEach((el) => el.classList.add('hidden'));
+  }
   syncTaxUiState();
   await refreshTemplatesAndSeq();
 
-  try {
-    const cl = await api('customers_search', { q: '' });
-    ALL_CUSTOMERS = cl || [];
-    $('cust-datalist').innerHTML = ALL_CUSTOMERS.map((c) => `<option value="${esc(c.name)}">${esc(c.phone || '')}</option>`).join('');
-    $('doc-cust-select').innerHTML = `<option value="">-- اختر عميلاً مسجلاً أو اكتب بياناته بالأسفل --</option>` +
-      ALL_CUSTOMERS.map((c) => `<option value="${c.id}">${esc(c.name)}${c.phone ? ' (' + esc(c.phone) + ')' : ''}</option>`).join('');
-  } catch (e) {}
+  if (hasPerm(['customers_quick_pick', 'customers_view'])) {
+    try {
+      const cl = await api('customers_search', { q: '' });
+      ALL_CUSTOMERS = cl || [];
+      $('cust-datalist').innerHTML = ALL_CUSTOMERS.map((c) => `<option value="${esc(c.name)}">${esc(c.phone || '')}</option>`).join('');
+      $('doc-cust-select').innerHTML = `<option value="">-- اختر عميلاً مسجلاً أو اكتب بياناته بالأسفل --</option>` +
+        ALL_CUSTOMERS.map((c) => `<option value="${c.id}">${esc(c.name)}${c.phone ? ' (' + esc(c.phone) + ')' : ''}</option>`).join('');
+    } catch (e) {}
+  }
 
   try {
     const cats = await api('categories');

@@ -297,19 +297,24 @@ ru = call(a, "user_save", {
     "name": "سالم علي",
     "role": "cashier",
     "pin": "2222",
-    "permissions": {"inventory_edit": True, "reports_view": False, "pos_item_discount": True},
+    "permissions": {
+        "inventory_edit": True,
+        "reports_sales_view": False,
+        "sales_post_discount": True,
+        "history_view_all": True,
+    },
 })
 check("custom permission user save ok", ru["ok"] and ru["data"]["id"] > 0)
 uid2 = ru["data"]["id"]
 
-# تسجيل الدخول بالموظف المخصص والتأكد أنه يستطيع تعديل المخزون وعمل خصم ولا يستطيع فتح التقارير
+# تسجيل الدخول بالموظف المخصص والتأكد أنه يستطيع تعديل المخزون وعمل خصم لاحق ولا يستطيع فتح التقارير
 call(a, "login", {"username": "cashier2", "pin": "2222"})
 r_allowed = call(a, "categories_save", {"name": "فئة صلاحية خاصة"})
 check("custom perm allowed inventory_edit", r_allowed["ok"])
 r_disc_allowed = call(a, "sale_discount", {"sale_id": sale_id, "discount": 10})
-check("custom perm allowed pos_item_discount", r_disc_allowed["ok"])
+check("custom perm allowed sales_post_discount", r_disc_allowed["ok"])
 r_denied = call(a, "report_daily", {})
-check("custom perm denied reports_view", not r_denied["ok"])
+check("custom perm denied reports_sales_view", not r_denied["ok"])
 
 call(a, "login", {"username": "admin", "pin": "1234"})
 ru_del = call(a, "user_delete", {"id": uid2})
@@ -750,13 +755,24 @@ with db.connect() as _c:
           _migrated_flag == "1" and _crow_mig["debt"] == 27000 and _crow_mig["credit_total"] == 27000 and _lcount_mig >= 2)
 
 # 13c) فحص نظام الأقساط المتكامل (المرحلة D): الصلاحيات، العقود المباشرة، التحصيل، الإلغاء، تحويل فاتورة آجلة، التنبيهات، وواتساب
-# أ) فحص صلاحيات الكاشير: مسموح بالعرض وممنوع من إنشاء/تحصيل/إلغاء الأقساط افتراضياً
+# أ) فحص صلاحيات الكاشير الصارم vs موظف لديه صلاحية عرض الأقساط فقط
 call(a, "login", {"username": "cashier", "pin": "1111"})
-check("cashier can view installments_list", call(a, "installments_list")["ok"])
+check("strict cashier denied installments_list", not call(a, "installments_list")["ok"])
 check("cashier denied installment_create", not call(a, "installment_create", {
     "customer_name": "عميل مرفوض", "title": "جهاز", "principal": 1000, "months": 2
 })["ok"])
 call(a, "login", {"username": "admin", "pin": "1234"})
+_inst_viewer = call(a, "user_save", {
+    "username": "inst_viewer", "name": "عارض الأقساط", "role": "cashier", "pin": "3344",
+    "permissions": {"installments_view": True},
+})["data"]["id"]
+call(a, "login", {"username": "inst_viewer", "pin": "3344"})
+check("installments_view user can view installments_list", call(a, "installments_list")["ok"])
+check("installments_view user denied installment_create", not call(a, "installment_create", {
+    "customer_name": "عميل مرفوض", "title": "جهاز", "principal": 1000, "months": 2
+})["ok"])
+call(a, "login", {"username": "admin", "pin": "1234"})
+call(a, "user_delete", {"id": _inst_viewer})
 
 # ب) إنشاء منتج ومخزون مخصص + عميل مخصص + فتح عقد تقسيط مباشر بـ 10% زيادة على 3 شهور
 ip_cat = call(a, "categories")["data"][0]["id"]
@@ -995,7 +1011,7 @@ check("module_clone creates custom alias opening source page with params",
       and cln["data"]["url"] == "inventory.html"
       and cln["data"]["full_url"] == "inventory.html?category_id=2"
       and not cln["data"]["is_builtin"]
-      and cln["data"]["perm_keys"] == ["inventory_view", "inventory_edit"])
+      and cln["data"]["perm_keys"] == ["inventory_view", "inventory_edit", "inventory_adjust"])
 check("module validation rejects bad icon, color, params & empty title",
       (not call(a, "module_clone", {"source_key": "inventory", "title": "bad icon", "icon": "bad icon!"})["ok"])
       and (not call(a, "module_clone", {"source_key": "inventory", "title": "bad col", "color": "javascript:alert(1)"})["ok"])
@@ -1198,7 +1214,7 @@ check("pages include data-label hooks and main.py clears owner state on window c
       and "_on_window_closed" in _main_py and '_STATE["owner"] = None' in _main_py)
 
 # 13g) إصلاح قراءة الضريبة للكاشير + معاينة الطباعة والطباعة المباشرة من الإعدادات
-call(a, "login", {"username": "admin", "pin": "1234"})
+call(a, "login", {"username": "admin", "pin": "8642"})
 r_prt_save = call(a, "settings_save", {
     "tax_enabled": "0",
     "pos_print_preview": "1",
@@ -1223,7 +1239,7 @@ r_sprint = call(a, "silent_print", {"mode": "thermal"})
 check("printers_list & silent_print callable cleanly",
       r_plist["ok"] and isinstance(r_plist["data"].get("printers"), list)
       and r_sprint["ok"] and r_sprint["data"].get("fallback") == "dialog")
-call(a, "login", {"username": "admin", "pin": "1234"})
+call(a, "login", {"username": "admin", "pin": "8642"})
 _pos_html = (ROOT / "web" / "pos.html").read_text(encoding="utf-8")
 _st_html = (ROOT / "web" / "settings.html").read_text(encoding="utf-8")
 _app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
@@ -1231,6 +1247,154 @@ check("pos.html & settings.html & app.js wire print preview modal, silent print 
       all(tok in _pos_html for tok in ("pos-print-preview-modal", "openPosPrintPreview", "handleSalePrintFlow", "syncSettingsRuntime", "PREVIEW_FORMAT"))
       and all(tok in _st_html for tok in ("st-pos-print-preview", "st-print-show-dialog", "st-print-printer-name"))
       and all(tok in _app_js for tok in ("tzPrintPage", "renderA4DocumentToJpeg(s, a4Cfg)")))
+
+# 13i) فحص نظام الصلاحيات الصارم الجديد (49 صلاحية / 10 مجموعات / الكاشير الصارم / الجرد الأعمى / تعطيل الحسابات / الترحيل التلقائي)
+_desk_ctx_html = (ROOT / "web" / "desktop.html").read_text(encoding="utf-8")
+check("desktop.html context menu dynamically mirrors PERMITTED_APPS & honors .hidden specificity",
+      "renderCtxMenu()" in _desk_ctx_html
+      and 'id="os-ctx-apps"' in _desk_ctx_html
+      and ".top-btn.hidden, .ctx-item.hidden" in _desk_ctx_html
+      and 'data-ctx-app="sales_quotes"' not in _desk_ctx_html)
+_ps = call(a, "permissions_schema")
+check("permissions_schema returns 49 perms, 10 groups, 7 presets",
+      _ps["ok"]
+      and len(_ps["data"].get("all_keys", [])) == 49
+      and len(_ps["data"].get("groups", [])) == 10
+      and len(_ps["data"].get("presets", [])) == 7)
+
+# استعادة قالب الإلكترونيات لضمان تفعيل كافة الأقسام الـ 13 قبل فحص عزل الصلاحيات الصارم
+call(a, "login", {"username": "admin", "pin": "8642"})
+call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
+call(a, "profile_apply", {"key": "retail_electronics", "dry_run": False, "apply_demo": True})
+call(a, "owner_logout")
+call(a, "settings_save", {"tax_enabled": "0"})
+if not call(a, "shift")["data"].get("shift"):
+    call(a, "shift_open", {"opening_cash": 0})
+_rbac_cat_id = call(a, "categories_save", {"name": "فئة اختبار RBAC"})["data"]["id"]
+_rbac_prod_id = call(a, "product_save", {
+    "sku": "RBAC-ITEM-1", "name": "صنف اختبار السرية", "category_id": _rbac_cat_id,
+    "price": 100, "cost": 60, "tracked": 0,
+})["data"]["id"]
+call(a, "product_adjust", {"id": _rbac_prod_id, "qty_change": 50, "reason": "فحص RBAC"})
+_cust_r = call(a, "customers_save", {"name": "عميل اختبار السرية", "phone": "01055566677"})
+_cust_id = _cust_r["data"]["id"]
+_adm_sale = call(a, "sale_create", {
+    "items": [{"product_id": _rbac_prod_id, "qty": 1}],
+    "payments": [{"method": "cash", "amount": 100}],
+})
+_adm_sale_id = _adm_sale["data"]["sale_id"]
+
+call(a, "login", {"username": "cashier", "pin": "1111"})
+_c_srch = call(a, "customers_search", {"q": "01055566677"})
+check("strict cashier customers_search returns name/phone only without debt",
+      _c_srch["ok"]
+      and len(_c_srch["data"]) >= 1
+      and _c_srch["data"][0].get("name") == "عميل اختبار السرية"
+      and "debt" not in _c_srch["data"][0])
+_c_sh = call(a, "shift")
+check("strict cashier shift() hides today store-wide sales",
+      _c_sh["ok"] and _c_sh["data"].get("today") is None)
+if not _c_sh["data"].get("shift"):
+    call(a, "shift_open", {"opening_cash": 0})
+check("strict cashier denied admin sale()", not call(a, "sale", {"id": _adm_sale_id})["ok"])
+check("strict cashier denied sale_discount on admin sale",
+      not call(a, "sale_discount", {"sale_id": _adm_sale_id, "discount": 5})["ok"])
+check("strict cashier denied invoice discount in sale_create",
+      not call(a, "sale_create", {
+          "items": [{"product_id": _rbac_prod_id, "qty": 1}],
+          "discount": 5, "payments": [{"method": "cash", "amount": 95}],
+      })["ok"])
+check("strict cashier denied credit sale in sale_create",
+      not call(a, "sale_create", {
+          "items": [{"product_id": _rbac_prod_id, "qty": 1}],
+          "customer_id": _cust_id, "payments": [{"method": "credit", "amount": 100}],
+      })["ok"])
+
+_c_sale = call(a, "sale_create", {
+    "items": [{"product_id": _rbac_prod_id, "qty": 1}],
+    "payments": [{"method": "cash", "amount": 100}],
+})
+check("strict cashier can make normal POS cash sale and read OWN sale",
+      _c_sale["ok"] and call(a, "sale", {"id": _c_sale["data"]["sale_id"]})["ok"])
+
+for _denied_ep, _denied_p in [
+    ("sales", {}),
+    ("history_suggestions", {}),
+    ("sales_stats", {}),
+    ("quotations", {}),
+    ("repairs", {}),
+    ("used_stats", {}),
+    ("stock_stats", {}),
+    ("report_low", {}),
+    ("users", {}),
+    ("payment_methods_save", {"methods": [{"key": "cash", "label": "كاش", "active": True}]}),
+    ("pos_categories_config_save", {"mode": "all", "category_ids": []}),
+    ("customers_list", {}),
+    ("customer_history", {"id": _cust_id}),
+    ("shift_summary", {}),
+]:
+    check(f"strict cashier denied {_denied_ep}", not call(a, _denied_ep, _denied_p)["ok"])
+
+# اختبار الجرد الأعمى (Blind Close)
+call(a, "login", {"username": "admin", "pin": "8642"})
+_blind_uid = call(a, "user_save", {
+    "username": "blind_cashier", "name": "كاشير أعمى", "role": "cashier", "pin": "4455",
+    "job_preset": "cashier_strict",
+})["data"]["id"]
+call(a, "login", {"username": "blind_cashier", "pin": "4455"})
+call(a, "shift_open", {"opening_cash": 100})
+call(a, "sale_create", {
+    "items": [{"product_id": _rbac_prod_id, "qty": 1}],
+    "payments": [{"method": "cash", "amount": 100}],
+})
+_blind_close = call(a, "shift_close", {"counted_cash": 200})
+check("blind close succeeds without leaking expected_cash or diff",
+      _blind_close["ok"]
+      and _blind_close["data"].get("blind") is True
+      and "expected_cash" not in _blind_close["data"]
+      and "diff" not in _blind_close["data"])
+
+# اختبار تعطيل الحساب + سجل تدقيق الصلاحيات
+call(a, "login", {"username": "admin", "pin": "8642"})
+_shifts_chk = call(a, "shifts")
+check("admin shifts log retains accurate diff for blind close",
+      _shifts_chk["ok"] and _shifts_chk["data"][0]["diff"] == 0)
+_tog_off = call(a, "user_toggle_active", {"id": _blind_uid, "is_active": False})
+check("user_toggle_active disables user cleanly", _tog_off["ok"] and _tog_off["data"]["is_active"] == 0)
+check("disabled user login rejected", not call(a, "login", {"username": "blind_cashier", "pin": "4455"})["ok"])
+_tog_on = call(a, "user_toggle_active", {"id": _blind_uid, "is_active": True})
+check("re-enabled user can login again",
+      _tog_on["ok"] and call(a, "login", {"username": "blind_cashier", "pin": "4455"})["ok"])
+call(a, "login", {"username": "admin", "pin": "8642"})
+_paudit = call(a, "perm_audit_list", {"limit": 20})
+check("perm_audit_list logs permission & active changes",
+      _paudit["ok"] and len(_paudit["data"]) >= 2)
+call(a, "user_delete", {"id": _blind_uid})
+
+# اختبار الترحيل التلقائي v2 لإعادة ضبط الموظفين غير الإداريين للوضع الصارم
+import json as _json
+with db.connect() as _mc:
+    _mc.execute(
+        "INSERT INTO users(username,name,role,pin_salt,pin_hash,permissions,is_active,job_preset,created_at) "
+        "VALUES('legacy_u','موظف قديم','cashier','salt123','deadbeef',?,1,'custom',?)",
+        (_json.dumps({"pos_sell": True, "reports_view": True, "settings_manage": True}), db.now()),
+    )
+    _mc.execute("DELETE FROM settings WHERE key='migration_v2_strict_perms'")
+    db._migrate_strict_permissions_v2(_mc)
+    _lu = _mc.execute("SELECT permissions, job_preset FROM users WHERE username='legacy_u'").fetchone()
+    _lup = _json.loads(_lu["permissions"])
+    _migr_flag = _mc.execute("SELECT value FROM settings WHERE key='migration_v2_strict_perms'").fetchone()["value"]
+    check("migration_v2 resets non-admin accounts to strict cashier baseline",
+          _lu["job_preset"] == "cashier_strict"
+          and _lup.get("pos_sell") is True
+          and _lup.get("shift_manage") is True
+          and _lup.get("receipt_view") is True
+          and _lup.get("customers_quick_pick") is True
+          and not _lup.get("reports_sales_view")
+          and not _lup.get("settings_view_edit")
+          and _migr_flag == "1")
+    _mc.execute("DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE username='legacy_u')")
+    _mc.execute("DELETE FROM users WHERE username='legacy_u'")
 
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()

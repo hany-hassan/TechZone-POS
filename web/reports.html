@@ -120,82 +120,109 @@ function barRow(label, val, max) {
 }
 
 async function load() {
+  const canSales = hasPerm('reports_sales_view');
+  const canProfit = hasPerm('reports_profit_view');
+  const canShifts = hasPerm('reports_shifts_view');
+  const canMoves = hasPerm('reports_movements_view');
+
   const df = document.getElementById('f-date-from').value || todayISO();
   const dt = document.getElementById('f-date-to').value || todayISO();
   const [y, m] = document.getElementById('f-month').value.split('-').map(Number);
-  let d;
-  if (PERIOD === 'day') d = await guard(() => api('report_daily', { date_from: df, date_to: dt }));
-  else d = await guard(() => api('report_monthly', { year: y, month: m }));
-  if (!d) return;
 
-  document.getElementById('cards').innerHTML =
-    card('إجمالي المبيعات', fmt(d.sales.total), CURRENCY, { i: 'attach_money', c: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' }, 'bg-primary/5') +
-    card('المرتجعات', fmt(d.returns.total), CURRENCY, { i: 'assignment_return', c: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' }, 'bg-orange-500/5') +
-    card('تحصيل مديونيات (سندات قبض)', fmt((d.vouchers && d.vouchers.total) || 0), CURRENCY, { i: 'payments', c: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' }, 'bg-purple-500/5');
+  if (canSales) {
+    let d;
+    if (PERIOD === 'day') d = await guard(() => api('report_daily', { date_from: df, date_to: dt }));
+    else d = await guard(() => api('report_monthly', { year: y, month: m }));
+    if (d) {
+      document.getElementById('cards').innerHTML =
+        card('إجمالي المبيعات', fmt(d.sales.total), CURRENCY, { i: 'attach_money', c: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' }, 'bg-primary/5') +
+        card('المرتجعات', fmt(d.returns.total), CURRENCY, { i: 'assignment_return', c: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' }, 'bg-orange-500/5') +
+        card('تحصيل مديونيات (سندات قبض)', fmt((d.vouchers && d.vouchers.total) || 0), CURRENCY, { i: 'payments', c: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' }, 'bg-purple-500/5');
 
-  const max = Math.max(d.payments.cash || 0, d.payments.wallet || 0, d.payments.credit || 0, 1);
-  document.getElementById('breakdown').innerHTML =
-    `<div class="grid grid-cols-3 gap-3 mb-4 text-sm">
-      <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">المجموع الفرعي</p><p class="font-num font-bold">${fmt(d.sales.subtotal)}</p></div>
-      <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">الخصم</p><p class="font-num font-bold text-green-600">-${fmt(d.sales.discount)}</p></div>
-      <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">الضريبة</p><p class="font-num font-bold">${fmt(d.sales.tax)}</p></div>
-    </div>` +
-    ['cash', 'wallet', 'credit'].map((k) => barRow(AR[k], d.payments[k] || 0, max)).join('');
+      const max = Math.max(d.payments.cash || 0, d.payments.wallet || 0, d.payments.credit || 0, 1);
+      document.getElementById('breakdown').innerHTML =
+        `<div class="grid grid-cols-3 gap-3 mb-4 text-sm">
+          <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">المجموع الفرعي</p><p class="font-num font-bold">${fmt(d.sales.subtotal)}</p></div>
+          <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">الخصم</p><p class="font-num font-bold text-green-600">-${fmt(d.sales.discount)}</p></div>
+          <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">الضريبة</p><p class="font-num font-bold">${fmt(d.sales.tax)}</p></div>
+        </div>` +
+        ['cash', 'wallet', 'credit'].map((k) => barRow(AR[k], d.payments[k] || 0, max)).join('');
+    }
+  } else {
+    document.getElementById('cards').classList.add('hidden');
+    document.getElementById('breakdown').parentElement.classList.add('hidden');
+  }
 
   const from = PERIOD === 'day' ? df : `${y}-${String(m).padStart(2, '0')}-01`;
   const to = PERIOD === 'day' ? dt : `${y}-${String(m).padStart(2, '0')}-31`;
   const [top, profit, low, moves, shifts] = await Promise.all([
-    guard(() => api('report_top', { date_from: from, date_to: to, limit: 6 })),
-    guard(() => api('report_profit', { date_from: from, date_to: to })),
-    guard(() => api('report_low')),
-    guard(() => api('report_movements', { limit: 12 })),
-    guard(() => api('shifts')),
+    canSales ? guard(() => api('report_top', { date_from: from, date_to: to, limit: 6 })) : Promise.resolve(null),
+    canProfit ? guard(() => api('report_profit', { date_from: from, date_to: to })) : Promise.resolve(null),
+    canMoves ? guard(() => api('report_low')) : Promise.resolve(null),
+    canMoves ? guard(() => api('report_movements', { limit: 12 })) : Promise.resolve(null),
+    canShifts ? guard(() => api('shifts')) : Promise.resolve(null),
   ]);
 
-  document.getElementById('top').innerHTML = (top || []).length ? (top || []).map((t) => `
-    <div class="flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded-lg transition-colors -mx-2">
-      <div class="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0"><span class="material-icons-round">devices</span></div>
-      <div class="flex-1 min-w-0"><h4 class="text-sm font-bold text-gray-800 dark:text-white truncate">${esc(t.name)}</h4><p class="text-xs text-gray-500 truncate">${esc(t.sku)}</p></div>
-      <div class="text-left"><p class="text-sm font-bold text-gray-900 dark:text-white font-num">${n(t.qty)}</p><p class="text-xs text-gray-400">مباع</p></div>
-    </div>`).join('') : '<div class="text-center text-gray-400 py-6">لا مبيعات في الفترة</div>';
+  if (canSales) {
+    document.getElementById('top').innerHTML = (top || []).length ? (top || []).map((t) => `
+      <div class="flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded-lg transition-colors -mx-2">
+        <div class="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0"><span class="material-icons-round">devices</span></div>
+        <div class="flex-1 min-w-0"><h4 class="text-sm font-bold text-gray-800 dark:text-white truncate">${esc(t.name)}</h4><p class="text-xs text-gray-500 truncate">${esc(t.sku)}</p></div>
+        <div class="text-left"><p class="text-sm font-bold text-gray-900 dark:text-white font-num">${n(t.qty)}</p><p class="text-xs text-gray-400">مباع</p></div>
+      </div>`).join('') : '<div class="text-center text-gray-400 py-6">لا مبيعات في الفترة</div>';
+  } else {
+    document.getElementById('top').parentElement.classList.add('hidden');
+  }
 
-  document.getElementById('profit').innerHTML = `
-    <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">إيراد البضائع</p><p class="font-num font-bold">${fmt(profit.goods_revenue)}</p></div>
-    <div class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20"><p class="text-gray-500 text-xs">ربح البضائع</p><p class="font-num font-bold text-green-600">${fmt(profit.goods_profit)}</p></div>
-    <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">إيراد الصيانة</p><p class="font-num font-bold">${fmt(profit.repair_revenue)}</p></div>
-    <div class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20"><p class="text-gray-500 text-xs">ربح الصيانة</p><p class="font-num font-bold text-green-600">${fmt(profit.repair_profit)}</p></div>`;
+  if (canProfit && profit) {
+    document.getElementById('profit').innerHTML = `
+      <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">إيراد البضائع</p><p class="font-num font-bold">${fmt(profit.goods_revenue)}</p></div>
+      <div class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20"><p class="text-gray-500 text-xs">ربح البضائع</p><p class="font-num font-bold text-green-600">${fmt(profit.goods_profit)}</p></div>
+      <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">إيراد الصيانة</p><p class="font-num font-bold">${fmt(profit.repair_revenue)}</p></div>
+      <div class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20"><p class="text-gray-500 text-xs">ربح الصيانة</p><p class="font-num font-bold text-green-600">${fmt(profit.repair_profit)}</p></div>`;
+  } else {
+    document.getElementById('profit').parentElement.classList.add('hidden');
+  }
 
-  document.getElementById('low').innerHTML = (low || []).slice(0, 8).map((p) => `
-    <div class="flex items-center justify-between px-6 py-3">
-      <span class="text-sm font-medium">${esc(p.name)}</span>
-      <span class="text-sm font-num font-bold ${p.qty <= 0 ? 'text-slate-400' : 'text-red-500'}">${n(p.qty)} / حد ${n(p.min_qty)}</span>
-    </div>`).join('') || '<div class="p-6 text-center text-gray-400">لا نواقص</div>';
+  if (canMoves) {
+    document.getElementById('low').innerHTML = (low || []).slice(0, 8).map((p) => `
+      <div class="flex items-center justify-between px-6 py-3">
+        <span class="text-sm font-medium">${esc(p.name)}</span>
+        <span class="text-sm font-num font-bold ${p.qty <= 0 ? 'text-slate-400' : 'text-red-500'}">${n(p.qty)} / حد ${n(p.min_qty)}</span>
+      </div>`).join('') || '<div class="p-6 text-center text-gray-400">لا نواقص</div>';
 
-  const REASON = { sale: 'بيع', return: 'مرتجع', repair_part: 'قطعة صيانة', used_purchase: 'شراء مستعمل', serial_add: 'إضافة سيريال', manual: 'يدوي', 'تعديل يدوي': 'تعديل يدوي' };
-  document.getElementById('moves').innerHTML = (moves || []).map((x) => `
-    <div class="flex items-center justify-between px-6 py-3 text-sm">
-      <div><span class="font-medium">${esc(x.product_name)}</span> <span class="text-gray-400">· ${esc(REASON[x.reason] || x.reason)}</span>
-        <div class="text-xs text-gray-400 font-num">${fmtDT(x.created_at)}${x.user_name ? ' · ' + esc(x.user_name) : ''}${x.ref ? ' · ' + esc(x.ref) : ''}</div></div>
-      <span class="font-num font-bold ${x.qty_change > 0 ? 'text-green-600' : 'text-red-500'}">${x.qty_change > 0 ? '+' : ''}${n(x.qty_change)}</span>
-    </div>`).join('') || '<div class="p-6 text-center text-gray-400">لا حركات</div>';
-
-  document.getElementById('shifts-list').innerHTML = (shifts || []).map((sh) => {
-    const closed = !!sh.closed_at;
-    const diffStr = !closed ? 'مفتوحة' : (sh.diff === 0 ? 'متطابقة' : (sh.diff > 0 ? `+${fmt(sh.diff)}` : fmt(sh.diff)));
-    const diffCol = !closed ? 'text-blue-600' : (sh.diff === 0 ? 'text-green-600' : (sh.diff > 0 ? 'text-emerald-600' : 'text-red-500'));
-    return `
+    const REASON = { sale: 'بيع', return: 'مرتجع', repair_part: 'قطعة صيانة', used_purchase: 'شراء مستعمل', serial_add: 'إضافة سيريال', manual: 'يدوي', 'تعديل يدوي': 'تعديل يدوي' };
+    document.getElementById('moves').innerHTML = (moves || []).map((x) => `
       <div class="flex items-center justify-between px-6 py-3 text-sm">
-        <div>
-          <span class="font-bold">${esc(sh.user_name)}</span>
-          <span class="text-xs text-gray-400 font-num mr-2">${fmtDT(sh.opened_at)}${closed ? ' ← ' + fmtDT(sh.closed_at) : ''}</span>
-          <div class="text-xs text-gray-500 font-num mt-0.5">افتتاحي: ${fmt(sh.opening_cash)} · مبيعات الوردية: ${fmt(sh.sales_total)} ${CURRENCY}</div>
-        </div>
-        <div class="text-left">
-          <span class="font-num font-bold ${diffCol}">${diffStr}</span>
-          ${closed ? `<div class="text-[11px] text-gray-400 font-num">فعلي: ${fmt(sh.counted_cash)} / متوقع: ${fmt(sh.expected_cash)}</div>` : ''}
-        </div>
-      </div>`;
-  }).join('') || '<div class="p-6 text-center text-gray-400">لا ورديات مسجلة</div>';
+        <div><span class="font-medium">${esc(x.product_name)}</span> <span class="text-gray-400">· ${esc(REASON[x.reason] || x.reason)}</span>
+          <div class="text-xs text-gray-400 font-num">${fmtDT(x.created_at)}${x.user_name ? ' · ' + esc(x.user_name) : ''}${x.ref ? ' · ' + esc(x.ref) : ''}</div></div>
+        <span class="font-num font-bold ${x.qty_change > 0 ? 'text-green-600' : 'text-red-500'}">${x.qty_change > 0 ? '+' : ''}${n(x.qty_change)}</span>
+      </div>`).join('') || '<div class="p-6 text-center text-gray-400">لا حركات</div>';
+  } else {
+    document.getElementById('low').parentElement.parentElement.classList.add('hidden');
+  }
+
+  if (canShifts) {
+    document.getElementById('shifts-list').innerHTML = (shifts || []).map((sh) => {
+      const closed = !!sh.closed_at;
+      const diffStr = !closed ? 'مفتوحة' : (sh.diff === 0 ? 'متطابقة' : (sh.diff > 0 ? `+${fmt(sh.diff)}` : fmt(sh.diff)));
+      const diffCol = !closed ? 'text-blue-600' : (sh.diff === 0 ? 'text-green-600' : (sh.diff > 0 ? 'text-emerald-600' : 'text-red-500'));
+      return `
+        <div class="flex items-center justify-between px-6 py-3 text-sm">
+          <div>
+            <span class="font-bold">${esc(sh.user_name)}</span>
+            <span class="text-xs text-gray-400 font-num mr-2">${fmtDT(sh.opened_at)}${closed ? ' ← ' + fmtDT(sh.closed_at) : ''}</span>
+            <div class="text-xs text-gray-500 font-num mt-0.5">افتتاحي: ${fmt(sh.opening_cash)} · مبيعات الوردية: ${fmt(sh.sales_total)} ${CURRENCY}</div>
+          </div>
+          <div class="text-left">
+            <span class="font-num font-bold ${diffCol}">${diffStr}</span>
+            ${closed ? `<div class="text-[11px] text-gray-400 font-num">فعلي: ${fmt(sh.counted_cash)} / متوقع: ${fmt(sh.expected_cash)}</div>` : ''}
+          </div>
+        </div>`;
+    }).join('') || '<div class="p-6 text-center text-gray-400">لا ورديات مسجلة</div>';
+  } else {
+    document.getElementById('shifts-list').parentElement.classList.add('hidden');
+  }
 }
 
 document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => {
@@ -216,7 +243,7 @@ document.getElementById('btn-rep-today').addEventListener('click', () => {
 document.getElementById('f-month').addEventListener('change', load);
 
 (async () => {
-  if (!(await pageInit('reports', { perm: 'reports_view' }))) return;
+  if (!(await pageInit('reports', { perm: ['reports_sales_view', 'reports_profit_view', 'reports_shifts_view', 'reports_movements_view'] }))) return;
   const d = new Date();
   const t = todayISO();
   document.getElementById('f-date-from').value = t;

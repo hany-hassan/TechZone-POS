@@ -87,7 +87,7 @@ class ReportsMixin:
         }
 
     def report_daily(self, date=None, date_from=None, date_to=None):
-        self._perm("reports_view")
+        self._perm("reports_sales_view")
         with db.connect() as conn:
             if date_from or date_to:
                 where, args = self._range(conn, date_from=date_from, date_to=date_to)
@@ -97,13 +97,13 @@ class ReportsMixin:
             return self._period_stats(conn, where, args)
 
     def report_monthly(self, year, month):
-        self._perm("reports_view")
+        self._perm("reports_sales_view")
         with db.connect() as conn:
             where, args = self._range(conn, month={"year": year, "month": month})
             return self._period_stats(conn, where, args)
 
     def report_top(self, date_from=None, date_to=None, limit=10):
-        self._perm("reports_view")
+        self._perm("reports_sales_view")
         limit = _int(limit, 10)
         where, args = ["1=1"], []
         if date_from:
@@ -124,7 +124,7 @@ class ReportsMixin:
             return [{"name": r["name"], "sku": r["sku"], "qty": r["sold_qty"], "total": r["total"]} for r in rows]
 
     def report_profit(self, date_from=None, date_to=None):
-        self._perm("reports_view")
+        self._perm("reports_profit_view")
         where, args = ["1=1"], []
         if date_from:
             where.append("s.created_at >= ?")
@@ -168,7 +168,7 @@ class ReportsMixin:
             }
 
     def report_low(self):
-        self._user()
+        self._perm_any("inventory_view", "reports_movements_view")
         with db.connect() as conn:
             rows = conn.execute(
                 """SELECT p.id, p.name, p.sku, p.qty, p.min_qty, c.name category
@@ -178,7 +178,7 @@ class ReportsMixin:
             return [dict(r) for r in rows]
 
     def report_movements(self, limit=100):
-        self._perm("reports_view")
+        self._perm("reports_movements_view")
         limit = _int(limit, 100)
         with db.connect() as conn:
             rows = conn.execute(
@@ -192,7 +192,7 @@ class ReportsMixin:
             return [dict(r) for r in rows]
 
     def stock_stats(self):
-        self._user()
+        self._perm("inventory_view")
         with db.connect() as conn:
             n = conn.execute("SELECT COUNT(*) c FROM products WHERE active=1").fetchone()["c"]
             val = conn.execute("SELECT COALESCE(SUM(qty*price),0) v FROM products WHERE active=1").fetchone()["v"]

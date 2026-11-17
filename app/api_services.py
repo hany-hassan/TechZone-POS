@@ -151,7 +151,7 @@ class ServicesMixin:
             return {"id": uid, "ref": row["ref"], "product_id": row["product_id"], "customer_id": customer_id}
 
     def used(self, q=None, limit=100, offset=0):
-        self._perm("used_manage")
+        self._perm_any("used_view", "used_manage")
         limit, offset = _int(limit, 100), _int(offset, 0)
         where, args = ["1=1"], []
         if q:
@@ -169,7 +169,7 @@ class ServicesMixin:
             return {"rows": [dict(r) for r in rows], "total": total}
 
     def used_stats(self):
-        self._user()
+        self._perm_any("used_view", "used_manage")
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         with db.connect() as conn:
             t = conn.execute(
@@ -182,7 +182,7 @@ class ServicesMixin:
     # ---------------------------------------------------------- صيانة
     def repair_create(self, customer_name, customer_phone, device_type, problem, address=None,
                        serial=None, accessories=None, notes=None, priority=0, cost=0):
-        u = self._perm("repair_edit")
+        u = self._perm("repair_create")
         for f, v in (("customer_name", customer_name), ("customer_phone", customer_phone),
                      ("device_type", device_type), ("problem", problem)):
             if not (v or "").strip():
@@ -210,7 +210,7 @@ class ServicesMixin:
             return {"id": cur.lastrowid, "ref": ref}
 
     def repairs(self, q=None, status=None, limit=100, offset=0):
-        self._user()
+        self._perm("repair_view")
         limit, offset = _int(limit, 100), _int(offset, 0)
         where, args = ["1=1"], []
         if status and status in REPAIR_FLOW:
@@ -331,7 +331,7 @@ class ServicesMixin:
 
     def repair_delete(self, id):
         """حذف تذكرة صيانة إذا لم تؤثر على الوضع المالي (غير مسلمة بتكلفة مالية) مع استرجاع قطع الغيار للمخزون."""
-        u = self._perm("repair_edit")
+        u = self._perm("repair_delete")
         rid = _int(id)
         with db.connect() as conn:
             r = conn.execute("SELECT * FROM repairs WHERE id=?", (rid,)).fetchone()

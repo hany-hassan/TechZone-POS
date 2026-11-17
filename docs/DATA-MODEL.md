@@ -2,7 +2,7 @@
 
 ## Overview
 
-All TechZone data is stored in a single SQLite database at `data/shop.db` (or beside the `.exe` when packaged). The schema comprises **28 tables** managed by `app/db.py`, which handles creation, seeding, and non-destructive auto-migration on every startup.
+All TechZone data is stored in a single SQLite database at `data/shop.db` (or beside the `.exe` when packaged). The schema comprises **31 tables** managed by `app/db.py`, which handles creation, seeding, and non-destructive auto-migration on every startup.
 
 ---
 
@@ -499,32 +499,30 @@ Customer installment financing contracts (direct item sale, inventory deduction,
 
 ---
 
-## Access Control Matrix
+## Access Control Matrix (49 Granular Permissions in 10 Groups)
 
-TechZone enforces **18 granular permissions** checked server-side via `_perm(key)` in `app/api_*.py`. The `admin` role bypasses all checks. Cashier permissions are individually toggled per user in `staff.html`.
+TechZone enforces **49 granular permissions** organized in **10 groups** (canonical registry in `app/permissions.py`) and checked server-side via `_perm(key)` / `_perm_any()` / `_perm_all()` in `app/api_*.py`. The `admin` role bypasses all permission checks (subject to Owner Mode module state). Non-admin accounts (`role='cashier'`) start from the strict cashier baseline (`cashier_strict`: `pos_sell`, `shift_manage`, `receipt_view`, `customers_quick_pick`) or one of **7 job presets** (`permission_roles`), synced between `users.permissions` (JSON cache) and the normalized `user_permissions` table, with changes logged in `perm_audit_log`.
 
-| Permission Key | Resource / Action | Admin | Cashier (if granted) |
-|---------------|-------------------|:-----:|:--------------------:|
-| `pos_sell` | Create POS sales | ✅ | ✅ |
-| `pos_price` | View/modify prices in POS | ✅ | ✅ |
-| `pos_item_discount` | Apply per-item discounts in POS | ✅ | ✅ |
-| `sales_return` | Process sale returns | ✅ | ✅ |
-| `sales_all` | View all users' sales (not just own) | ✅ | ✅ |
-| `inventory_view` | View product catalog and stock levels | ✅ | ✅ |
-| `inventory_edit` | Add/edit/delete products and adjust stock | ✅ | ✅ |
-| `cost_view` | View product cost prices and profit margins | ✅ | ✅ |
-| `customers_view` | View customer list and account statements | ✅ | ✅ |
-| `customers_edit` | Add/edit customer records | ✅ | ✅ |
-| `customers_delete` | Delete customer records | ✅ | ✅ |
-| `repair_view` | View repair tickets | ✅ | ✅ |
-| `repair_edit` | Create/edit repair tickets and update status | ✅ | ✅ |
-| `used_manage` | Record used device purchases | ✅ | ✅ |
-| `reports_view` | Access financial reports and analytics | ✅ | ✅ |
-| `settings_manage` | Modify system settings, invoice templates, payment methods | ✅ | ✅ |
-| `installments_view` | View installment contracts, schedules & reminders | ✅ | ✅ |
-| `installments_manage` | Create, collect payments on, and cancel installment contracts | ✅ | ✅ |
+| Group | Count | Permission Keys |
+|-------|:-----:|----------------|
+| `pos` | 9 | `pos_sell`, `shift_manage`, `shift_summary_view` (disabling activates Blind Close), `pos_item_discount`, `pos_invoice_discount`, `pos_price`, `pos_credit_sale`, `pos_whatsapp`, `pos_categories_manage` |
+| `history` | 6 | `receipt_view`, `history_view_own`, `history_view_all`, `sales_return_own`, `sales_return`, `sales_post_discount` |
+| `quotes` | 4 | `quotes_view`, `quotes_create_edit`, `quotes_convert`, `quotes_cancel_delete` |
+| `customers` | 6 | `customers_quick_pick` (name/phone only), `customers_view`, `customers_debt_view`, `customers_edit`, `customers_payment`, `customers_delete` |
+| `installments` | 4 | `installments_view`, `installments_collect`, `installments_create`, `installments_cancel` |
+| `inventory` | 5 | `inventory_view`, `inventory_edit`, `inventory_adjust`, `serials_view`, `cost_view` |
+| `repair` | 4 | `repair_view`, `repair_create`, `repair_edit`, `repair_delete` |
+| `buy_used` | 2 | `used_view`, `used_manage` |
+| `reports` | 4 | `reports_sales_view`, `reports_profit_view`, `reports_shifts_view`, `reports_movements_view` |
+| `admin` | 5 | `staff_view`, `staff_manage`, `settings_view_edit`, `templates_manage`, `backups_manage` |
 
-> **Note:** The "Cashier" column shows capabilities when the specific permission is granted. By default, a new cashier has **no permissions** — the admin must explicitly enable each one from `staff.html`.
+> **Strict Isolation & Blind Mode:** By default (`cashier_strict`), cashiers can only open/close their own shift in Blind Close mode (`shift_summary_view=False`), sell catalog items at catalog price with cash/wallet, select customer name/phone only without seeing debt (`customers_quick_pick=True`, `customers_debt_view=False`), and preview/print their own receipts. Additional capabilities are granted individually or via presets in `staff.html`.
+
+### RBAC Tables (3 Tables Added in v2 Overhaul)
+
+- **`user_permissions`**: Normalized mapping (`user_id`, `perm_key`, `granted`) kept in sync with `users.permissions`.
+- **`permission_roles`**: 7 built-in job presets (`key`, `name`, `description`, `badge_color`, `perms_json`, `is_builtin`).
+- **`perm_audit_log`**: Audit trail of permission edits, preset assignments, and `is_active` account suspensions (`ts`, `actor_id`, `actor_name`, `target_user_id`, `target_username`, `action`, `diff_json`).
 
 ### Access Pattern by Page
 
@@ -532,21 +530,21 @@ TechZone enforces **18 granular permissions** checked server-side via `_perm(key
 |------|----------------------|----------|
 | `index.html` | None (public login) | — |
 | `owner.html` | Independent Owner Mode passphrase / setup by `admin` | Redirected / hidden behind 2s long-press |
-| `desktop.html` | Any authenticated user | — |
-| `profile.html` | Any authenticated user | — |
+| `desktop.html` | Any active authenticated user (`is_active=1`) | — |
+| `profile.html` | Any active authenticated user | — |
 | `pos.html` | `pos_sell` | Redirected / hidden |
-| `sales_quotes.html` | `pos_sell` | Redirected / hidden |
-| `history.html` | `pos_sell` or `sales_all` | Shows only own sales |
-| `customers.html` | `customers_view` | Redirected / hidden |
-| `customer_details.html` | `customers_view` | Redirected / hidden |
+| `sales_quotes.html` | `quotes_view` | Redirected / hidden (own-scoped unless `history_view_all`) |
+| `history.html` | `history_view_own` or `history_view_all` | Redirected / hidden; shows own sales without `history_view_all` |
+| `customers.html` | `customers_view` | Redirected / hidden; debt redacted without `customers_debt_view` |
+| `customer_details.html` | `customers_view` (+ `customers_debt_view` for full ledger) | Redirected / hidden |
 | `installments.html` | `installments_view` | Redirected / hidden |
-| `inventory.html` | `inventory_view` | Redirected / hidden |
+| `inventory.html` | `inventory_view` | Redirected / hidden; cost redacted without `cost_view` |
 | `repair.html` | `repair_view` | Redirected / hidden |
-| `buy_used.html` | `used_manage` | Redirected / hidden |
-| `receipt.html` | Any authenticated user | — |
-| `reports.html` | `reports_view` | Redirected / hidden |
-| `settings.html` | `settings_manage` | Redirected / hidden |
-| `staff.html` | Admin only (`role = 'admin'`) | Redirected / hidden |
+| `buy_used.html` | `used_view` or `used_manage` | Redirected / hidden |
+| `receipt.html` | `receipt_view` (or `history_view_*` / `pos_sell`) | Ownership-checked on server unless `history_view_all` |
+| `reports.html` | `reports_sales_view`, `reports_profit_view`, `reports_shifts_view`, or `reports_movements_view` | Redirected / hidden |
+| `settings.html` | `settings_view_edit`, `templates_manage`, or `backups_manage` | Redirected / hidden |
+| `staff.html` | `staff_view` or `staff_manage` | Redirected / hidden |
 
 ---
 

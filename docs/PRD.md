@@ -161,17 +161,16 @@
 | 21–23 | منظومة الأقساط | `installment_plans`, `installment_items`, `installment_payments` |
 | 24–28 | منظومة المالك والقوالب | `owner_auth`, `owner_audit_log`, `modules`, `ui_labels`, `business_profiles` |
 
-### 7.3 نظام الصلاحيات (18 صلاحية)
+### 7.3 نظام الصلاحيات الصارم (49 صلاحية في 10 مجموعات)
 
-المدير (`role='admin'`) يملك كافة الصلاحيات تلقائياً للأقسام المفعّلة. لكل موظف آخر يمكن تخصيص الـ 18 صلاحية التالية (تفاصيلها الكاملة في [`DATA-MODEL.md`](DATA-MODEL.md)):
-`pos_sell`, `pos_price`, `pos_item_discount`, `sales_return`, `sales_all`, `inventory_view`, `inventory_edit`, `cost_view`, `customers_view`, `customers_edit`, `customers_delete`, `repair_view`, `repair_edit`, `used_manage`, `reports_view`, `settings_manage`, `installments_view`, `installments_manage`.
+المدير (`role='admin'`) يملك كافة الصلاحيات تلقائياً للأقسام المفعّلة. لغير المدير يوجد وضع افتراضي صارم (`cashier_strict`: `pos_sell`، `shift_manage`، `receipt_view`، `customers_quick_pick` بالاسم والهاتف فقط بدون مديونية، ومع الجرد الأعمى عند إغلاق الوردية) بالإضافة إلى 7 قوالب وظائف جاهزة في `permission_roles` وتخصيص كامل لـ **49 صلاحية** موزعة على **10 مجموعات** في [`app/permissions.py`](../app/permissions.py) و[`DATA-MODEL.md`](DATA-MODEL.md).
 
 ---
 
 ## 8. معايير القبول
 
 - [x] كافة الصفحات الـ 17 تعمل بدون أخطاء في وحدة التحكم (Console)
-- [x] اجتياز كافة فحوصات `selfcheck.py` (195 فحصاً آلياً + التحقق من عقد الواجهة) بنجاح تام
+- [x] اجتياز كافة فحوصات `selfcheck.py` (232 فحصاً آلياً + التحقق من عقد الواجهة لـ 112 دالة) بنجاح تام
 - [x] إتمام دورة بيع كاملة: إضافة منتج → بيع في POS → طباعة إيصال → عرض في سجل المبيعات
 - [x] إتمام دورة عرض سعر: إنشاء عرض → تحويل لفاتورة → طباعة A4 → إرسال PDF عبر واتساب
 - [x] تسجيل دخول المدير والكاشير بالأوضاع الثلاثة بنجاح

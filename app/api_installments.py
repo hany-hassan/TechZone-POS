@@ -68,7 +68,7 @@ class InstallmentsMixin:
         u = self._user()
         if u["role"] != "admin":
             perms = u.get("permissions") or {}
-            if not (perms.get("installments_view") or perms.get("installments_manage")):
+            if not (perms.get("installments_view") or perms.get("installments_collect") or perms.get("installments_create")):
                 return {"overdue_count": 0, "overdue_amount": 0, "due_soon_count": 0, "due_soon_amount": 0, "active_count": 0}
         today = datetime.date.today().isoformat()
         soon_end = (datetime.date.today() + datetime.timedelta(days=7)).isoformat()
@@ -98,7 +98,7 @@ class InstallmentsMixin:
             }
 
     def installments_list(self, q="", status="all", limit=50, offset=0):
-        self._perm_any("installments_view", "installments_manage")
+        self._perm_any("installments_view", "installments_collect", "installments_create")
         limit = max(1, min(200, _int(limit, 50)))
         offset = max(0, _int(offset, 0))
         q = (q or "").strip()
@@ -222,7 +222,7 @@ class InstallmentsMixin:
 
     def installment_eligible_sales(self, customer_id):
         """جلب الفواتير الآجلة المفتوحة للعميل الصالحة للتحويل إلى خطة أقساط."""
-        self._perm_any("installments_view", "installments_manage")
+        self._perm_any("installments_view", "installments_collect", "installments_create")
         cid = _int(customer_id)
         with db.connect() as conn:
             cust = conn.execute("SELECT * FROM customers WHERE id=?", (cid,)).fetchone()
@@ -253,7 +253,7 @@ class InstallmentsMixin:
             return out
 
     def installment_detail(self, id):
-        self._perm_any("installments_view", "installments_manage")
+        self._perm_any("installments_view", "installments_collect", "installments_create")
         pid = _int(id)
         today_dt = datetime.date.today()
         with db.connect() as conn:
@@ -337,7 +337,7 @@ class InstallmentsMixin:
         notes=None,
     ):
         """إنشاء عقد تقسيط جديد مع توليد جدول الأقساط وقيد دفتر الأستاذ وتحديث المخزون."""
-        u = self._perm("installments_manage")
+        u = self._perm("installments_create")
         count = _int(months, 6)
         if count < 1 or count > 120:
             raise ApiError("عدد الأقساط يجب أن يكون بين 1 و 120 قسطاً")
@@ -569,7 +569,7 @@ class InstallmentsMixin:
 
     def installment_pay(self, plan_id, amount, method="cash", ref_no=None, item_id=None, notes=None):
         """تحصيل دفعة أو قسط (كامل أو جزئي أو متعدد الأقساط) وتسجيل القيد والإيصال."""
-        u = self._perm_any("installments_view", "installments_manage")
+        u = self._perm("installments_collect")
         pid = _int(plan_id)
         amt = _money(amount)
         if amt <= 0:
@@ -680,7 +680,7 @@ class InstallmentsMixin:
 
     def installment_cancel(self, plan_id, reason=None):
         """إلغاء عقد تقسيط لم تُحصّل منه أقساط، مع عكس قيد الدفتر وإعادة المخزون إن وجد."""
-        u = self._perm("installments_manage")
+        u = self._perm("installments_cancel")
         pid = _int(plan_id)
         reason = (reason or "").strip() or "إلغاء عقد تقسيط"
         with db.connect() as conn:
@@ -734,7 +734,7 @@ class InstallmentsMixin:
 
     def installment_whatsapp_reminder(self, plan_id, item_id=None, open_app=True):
         """تجهيز وفتح رسالة تذكير بموعد القسط أو كشف العقد عبر واتساب."""
-        self._perm_any("installments_view", "installments_manage")
+        self._perm("installments_collect")
         det = self.installment_detail(plan_id)
         plan = det["plan"]
         digits = _normalize_eg_phone(plan.get("customer_phone") or "")

@@ -190,7 +190,7 @@
 
         <!-- أدوات الفواتير المدفوعة (خصم + تعديل في الكاشير) -->
         <div id="d-sale-tools" class="space-y-2 hidden">
-          <div class="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3 space-y-2">
+          <div id="d-sale-disc-box" class="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3 space-y-2">
             <label class="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
               <span class="material-icons-outlined text-sm">discount</span>عمل خصم على الفاتورة المدفوعة
             </label>
@@ -438,14 +438,18 @@ async function openDetail(kind, id, subKind = '', quoteId = null) {
     document.getElementById('d-tot').textContent = `${fmt(s.total)} ${CURRENCY}`;
     document.getElementById('d-disc-val').value = (s.discount / 100).toFixed(2);
 
-    const canReturn = s.status !== 'returned' && (!CURRENT_USER.permissions || CURRENT_USER.permissions.includes('sales_return'));
+    const canReturn = s.status !== 'returned' && hasPerm(['sales_return', 'sales_return_own']);
+    const canPostDisc = hasPerm('sales_post_discount');
+    const canEditInPos = s.status !== 'returned' && hasPerm('pos_sell') && hasPerm(['sales_return', 'sales_return_own', 'sales_post_discount']);
     document.getElementById('d-return-btn').classList.toggle('hidden', !canReturn);
     document.getElementById('ret-reason-box').classList.toggle('hidden', !canReturn);
     document.getElementById('ret-hint').classList.toggle('hidden', !canReturn);
-    document.getElementById('d-sale-tools').classList.toggle('hidden', !canReturn);
+    document.getElementById('d-sale-disc-box').classList.toggle('hidden', !canPostDisc);
+    document.getElementById('d-edit-pos-btn').classList.toggle('hidden', !canEditInPos);
+    document.getElementById('d-sale-tools').classList.toggle('hidden', !canPostDisc && !canEditInPos);
     document.getElementById('d-quote-tools').classList.add('hidden');
     document.getElementById('d-print').classList.remove('hidden');
-    document.getElementById('d-wa').classList.remove('hidden');
+    document.getElementById('d-wa').classList.toggle('hidden', !(whatsappEnabled() && hasPerm('pos_whatsapp')));
 
     document.getElementById('d-items').innerHTML = s.items.map((it) => {
       const rem = it.remaining_qty != null ? it.remaining_qty : it.qty;
@@ -480,11 +484,13 @@ async function openDetail(kind, id, subKind = '', quoteId = null) {
     document.getElementById('d-return-btn').classList.add('hidden');
     document.getElementById('ret-reason-box').classList.add('hidden');
     document.getElementById('ret-hint').classList.add('hidden');
-    document.getElementById('d-quote-tools').classList.remove('hidden');
-    document.getElementById('d-quote-conv-btn').classList.toggle('hidden', qDoc.status === 'cancelled');
-    document.getElementById('d-quote-cancel-btn').classList.toggle('hidden', qDoc.status === 'cancelled');
+    document.getElementById('d-quote-tools').classList.toggle('hidden', !hasPerm(['quotes_convert', 'quotes_cancel_delete']));
+    document.getElementById('d-quote-conv-btn').classList.toggle('hidden', qDoc.status === 'cancelled' || !hasPerm('quotes_convert'));
+    document.getElementById('d-quote-cancel-btn').classList.toggle('hidden', qDoc.status === 'cancelled' || !hasPerm('quotes_cancel_delete'));
+    const qDelBtn = document.getElementById('d-quote-del-btn');
+    if (qDelBtn) qDelBtn.classList.toggle('hidden', !hasPerm('quotes_cancel_delete'));
     document.getElementById('d-print').classList.remove('hidden');
-    document.getElementById('d-wa').classList.remove('hidden');
+    document.getElementById('d-wa').classList.toggle('hidden', !(whatsappEnabled() && hasPerm('pos_whatsapp')));
 
     document.getElementById('d-sub').textContent = fmt(qDoc.subtotal);
     document.getElementById('d-disc').textContent = fmt(qDoc.discount);
@@ -793,8 +799,14 @@ document.getElementById('prev').addEventListener('click', () => { OFFSET = Math.
 document.getElementById('next').addEventListener('click', () => { OFFSET += LIMIT; loadRows(); });
 
 (async () => {
-  const u = await pageInit('history');
+  const u = await pageInit('history', { perm: ['history_view_own', 'history_view_all', 'sales_return_own', 'sales_return', 'sales_post_discount'] });
   if (!u) return;
+  if (!hasPerm('quotes_view')) {
+    document.querySelectorAll('#f-tabs [data-kind="quote"], #f-tabs [data-kind="b2b"]').forEach((b) => b.classList.add('hidden'));
+  }
+  if (!hasPerm('repair_view')) {
+    document.querySelectorAll('#f-tabs [data-kind="repair"]').forEach((b) => b.classList.add('hidden'));
+  }
   const t = todayISO();
   document.getElementById('f-date-from').value = t;
   document.getElementById('f-date-to').value = t;

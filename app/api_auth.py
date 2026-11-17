@@ -10,6 +10,7 @@ import time
 from decimal import Decimal, ROUND_HALF_UP
 
 import db
+from permissions import ALL_PERM_KEYS, PERMISSION_GROUPS
 from api_common import (
     ApiError,
     _FALLBACK_JPEG,
@@ -36,7 +37,7 @@ class AuthSettingsMixin:
         """إعدادات شاشة تسجيل الدخول العامة (اسم المحل والشعار وطريقة الدخول وقائمة أسماء الموظفين دون كشف الدور)."""
         with db.connect() as conn:
             st = self._settings(conn)
-            rows = conn.execute("SELECT id, username, name, avatar FROM users ORDER BY id").fetchall()
+            rows = conn.execute("SELECT id, username, name, avatar FROM users WHERE COALESCE(is_active,1)=1 ORDER BY id").fetchall()
             try:
                 fail_state = json.loads(st.get("login_fail_state") or "{}")
                 if not isinstance(fail_state, dict):
@@ -65,26 +66,91 @@ class AuthSettingsMixin:
                 "users": [{"id": r["id"], "username": r["username"], "name": r["name"], "avatar": r["avatar"]} for r in rows],
             }
 
-    def users(self):
+    def permissions_schema(self):
+        """إرجاع المخطط الرسمي للصلاحيات التفصيلية والقوالب الوظيفية المتاحة."""
+        self._user()
+        with db.connect() as conn:
+            roles_rows = conn.execute(
+                "SELECT key, name, description, badge_color, perms_json, is_builtin FROM permission_roles ORDER BY is_builtin DESC, name"
+            ).fetchall()
+            presets = []
+            for r in roles_rows:
+                try:
+                    pdict = db.parse_user_perms("cashier", r["perms_json"])
+                except Exception:
+                    pdict = dict(db.DEFAULT_CASHIER_PERMS)
+                presets.append({
+                    "key": r["key"],
+                    "name": r["name"],
+                    "description": r["description"],
+                    "badge_color": r["badge_color"],
+                    "is_builtin": bool(r["is_builtin"]),
+                    "perms": pdict,
+                })
+            return {"groups": PERMISSION_GROUPS, "all_keys": list(ALL_PERM_KEYS), "presets": presets}
+
+    def perm_audit_list(self, limit=80):
+        """سجل تغييرات صلاحيات وحالات الموظفين."""
+        self._perm_any("staff_view", "staff_manage")
+        lim = max(1, min(300, _int(limit, 80)))
         with db.connect() as conn:
             rows = conn.execute(
-                "SELECT id, username, name, role, permissions, card_size, start_page, start_mode, theme_mode, avatar, created_at FROM users ORDER BY id"
+                "SELECT * FROM perm_audit_log ORDER BY id DESC LIMIT ?", (lim,)
             ).fetchall()
             out = []
             for r in rows:
                 d = dict(r)
-                d["permissions"] = db.parse_user_perms(d["role"], d.get("permissions"))
+                try:
+                    d["diff"] = json.loads(d.get("diff_json") or "{}")
+                except Exception:
+                    d["diff"] = {}
                 out.append(d)
             return out
 
-    def _row_to_user_dict(self, row) -> dict:
+    def users(self):
+        self._perm_any("staff_view", "staff_manage")
+        with db.connect() as conn:
+            rows = conn.execute(
+                """SELECT id, username, name, role, permissions, is_active, job_preset,
+                          card_size, start_page, start_mode, theme_mode, avatar, created_at
+                   FROM users ORDER BY id"""
+            ).fetchall()
+            out = []
+            for r in rows:
+                d = dict(r)
+                d["is_active"] = bool(d.get("is_active", 1))
+                d["permissions"] = self._load_effective_perms(conn, d["id"], d["role"], d.get("permissions"))
+                out.append(d)
+            return out
+
+    def _load_effective_perms(self, conn, user_id: int, role: str, raw_json: str | None) -> dict:
+        if role == "admin":
+            return dict(db.ALL_ADMIN_PERMS)
+        up_rows = conn.execute(
+            "SELECT perm_key, granted FROM user_permissions WHERE user_id=?", (user_id,)
+        ).fetchall()
+        if up_rows:
+            merged = dict(db.DEFAULT_CASHIER_PERMS)
+            for ur in up_rows:
+                if ur["perm_key"] in merged:
+                    merged[ur["perm_key"]] = bool(ur["granted"])
+            return merged
+        return db.parse_user_perms(role, raw_json)
+
+    def _row_to_user_dict(self, row, conn=None) -> dict:
         keys = row.keys()
+        if conn is not None:
+            perms = self._load_effective_perms(conn, row["id"], row["role"], row["permissions"] if "permissions" in keys else None)
+        else:
+            perms = db.parse_user_perms(row["role"], row["permissions"] if "permissions" in keys else None)
         return {
             "id": row["id"],
             "username": row["username"],
             "name": row["name"],
             "role": row["role"],
-            "permissions": db.parse_user_perms(row["role"], row["permissions"] if "permissions" in keys else None),
+            "is_active": bool(row["is_active"]) if "is_active" in keys and row["is_active"] is not None else True,
+            "job_preset": row["job_preset"] if "job_preset" in keys else None,
+            "permissions": perms,
             "card_size": row["card_size"] if "card_size" in keys else None,
             "wallpaper": row["wallpaper"] if "wallpaper" in keys else None,
             "custom_bg": row["custom_bg"] if "custom_bg" in keys else None,
@@ -162,7 +228,7 @@ class AuthSettingsMixin:
             conn.commit()
             row = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
             if row:
-                _STATE["user"] = self._row_to_user_dict(row)
+                _STATE["user"] = self._row_to_user_dict(row, conn)
         return {
             "card_size": _STATE["user"].get("card_size"),
             "wallpaper": _STATE["user"].get("wallpaper"),
@@ -255,7 +321,7 @@ class AuthSettingsMixin:
         with db.connect() as conn:
             st = self._settings(conn)
             updated = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
-            _STATE["user"] = self._row_to_user_dict(updated)
+            _STATE["user"] = self._row_to_user_dict(updated, conn)
             eff_sp = _STATE["user"].get("start_page") or st.get("default_start_page") or "pos"
             enabled_keys = self._enabled_module_keys(conn)
             if eff_sp != "desktop" and eff_sp not in enabled_keys:
@@ -267,8 +333,8 @@ class AuthSettingsMixin:
             )
         return dict(_STATE["user"])
 
-    def user_save(self, username, name, role="cashier", pin=None, permissions=None, id=None, start_page=None, start_mode=None, avatar=None):
-        self._perm("settings_manage")
+    def user_save(self, username, name, role="cashier", pin=None, permissions=None, id=None, start_page=None, start_mode=None, avatar=None, job_preset=None, is_active=None):
+        actor = self._perm("staff_manage")
         username = (username or "").strip()
         name = (name or "").strip()
         if not username or not name:
@@ -294,6 +360,7 @@ class AuthSettingsMixin:
                 if k in permissions:
                     perms_dict[k] = bool(permissions[k])
         perms_json = json.dumps(perms_dict, ensure_ascii=False)
+        preset_val = "admin" if role == "admin" else ((str(job_preset).strip()[:60] or None) if job_preset is not None else None)
 
         with db.connect() as conn:
             valid_pages = {"", "desktop"} | self._enabled_module_keys(conn)
@@ -309,42 +376,134 @@ class AuthSettingsMixin:
             try:
                 if id:
                     uid = _int(id)
-                    cur_u = conn.execute("SELECT start_page, start_mode, avatar FROM users WHERE id=?", (uid,)).fetchone()
-                    final_sp = (sp_val or None) if start_page is not None else (cur_u["start_page"] if cur_u else None)
-                    final_sm = (sm_val or None) if start_mode is not None else (cur_u["start_mode"] if cur_u else None)
-                    final_av = (str(avatar).strip() or None) if avatar is not None else (cur_u["avatar"] if cur_u else None)
+                    cur_u = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+                    if not cur_u:
+                        raise ApiError("المستخدم غير موجود")
+                    old_perms = self._load_effective_perms(conn, uid, cur_u["role"], cur_u["permissions"])
+                    final_active = cur_u["is_active"] if is_active is None else (1 if is_active else 0)
+                    if uid == actor["id"] and final_active == 0:
+                        raise ApiError("لا يمكنك تعطيل حسابك الحالي أثناء الجلسة")
+                    if cur_u["role"] == "admin" and (role != "admin" or final_active == 0):
+                        active_admins = conn.execute(
+                            "SELECT COUNT(*) c FROM users WHERE role='admin' AND is_active=1 AND id!=?", (uid,)
+                        ).fetchone()["c"]
+                        if active_admins < 1:
+                            raise ApiError("لا يمكن إزالة صلاحية المدير أو تعطيل آخر مدير نشط في النظام")
+                    final_sp = (sp_val or None) if start_page is not None else cur_u["start_page"]
+                    final_sm = (sm_val or None) if start_mode is not None else cur_u["start_mode"]
+                    final_av = (str(avatar).strip() or None) if avatar is not None else cur_u["avatar"]
+                    final_preset = preset_val if (role == "admin" or job_preset is not None) else cur_u["job_preset"]
                     if final_av:
                         _validate_image_data_url(final_av, 450 * 1024)
                     if pin:
                         salt = os.urandom(16)
                         conn.execute(
-                            "UPDATE users SET username=?, name=?, role=?, pin_salt=?, pin_hash=?, permissions=?, start_page=?, start_mode=?, avatar=? WHERE id=?",
-                            (username, name, role, salt, db.hash_pin(pin, salt), perms_json, final_sp, final_sm, final_av, uid),
+                            """UPDATE users SET username=?, name=?, role=?, pin_salt=?, pin_hash=?, permissions=?,
+                                      is_active=?, job_preset=?, start_page=?, start_mode=?, avatar=? WHERE id=?""",
+                            (username, name, role, salt, db.hash_pin(pin, salt), perms_json, final_active, final_preset, final_sp, final_sm, final_av, uid),
                         )
                     else:
                         conn.execute(
-                            "UPDATE users SET username=?, name=?, role=?, permissions=?, start_page=?, start_mode=?, avatar=? WHERE id=?",
-                            (username, name, role, perms_json, final_sp, final_sm, final_av, uid),
+                            """UPDATE users SET username=?, name=?, role=?, permissions=?,
+                                      is_active=?, job_preset=?, start_page=?, start_mode=?, avatar=? WHERE id=?""",
+                            (username, name, role, perms_json, final_active, final_preset, final_sp, final_sm, final_av, uid),
                         )
+                    db.sync_user_permissions_table(conn, uid, role, perms_dict)
+                    added = sorted(k for k in ALL_PERM_KEYS if perms_dict.get(k) and not old_perms.get(k))
+                    removed = sorted(k for k in ALL_PERM_KEYS if old_perms.get(k) and not perms_dict.get(k))
+                    conn.execute(
+                        """INSERT INTO perm_audit_log(ts, actor_id, actor_name, target_user_id, target_username, action, diff_json)
+                           VALUES(?,?,?,?,?,?,?)""",
+                        (
+                            db.now(),
+                            actor["id"],
+                            actor["name"],
+                            uid,
+                            username,
+                            "user_perm_update",
+                            json.dumps({
+                                "role_from": cur_u["role"],
+                                "role_to": role,
+                                "is_active": bool(final_active),
+                                "preset": final_preset,
+                                "added": added,
+                                "removed": removed,
+                                "pin_changed": bool(pin),
+                            }, ensure_ascii=False),
+                        ),
+                    )
                     if _STATE["user"] and _STATE["user"]["id"] == uid:
                         row = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
                         if row:
-                            _STATE["user"] = self._row_to_user_dict(row)
+                            _STATE["user"] = self._row_to_user_dict(row, conn)
                     return {"id": uid}
                 else:
                     if not pin:
                         raise ApiError("الرمز السري (4 أرقام) مطلوب للمستخدم الجديد")
+                    final_active = 1 if (is_active is None or is_active) else 0
                     salt = os.urandom(16)
                     cur = conn.execute(
-                        "INSERT INTO users(username, name, role, pin_salt, pin_hash, permissions, start_page, start_mode, avatar, created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        (username, name, role, salt, db.hash_pin(pin, salt), perms_json, sp_val or None, sm_val or None, (str(avatar).strip() or None) if avatar else None, db.now()),
+                        """INSERT INTO users(username, name, role, pin_salt, pin_hash, permissions, is_active, job_preset, start_page, start_mode, avatar, created_at)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (username, name, role, salt, db.hash_pin(pin, salt), perms_json, final_active, preset_val or ("admin" if role == "admin" else "cashier_strict"), sp_val or None, sm_val or None, (str(avatar).strip() or None) if avatar else None, db.now()),
                     )
-                    return {"id": cur.lastrowid}
+                    new_uid = cur.lastrowid
+                    db.sync_user_permissions_table(conn, new_uid, role, perms_dict)
+                    conn.execute(
+                        """INSERT INTO perm_audit_log(ts, actor_id, actor_name, target_user_id, target_username, action, diff_json)
+                           VALUES(?,?,?,?,?,?,?)""",
+                        (
+                            db.now(),
+                            actor["id"],
+                            actor["name"],
+                            new_uid,
+                            username,
+                            "user_create",
+                            json.dumps({
+                                "role": role,
+                                "is_active": bool(final_active),
+                                "preset": preset_val,
+                                "granted": sorted(k for k, v in perms_dict.items() if v),
+                            }, ensure_ascii=False),
+                        ),
+                    )
+                    return {"id": new_uid}
             except sqlite3.IntegrityError:
                 raise ApiError("اسم الدخول مسجل مسبقاً")
 
+    def user_toggle_active(self, id, is_active=True):
+        """تفعيل أو تعطيل حساب موظف بدون حذف سجلاته التاريخية."""
+        actor = self._perm("staff_manage")
+        uid = _int(id)
+        active_val = 1 if is_active else 0
+        if uid == actor["id"] and active_val == 0:
+            raise ApiError("لا يمكنك تعطيل حسابك الحالي أثناء الجلسة")
+        with db.connect() as conn:
+            target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+            if not target:
+                raise ApiError("المستخدم غير موجود")
+            if target["role"] == "admin" and active_val == 0:
+                admins = conn.execute("SELECT COUNT(*) c FROM users WHERE role='admin' AND is_active=1 AND id!=?", (uid,)).fetchone()["c"]
+                if admins < 1:
+                    raise ApiError("لا يمكن تعطيل المدير النشط الوحيد في النظام")
+            conn.execute("UPDATE users SET is_active=? WHERE id=?", (active_val, uid))
+            conn.execute(
+                """INSERT INTO perm_audit_log(ts, actor_id, actor_name, target_user_id, target_username, action, diff_json)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (
+                    db.now(),
+                    actor["id"],
+                    actor["name"],
+                    uid,
+                    target["username"],
+                    "user_toggle_active",
+                    json.dumps({"is_active": bool(active_val)}, ensure_ascii=False),
+                ),
+            )
+            return {"id": uid, "is_active": bool(active_val)}
+
     def user_delete(self, id):
-        u = self._perm("settings_manage")
+        u = self._perm("staff_manage")
         uid = _int(id)
         if uid == u["id"]:
             raise ApiError("لا يمكنك حذف حسابك الحالي أثناء الجلسة")
@@ -359,8 +518,13 @@ class AuthSettingsMixin:
             try:
                 conn.execute("UPDATE sales SET modified_by=NULL WHERE modified_by=?", (uid,))
                 conn.execute("DELETE FROM users WHERE id=?", (uid,))
+                conn.execute(
+                    """INSERT INTO perm_audit_log(ts, actor_id, actor_name, target_user_id, target_username, action, diff_json)
+                       VALUES(?,?,?,?,?,?,?)""",
+                    (db.now(), u["id"], u["name"], uid, target["username"], "user_delete", json.dumps({"role": target["role"]}, ensure_ascii=False)),
+                )
             except sqlite3.IntegrityError:
-                raise ApiError("لا يمكن حذف مستخدم مرتبط بعمليات بيع أو صيانة سابقة")
+                raise ApiError("لا يمكن حذف مستخدم مرتبط بعمليات بيع أو صيانة سابقة (يمكنك تعطيل حسابه بدلاً من الحذف)")
             return True
 
     def login(self, username=None, pin=None):
@@ -435,6 +599,9 @@ class AuthSettingsMixin:
                     raise ApiError(f"تم تجاوز عدد المحاولات المسموح. حاول بعد {mins} دقيقة [LOCKED:{int(info['locked_until'] - now_ts)}]")
                 raise
 
+            # فحص حالة الحساب قبل إتمام الجلسة
+            if "is_active" in row.keys() and row["is_active"] == 0:
+                raise ApiError("تم إيقاف هذا الحساب من قبل المدير — يرجى مراجعة الإدارة")
             # نجاح: إعادة تعيين
             fail_state[lock_key] = {"count": 0, "locked_until": 0.0}
             conn.execute(
@@ -449,7 +616,7 @@ class AuthSettingsMixin:
                 ("login_locked_until", "0"),
             )
             self._settings_cache = None
-            _STATE["user"] = self._row_to_user_dict(row)
+            _STATE["user"] = self._row_to_user_dict(row, conn)
             out = dict(_STATE["user"])
             eff_sp = out.get("start_page") or st.get("default_start_page") or "pos"
             enabled_keys = self._enabled_module_keys(conn)
@@ -470,15 +637,17 @@ class AuthSettingsMixin:
             with db.connect() as conn:
                 st = self._settings(conn)
                 row = conn.execute("SELECT * FROM users WHERE id=?", (_STATE["user"]["id"],)).fetchone()
-                if row:
-                    _STATE["user"] = self._row_to_user_dict(row)
-                    eff_sp = _STATE["user"].get("start_page") or st.get("default_start_page") or "pos"
-                    enabled_keys = self._enabled_module_keys(conn)
-                    if eff_sp != "desktop" and eff_sp not in enabled_keys:
-                        eff_sp = self._first_enabled_module(conn)
-                    _STATE["user"]["effective_start_page"] = eff_sp
-                    _STATE["user"]["effective_start_mode"] = _STATE["user"].get("start_mode") or st.get("default_start_mode") or "window"
-                    _STATE["user"]["force_change_pin"] = bool(row["role"] == "admin" and hmac.compare_digest(db.hash_pin("1234", row["pin_salt"]), row["pin_hash"]))
+                if not row or ("is_active" in row.keys() and row["is_active"] == 0):
+                    _STATE["user"] = None
+                    return {"user": None}
+                _STATE["user"] = self._row_to_user_dict(row, conn)
+                eff_sp = _STATE["user"].get("start_page") or st.get("default_start_page") or "pos"
+                enabled_keys = self._enabled_module_keys(conn)
+                if eff_sp != "desktop" and eff_sp not in enabled_keys:
+                    eff_sp = self._first_enabled_module(conn)
+                _STATE["user"]["effective_start_page"] = eff_sp
+                _STATE["user"]["effective_start_mode"] = _STATE["user"].get("start_mode") or st.get("default_start_mode") or "window"
+                _STATE["user"]["force_change_pin"] = bool(row["role"] == "admin" and hmac.compare_digest(db.hash_pin("1234", row["pin_salt"]), row["pin_hash"]))
         return {"user": _STATE["user"]}
 
     def logout(self):
@@ -492,13 +661,13 @@ class AuthSettingsMixin:
         self._user()
         with db.connect() as conn:
             st = dict(self._settings(conn))
-            if not self._has_perm("settings_manage"):
-                for priv in ("login_fail_state", "login_max_attempts", "login_lockout_minutes", "customer_ledger_migrated"):
+            if not self._has_perm("settings_view_edit"):
+                for priv in ("login_fail_state", "login_max_attempts", "login_lockout_minutes", "customer_ledger_migrated", "migration_v2_strict_perms"):
                     st.pop(priv, None)
             return st
 
     def settings_save(self, **kv):
-        self._perm("settings_manage")
+        self._perm("settings_view_edit")
         allowed = {"store_name", "store_address", "store_phone", "currency", "tax_enabled", "tax_rate",
                    "pos_card_size", "os_default_wallpaper", "os_default_custom_bg", "os_default_accent", "os_default_layout",
                    "os_default_theme", "login_mode", "default_start_page", "default_start_mode",
@@ -560,8 +729,8 @@ class AuthSettingsMixin:
             return self._settings(conn)
 
     def db_backup(self, reason="manual"):
-        """إنشاء نسخة احتياطية فورية لقاعدة البيانات (للمدير)."""
-        self._perm("settings_manage")
+        """إنشاء نسخة احتياطية فورية لقاعدة البيانات (للمخولين فقط)."""
+        self._perm("backups_manage")
         path = db.backup_database(str(reason or "manual"))
         if not path:
             raise ApiError("فشل إنشاء النسخة الاحتياطية لقاعدة البيانات")
@@ -575,13 +744,13 @@ class AuthSettingsMixin:
         }
 
     def backups_list(self):
-        """استعراض النسخ الاحتياطية المتوفرة (للمدير)."""
-        self._perm("settings_manage")
+        """استعراض النسخ الاحتياطية المتوفرة (للمخولين فقط)."""
+        self._perm("backups_manage")
         return db.list_backups()
 
     def db_restore(self, backup_name):
-        """استرجاع قاعدة البيانات من نسخة احتياطية محددة مع أخذ نسخة أمان مسبقة (للمدير)."""
-        self._perm("settings_manage")
+        """استرجاع قاعدة البيانات من نسخة احتياطية محددة مع أخذ نسخة أمان مسبقة."""
+        self._perm("backups_manage")
         if not backup_name:
             raise ApiError("اسم ملف النسخة الاحتياطية مطلوب")
         try:
@@ -617,9 +786,7 @@ class AuthSettingsMixin:
 
     def payment_methods_save(self, methods=None):
         """حفظ قائمة طرق وأنظمة الدفع المخصصة (نقدي، محافظ، خطط دفعات مقدمة وأقساط)."""
-        self._user()
-        if not (self._has_perm("pos_sell") or self._has_perm("settings_manage")):
-            raise ApiError("ليست لديك صلاحية لتعديل طرق الدفع")
+        self._perm("settings_view_edit")
         cleaned = []
         for idx, m in enumerate(methods or []):
             if isinstance(m, str):
@@ -691,7 +858,7 @@ class AuthSettingsMixin:
 
     def templates_save(self, a4=None, pos=None, reset_a4=False, reset_pos=False, sync_receipt_settings=True):
         """حفظ تخصيص قوالب الفواتير (شكل الفاتورة A4، الألوان، الشعار، البيانات، وقالب الكاشير الحراري وجميع إيصالات البرنامج)."""
-        self._perm("settings_manage")
+        self._perm("templates_manage")
         with db.connect() as conn:
             cur = self._load_templates(conn)
             new_a4 = dict(db.DEFAULT_A4_TEMPLATE) if reset_a4 else cur["a4"]

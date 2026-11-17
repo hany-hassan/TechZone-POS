@@ -677,11 +677,7 @@
             startLoginCountdown(Math.ceil(cfg.login_locked_until - Date.now() / 1000));
           }
         }
-      } catch (e) {
-        try {
-          USERS = (await api('users')) || [];
-        } catch (err) { }
-      }
+      } catch (e) {}
       applyLoginModeUI();
     })();
 

@@ -238,13 +238,20 @@
 <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
   <div class="flex justify-between items-center mb-4">
     <div>
-      <h3 class="text-xl font-bold text-slate-900 dark:text-white">تقرير إغلاق الوردية التفصيلي</h3>
+      <h3 id="sc-title" class="text-xl font-bold text-slate-900 dark:text-white">تقرير إغلاق الوردية التفصيلي</h3>
       <p class="text-xs text-slate-500" id="sc-time"></p>
     </div>
     <button id="sc-x" type="button" class="text-slate-400 hover:text-slate-600"><span class="material-icons-outlined">close</span></button>
   </div>
+  <div id="sc-blind-banner" class="hidden p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 mb-4 text-xs space-y-1">
+    <p class="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+      <span class="material-icons-outlined text-base">visibility_off</span>
+      <span>وضع «الجرد الأعمى» لإغلاق الوردية</span>
+    </p>
+    <p class="text-slate-600 dark:text-slate-300">يرجى عدّ النقدية الفعلية الموجودة في الدرج وإدخال الإجمالي بدقة أدناه. ستتم المطابقة آلياً لدى الإدارة.</p>
+  </div>
   <!-- Cash Drawer Summary -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-sm">
+  <div id="sc-drawer-cards" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-sm">
     <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-700">
       <p class="text-xs text-slate-500">النقدية الافتتاحية</p>
       <p id="sc-open" class="font-num font-bold text-base">0.00</p>
@@ -273,7 +280,7 @@
     </div>
   </div>
   <!-- Operations Table -->
-  <div class="mb-4">
+  <div id="sc-ops-box" class="mb-4">
     <h4 class="text-sm font-bold mb-2">جميع العمليات التي تمت خلال الوردية (<span id="sc-ops-cnt" class="font-num">0</span>):</h4>
     <div class="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl divide-y divide-slate-100 dark:divide-slate-700 text-xs" id="sc-ops"></div>
   </div>
@@ -284,7 +291,7 @@
         <label class="block text-sm font-bold mb-1">أدخل عدّ النقدية الفعلي في الدرج *</label>
         <input id="count-cash" type="number" min="0" step="0.01" class="w-full bg-white dark:bg-slate-800 border-2 border-primary rounded-xl px-4 py-2.5 text-lg font-num font-bold" placeholder="0.00"/>
       </div>
-      <div class="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+      <div id="sc-diff-box" class="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
         <p class="text-xs text-slate-500 mb-1">المقارنة مع النقدية المتوقعة بالدرج</p>
         <p id="sc-diff-label" class="text-lg font-bold font-num text-emerald-600">متطابق (0.00)</p>
       </div>
@@ -383,7 +390,7 @@
       </div>
     </div>
     <!-- Items for Return -->
-    <div>
+    <div id="lu-ret-box">
       <h4 class="text-sm font-bold mb-2">أصناف الفاتورة (حدد الأصناف والكميات المراد استرجاعها):</h4>
       <div id="lu-items" class="space-y-2 max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl p-3"></div>
       <div class="flex gap-2 mt-2">
@@ -392,7 +399,7 @@
       </div>
     </div>
     <!-- Discount on Paid Invoice -->
-    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+    <div id="lu-disc-box" class="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
       <span class="font-bold">تعديل خصم الفاتورة (بالمبلغ أو % مثل 10%):</span>
       <div class="flex gap-2 items-center">
         <input id="lu-disc-val" class="w-32 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 font-num" placeholder="مثال: 50 أو 10%"/>
@@ -623,6 +630,8 @@ async function openPosPrintPreview(saleId) {
   PREVIEW_FORMAT = 'thermal';
   document.getElementById('pos-preview-invno').textContent = '#' + s.invoice_no;
   applyWhatsappVisibility();
+  const waPreviewBtn = document.getElementById('pos-preview-wa-btn');
+  if (waPreviewBtn) waPreviewBtn.classList.toggle('hidden', !(whatsappEnabled() && hasPerm('pos_whatsapp')));
   renderPosPrintPreview();
   const modal = document.getElementById('pos-print-preview-modal');
   modal.classList.remove('hidden');
@@ -696,24 +705,32 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-/* ===== إدارة الوردية (فتح + تقرير إغلاق تفصيلي) ===== */
+/* ===== إدارة الوردية (فتح + تقرير تفصيلي أو جرد أعمى) ===== */
 async function refreshShift() {
+  const canManageShift = hasPerm('shift_manage');
+  const canSummary = hasPerm('shift_summary_view');
   const s = await guard(() => api('shift'));
   if (!s) return;
   SHIFT = s.shift;
   const bar = document.getElementById('shift-bar');
   if (SHIFT) {
     bar.className = 'mb-4 flex items-center justify-center gap-3 text-sm p-3 rounded-xl border bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/30';
-    bar.innerHTML = `<span class="w-2 h-2 rounded-full bg-green-500"></span><span>وردية مفتوحة (${fmtDT(SHIFT.opened_at)})</span><button id="close-shift" class="px-3 py-1 rounded-lg bg-red-100 text-red-600 text-xs font-bold hover:bg-red-200 transition-colors">إغلاق الوردية (تقرير تفصيلي)</button>`;
-    bar.querySelector('#close-shift').addEventListener('click', openDetailedShiftClose);
+    bar.innerHTML = `<span class="w-2 h-2 rounded-full bg-green-500"></span><span>وردية مفتوحة (${fmtDT(SHIFT.opened_at)})</span>` +
+      (canManageShift ? `<button id="close-shift" class="px-3 py-1 rounded-lg bg-red-100 text-red-600 text-xs font-bold hover:bg-red-200 transition-colors">${canSummary ? 'إغلاق الوردية (تقرير تفصيلي)' : 'إغلاق الوردية (جرد أعمى)'}</button>` : '');
+    const clsBtn = bar.querySelector('#close-shift');
+    if (clsBtn) clsBtn.addEventListener('click', openDetailedShiftClose);
   } else {
     bar.className = 'mb-4 flex items-center justify-center gap-3 text-sm p-3 rounded-xl border bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900/30';
-    bar.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span><span>لا توجد وردية مفتوحة — لا يمكن البيع</span><button id="open-shift" class="px-3 py-1 rounded-lg bg-primary text-white text-xs font-bold">فتح وردية</button>`;
-    bar.querySelector('#open-shift').addEventListener('click', () => {
-      const m = document.getElementById('shift-modal');
-      document.getElementById('open-cash').value = '';
-      m.classList.replace('hidden', 'flex');
-    });
+    bar.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span><span>لا توجد وردية مفتوحة — لا يمكن البيع</span>` +
+      (canManageShift ? `<button id="open-shift" class="px-3 py-1 rounded-lg bg-primary text-white text-xs font-bold">فتح وردية</button>` : '');
+    const openBtn = bar.querySelector('#open-shift');
+    if (openBtn) {
+      openBtn.addEventListener('click', () => {
+        const m = document.getElementById('shift-modal');
+        document.getElementById('open-cash').value = '';
+        m.classList.replace('hidden', 'flex');
+      });
+    }
   }
 }
 
@@ -727,7 +744,33 @@ document.getElementById('shift-ok').addEventListener('click', async () => {
   }
 });
 
+let IS_BLIND_SHIFT_CLOSE = false;
+
 async function openDetailedShiftClose() {
+  if (!hasPerm('shift_manage')) {
+    toast('ليست لديك صلاحية إغلاق الوردية', 'error');
+    return;
+  }
+  const canSummary = hasPerm('shift_summary_view');
+  IS_BLIND_SHIFT_CLOSE = !canSummary;
+
+  document.getElementById('sc-blind-banner').classList.toggle('hidden', canSummary);
+  document.getElementById('sc-drawer-cards').classList.toggle('hidden', !canSummary);
+  document.getElementById('sc-noncash-note').classList.toggle('hidden', !canSummary);
+  document.getElementById('sc-ops-box').classList.toggle('hidden', !canSummary);
+  document.getElementById('sc-diff-box').classList.toggle('hidden', !canSummary);
+  document.getElementById('sc-title').textContent = canSummary ? 'تقرير إغلاق الوردية التفصيلي' : 'إغلاق الوردية — الجرد الأعمى';
+
+  const countInput = document.getElementById('count-cash');
+  if (!canSummary) {
+    EXPECTED_SHIFT_CASH = 0;
+    document.getElementById('sc-time').textContent = SHIFT ? `بدأت في: ${fmtDT(SHIFT.opened_at)}` : '';
+    countInput.value = '';
+    document.getElementById('shift-close-modal').classList.replace('hidden', 'flex');
+    countInput.focus();
+    return;
+  }
+
   const sum = await guard(() => api('shift_summary'));
   if (!sum) return;
   EXPECTED_SHIFT_CASH = sum.expected_cash || 0;
@@ -739,7 +782,7 @@ async function openDetailedShiftClose() {
 
   document.getElementById('sc-total-sales').textContent = money(sum.sales_total);
   document.getElementById('sc-sales-cnt').textContent = n(sum.sales_count);
-  document.getElementById('sc-wallet').textContent = money((sum.wallet_sales || 0) + (sum.wallet_vouchers || 0));
+  document.getElementById('sc-wallet').textContent = money((sum.wallet_sales || 0) + (sum.wallet_vouchers || 0) + (sum.wallet_installments || 0));
   document.getElementById('sc-credit').textContent = money(sum.credit_sales || 0);
   document.getElementById('sc-returns').textContent = money(sum.returns_total || 0);
 
@@ -758,13 +801,13 @@ async function openDetailedShiftClose() {
       </div>
     </div>`).join('') : '<div class="p-6 text-center text-slate-400">لا توجد عمليات مسجلة في هذه الوردية بعد</div>';
 
-  const countInput = document.getElementById('count-cash');
   countInput.value = (EXPECTED_SHIFT_CASH / 100).toFixed(2);
   updateShiftDiffPreview();
   document.getElementById('shift-close-modal').classList.replace('hidden', 'flex');
 }
 
 function updateShiftDiffPreview() {
+  if (IS_BLIND_SHIFT_CLOSE) return;
   const countedCents = Math.round(toAmount(document.getElementById('count-cash').value) * 100);
   const diff = countedCents - EXPECTED_SHIFT_CASH;
   const lbl = document.getElementById('sc-diff-label');
@@ -785,7 +828,11 @@ document.getElementById('sc-cancel').addEventListener('click', () => document.ge
 document.getElementById('sc-confirm').addEventListener('click', async () => {
   const c = await guard(() => api('shift_close', { counted_cash: toAmount(document.getElementById('count-cash').value) }));
   if (c) {
-    toast(c.diff == 0 ? 'تم إغلاق الوردية (متطابقة)' : (c.diff > 0 ? `تم إغلاق الوردية — زيادة ${money(c.diff)}` : `تم إغلاق الوردية — عجز ${money(-c.diff)}`));
+    if (c.blind) {
+      toast('تم إغلاق الوردية وتسجيل الجرد الفعلي بنجاح');
+    } else {
+      toast(c.diff == 0 ? 'تم إغلاق الوردية (متطابقة)' : (c.diff > 0 ? `تم إغلاق الوردية — زيادة ${money(c.diff)}` : `تم إغلاق الوردية — عجز ${money(-c.diff)}`));
+    }
     document.getElementById('shift-close-modal').classList.replace('flex', 'hidden');
     refreshShift();
   }
@@ -1122,7 +1169,7 @@ function renderCart() {
   const panel = document.getElementById('cart-panel');
   const fab = document.getElementById('cart-fab');
   const canItemDisc = hasPerm('pos_item_discount') || hasPerm('pos_price');
-  const canReturn = hasPerm('sales_return');
+  const canReturn = hasPerm(['sales_return', 'sales_return_own']);
 
   // التفرقة البصرية الواضحة بين فاتورة جديدة وفاتورة مرتجع/تعديل
   const headerEl = document.getElementById('cart-header');
@@ -1234,7 +1281,7 @@ function renderCart() {
     addToCart(c.product_id);
   }));
   el.querySelectorAll('[data-ret-all]').forEach((b) => b.addEventListener('click', () => {
-    if (!hasPerm('sales_return')) { toast('ليست لديك صلاحية استرجاع الأصناف', 'warn'); return; }
+    if (!hasPerm(['sales_return', 'sales_return_own'])) { toast('ليست لديك صلاحية استرجاع الأصناف', 'warn'); return; }
     const c = CART[+b.dataset.retAll];
     if (c) { c.qty = 0; renderCart(); }
   }));
@@ -1300,6 +1347,7 @@ document.getElementById('itdisc-ok').addEventListener('click', () => {
 
 /* ===== نافذة خصم الفاتورة بنسبة % أو مبلغ (زر %) ===== */
 document.getElementById('btn-disc').addEventListener('click', () => {
+  if (!hasPerm('pos_invoice_discount')) { toast('ليست لديك صلاحية عمل خصم على إجمالي الفاتورة', 'warn'); return; }
   if (!CART.length) { toast('السلة فارغة — أضف منتجات أولاً', 'warn'); return; }
   const sub = CART.reduce((a, c) => a + c.qty * c.unit_price, 0);
   const curDiscCents = Math.round(toAmount(document.getElementById('disc').value) * 100);
@@ -1344,8 +1392,8 @@ document.getElementById('idisc-ok').addEventListener('click', () => {
 
 /* ===== نافذة عرض فاتورة مدفوعة لعمل استرجاع أو خصم (بديل زر آخر إيصال) ===== */
 document.getElementById('btn-inv-lookup').addEventListener('click', async () => {
-  if (!hasPerm('sales_return') && !hasPerm('pos_item_discount')) {
-    toast('ليست لديك صلاحية استرجاع الفواتير أو تعديل خصمها (اطلب الصلاحية من المدير)', 'error');
+  if (!hasPerm(['history_view_own', 'history_view_all', 'sales_return', 'sales_return_own', 'sales_post_discount'])) {
+    toast('ليست لديك صلاحية استعراض الفواتير أو عمل المرتجعات', 'error');
     return;
   }
   document.getElementById('lu-q').value = '';
@@ -1382,7 +1430,7 @@ async function searchLookupInvoices() {
       </div>
       <div class="flex items-center gap-2">
         <span class="font-bold font-num text-sm ml-2">${money(r.total)}</span>
-        ${r.status !== 'returned' ? `<button type="button" data-lu-cart="${r.id}" class="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold flex items-center gap-1"><span class="material-icons-outlined text-sm">shopping_cart_checkout</span>فتح في السلة للتعديل / المرتجع</button>` : ''}
+        ${r.status !== 'returned' && hasPerm(['sales_return', 'sales_return_own', 'sales_post_discount']) ? `<button type="button" data-lu-cart="${r.id}" class="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold flex items-center gap-1"><span class="material-icons-outlined text-sm">shopping_cart_checkout</span>فتح في السلة للتعديل / المرتجع</button>` : ''}
         <button type="button" data-lu-open="${r.id}" class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-700">التفاصيل / طباعة</button>
       </div>
     </div>`).join('') : '<div class="p-6 text-center text-slate-400">لا توجد فواتير مطابقة</div>';
@@ -1464,6 +1512,12 @@ async function openLookupSale(saleId) {
   document.getElementById('lu-inv-meta').textContent = `${fmtDT(s.created_at)} · العميل: ${s.customer_name || 'نقدي'}`;
   document.getElementById('lu-inv-total').textContent = `الإجمالي: ${money(s.total)}${s.discount ? ` (خصم: ${money(s.discount)})` : ''}`;
   document.getElementById('lu-disc-val').value = s.discount ? (s.discount / 100).toFixed(2) : '';
+  const canRetLu = hasPerm(['sales_return', 'sales_return_own']);
+  const canDiscLu = hasPerm('sales_post_discount');
+  document.getElementById('lu-ret-box').classList.toggle('hidden', !canRetLu);
+  document.getElementById('lu-disc-box').classList.toggle('hidden', !canDiscLu);
+  const luWaBtn = document.getElementById('lu-wa-btn');
+  if (luWaBtn) luWaBtn.classList.toggle('hidden', !(whatsappEnabled() && hasPerm('pos_whatsapp')));
 
   const avail = s.items.filter((it) => (it.remaining_qty == null ? it.qty : it.remaining_qty) > 0);
   document.getElementById('lu-items').innerHTML = avail.length ? avail.map((it) => {
@@ -1530,7 +1584,8 @@ document.getElementById('lu-disc-submit').addEventListener('click', async () => 
 /* ===== الحسابات والدفع ===== */
 function totals() {
   const sub = CART.reduce((a, c) => a + c.qty * c.unit_price, 0);
-  const disc = Math.round(toAmount(document.getElementById('disc').value) * 100);
+  const canInvDisc = hasPerm('pos_invoice_discount');
+  const disc = canInvDisc ? Math.round(toAmount(document.getElementById('disc').value) * 100) : 0;
   const taxable = Math.max(0, sub - disc);
   const effectiveRate = TAX_ON ? RATE : 0;
   const tax = Math.round(taxable * effectiveRate / 100);
@@ -1556,6 +1611,8 @@ function highlightMethodBtn(m) {
 }
 
 function addPayLine(method = 'cash', amountStr = '', refStr = '') {
+  const allowCredit = hasPerm('pos_credit_sale');
+  if (method === 'credit' && !allowCredit) method = 'cash';
   const el = document.getElementById('pay-lines');
   const row = document.createElement('div');
   row.className = 'p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/60 space-y-2';
@@ -1564,7 +1621,7 @@ function addPayLine(method = 'cash', amountStr = '', refStr = '') {
       <select class="w-1/3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-2 text-sm font-medium" data-method>
         <option value="cash" ${method === 'cash' ? 'selected' : ''}>نقدي</option>
         <option value="wallet" ${method === 'wallet' ? 'selected' : ''}>محفظة إلكترونية</option>
-        <option value="credit" ${method === 'credit' ? 'selected' : ''}>آجل (مديونية)</option>
+        ${allowCredit ? `<option value="credit" ${method === 'credit' ? 'selected' : ''}>آجل (مديونية)</option>` : ''}
       </select>
       <input type="number" min="0" step="0.01" class="flex-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm font-numeric font-bold" placeholder="المبلغ المدفوع" data-amt value="${amountStr}"/>
       <button type="button" class="text-slate-400 hover:text-red-500 px-1" data-rm title="حذف الدفعة"><span class="material-icons-outlined text-base">close</span></button>
@@ -1596,6 +1653,10 @@ function getRawPayRows() {
 }
 
 function convertShortfallToCredit() {
+  if (!hasPerm('pos_credit_sale')) {
+    toast('ممنوع: ليست لديك صلاحية البيع الآجل', 'error');
+    return;
+  }
   const { total } = totals();
   const rows = getRawPayRows();
   const totalUnits = total / 100;
@@ -1696,6 +1757,10 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
 
   if (enteredSumCents < total && rows.some((r) => r.method === 'cash')) {
     const remStr = fmt(total - enteredSumCents) + ' ' + CURRENCY;
+    if (!hasPerm('pos_credit_sale')) {
+      toast(`المبلغ المدخل أقل من الإجمالي بمقدار (${remStr}) والبيع الآجل غير متاح بصلاحياتك`, 'error');
+      return;
+    }
     const ask = confirm(`تحذير: المبلغ المدخل أقل من إجمالي الفاتورة بمقدار (${remStr}).\n\nهل تود تحويل المبلغ المتبقي إلى بيع آجل (مديونية على العميل)؟`);
     if (!ask) return;
     convertShortfallToCredit();
@@ -1783,15 +1848,16 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
     const ph = document.getElementById(phoneId);
     const sug = document.getElementById(sugId);
     inp.addEventListener('input', async () => {
-      if (!isModuleEnabled('customers')) { sug.classList.add('hidden'); return; }
+      if (!isModuleEnabled('customers') || !hasPerm(['customers_quick_pick', 'customers_view'])) { sug.classList.add('hidden'); return; }
       const q = inp.value.trim();
       if (q.length < 1) { sug.classList.add('hidden'); return; }
       const res = await guard(() => api('customers_search', { q }));
       if (!res || !res.length) { sug.classList.add('hidden'); return; }
+      const showDebt = hasPerm('customers_debt_view');
       sug.innerHTML = res.map(c => `
         <div class="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer flex justify-between items-center text-sm transition-colors" data-cname="${esc(c.name)}" data-cphone="${esc(c.phone || '')}">
           <span class="font-medium text-slate-800 dark:text-white">${esc(c.name)}</span>
-          <span class="text-xs text-slate-500 dark:text-slate-400 font-num">${esc(c.phone || 'بدون هاتف')}${c.debt > 0 ? ` · مديونية: ${fmt(c.debt)}` : ''}</span>
+          <span class="text-xs text-slate-500 dark:text-slate-400 font-num">${esc(c.phone || 'بدون هاتف')}${showDebt && c.debt > 0 ? ` · مديونية: ${fmt(c.debt)}` : ''}</span>
         </div>
       `).join('');
       sug.querySelectorAll('[data-cname]').forEach((el) => el.addEventListener('click', () => {
@@ -1885,7 +1951,7 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
   window.syncSettingsRuntime = syncSettingsRuntime;
 
   (async () => {
-  user = await pageInit('pos');
+  user = await pageInit('pos', { perm: 'pos_sell' });
   if (!user) return;
   document.getElementById('user-name').textContent = user.name;
   document.getElementById('user-role').textContent = user.role === 'admin' ? 'مدير' : 'موظف / كاشير';
@@ -1896,14 +1962,34 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
   const defaultCardSize = +(SETTINGS.pos_card_size || 200);
   const userCardSize = user.card_size ? +user.card_size : defaultCardSize;
   applyCardSize(userCardSize);
-  if (hasPerm('settings_manage')) {
+  if (hasPerm('settings_view_edit')) {
     document.getElementById('btn-size-default').classList.remove('hidden');
   }
 
-  // إخفاء أو إظهار زر استرجاع/تعديل الفاتورة حسب صلاحية الكاشير
-  if (!hasPerm('sales_return') && !hasPerm('pos_item_discount')) {
-    document.getElementById('btn-inv-lookup').classList.add('opacity-50');
+  // إخفاء وتقييد أدوات الكاشير وفق الصلاحيات التفصيلية
+  const canInvDisc = hasPerm('pos_invoice_discount');
+  document.getElementById('disc').classList.toggle('hidden', !canInvDisc);
+  document.getElementById('btn-disc').classList.toggle('hidden', !canInvDisc);
+  if (!canInvDisc) {
+    document.getElementById('disc').value = '';
+    document.getElementById('phone').classList.replace('w-1/2', 'w-full');
   }
+  const canCredit = hasPerm('pos_credit_sale');
+  const creditBtn = document.querySelector('#methods [data-m="credit"]');
+  if (creditBtn) creditBtn.classList.toggle('hidden', !canCredit);
+  const convCreditBtn = document.getElementById('btn-convert-credit');
+  if (convCreditBtn) convCreditBtn.classList.toggle('hidden', !canCredit);
+  if (!canCredit) document.getElementById('cust').placeholder = 'اسم العميل (اختياري)';
+
+  if (!hasPerm('pos_categories_manage')) {
+    document.getElementById('btn-cats-cfg').classList.add('hidden');
+  }
+  if (!hasPerm('pos_whatsapp')) {
+    document.querySelectorAll('[data-wa-toggle]').forEach((el) => el.classList.add('hidden'));
+  }
+
+  const canLookup = hasPerm(['history_view_own', 'history_view_all', 'sales_return', 'sales_return_own', 'sales_post_discount']);
+  document.getElementById('btn-inv-lookup').classList.toggle('hidden', !canLookup);
 
   await refreshShift();
   await loadCats(true);

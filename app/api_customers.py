@@ -35,12 +35,22 @@ from api_common import (
 class CustomersMixin:
     # ---------------------------------------------------------- عملاء ومديونيات وسندات قبض
     def customers_search(self, q="", limit=20):
-        self._user()
+        self._perm_any("customers_quick_pick", "customers_view")
+        can_debt = self._has_perm("customers_debt_view")
         q = (q or "").strip()
         lim = min(100, max(1, _int(limit, 20)))
         with db.connect() as conn:
+            if can_debt:
+                rows = conn.execute(
+                    """SELECT id, name, phone, total_purchases, credit_total, paid_total, debt, created_at
+                       FROM customers
+                       WHERE name LIKE ? OR phone LIKE ?
+                       ORDER BY name LIMIT ?""",
+                    (f"%{q}%", f"%{q}%", lim),
+                ).fetchall()
+                return [dict(r) for r in rows]
             rows = conn.execute(
-                """SELECT id, name, phone, total_purchases, credit_total, paid_total, debt, created_at
+                """SELECT id, name, phone
                    FROM customers
                    WHERE name LIKE ? OR phone LIKE ?
                    ORDER BY name LIMIT ?""",
@@ -50,15 +60,24 @@ class CustomersMixin:
 
     def customer(self, id):
         self._perm("customers_view")
+        can_debt = self._has_perm("customers_debt_view")
         with db.connect() as conn:
-            r = conn.execute("SELECT * FROM customers WHERE id=?", (_int(id),)).fetchone()
+            r = conn.execute("SELECT id, name, phone, created_at FROM customers WHERE id=?", (_int(id),)).fetchone()
             if not r:
                 raise ApiError("العميل غير موجود")
             d = dict(r)
-            summary = _customer_debt_summary(conn, r)
-            d["credit_total"] = summary["credit_total"]
-            d["paid_total"] = summary["paid_total"]
-            d["debt"] = summary["debt"]
+            if can_debt:
+                full = conn.execute("SELECT * FROM customers WHERE id=?", (_int(id),)).fetchone()
+                summary = _customer_debt_summary(conn, full)
+                d["total_purchases"] = summary["total_purchases"]
+                d["credit_total"] = summary["credit_total"]
+                d["paid_total"] = summary["paid_total"]
+                d["debt"] = summary["debt"]
+            else:
+                d["total_purchases"] = None
+                d["credit_total"] = None
+                d["paid_total"] = None
+                d["debt"] = None
             return d
 
     def customers_save(self, name, phone=None, id=None):
@@ -111,6 +130,9 @@ class CustomersMixin:
 
     def customers_list(self, limit=100, offset=0, debt_only=False):
         self._perm("customers_view")
+        can_debt = self._has_perm("customers_debt_view")
+        if debt_only and not can_debt:
+            raise ApiError("ممنوع: ليست لديك صلاحية عرض المديونيات")
         limit, offset = max(1, _int(limit, 100)), max(0, _int(offset, 0))
         with db.connect() as conn:
             summary_row = conn.execute(
@@ -122,21 +144,44 @@ class CustomersMixin:
                           COALESCE(SUM(debt), 0) AS total_debt
                    FROM customers"""
             ).fetchone()
-            global_summary = dict(summary_row) if summary_row else {
-                "total_customers": 0, "debt_customers_count": 0,
-                "total_purchases": 0, "total_credit": 0, "total_paid": 0, "total_debt": 0,
-            }
-            total = global_summary["debt_customers_count"] if debt_only else global_summary["total_customers"]
-            where_sql = "WHERE debt > 0" if debt_only else ""
+            if can_debt:
+                global_summary = dict(summary_row) if summary_row else {
+                    "total_customers": 0, "debt_customers_count": 0,
+                    "total_purchases": 0, "total_credit": 0, "total_paid": 0, "total_debt": 0,
+                }
+                total = global_summary["debt_customers_count"] if debt_only else global_summary["total_customers"]
+                where_sql = "WHERE debt > 0" if debt_only else ""
+                rows = conn.execute(
+                    f"""SELECT id, name, phone, total_purchases, credit_total, paid_total, debt, created_at
+                        FROM customers {where_sql} ORDER BY name LIMIT ? OFFSET ?""",
+                    (limit, offset),
+                ).fetchall()
+                return {"rows": [dict(r) for r in rows], "total": total, "summary": global_summary}
+            tot_cnt = summary_row["total_customers"] if summary_row else 0
             rows = conn.execute(
-                f"""SELECT id, name, phone, total_purchases, credit_total, paid_total, debt, created_at
-                    FROM customers {where_sql} ORDER BY name LIMIT ? OFFSET ?""",
+                """SELECT id, name, phone, created_at
+                   FROM customers ORDER BY name LIMIT ? OFFSET ?""",
                 (limit, offset),
             ).fetchall()
-            return {"rows": [dict(r) for r in rows], "total": total, "summary": global_summary}
+            out_rows = [
+                {**dict(r), "total_purchases": None, "credit_total": None, "paid_total": None, "debt": None}
+                for r in rows
+            ]
+            return {
+                "rows": out_rows,
+                "total": tot_cnt,
+                "summary": {
+                    "total_customers": tot_cnt,
+                    "debt_customers_count": None,
+                    "total_purchases": None,
+                    "total_credit": None,
+                    "total_paid": None,
+                    "total_debt": None,
+                },
+            }
 
     def customer_history(self, id):
-        self._perm("customers_view")
+        self._perm_all("customers_view", "customers_debt_view")
         cid = _int(id)
         with db.connect() as conn:
             cust = conn.execute("SELECT * FROM customers WHERE id=?", (cid,)).fetchone()
@@ -225,7 +270,7 @@ class CustomersMixin:
             }
 
     def customer_payment_create(self, customer_id, amount, method="cash", ref_no=None, sale_id=None, notes=None):
-        u = self._perm("customers_edit")
+        u = self._perm("customers_payment")
         cid = _int(customer_id)
         amt = _money(amount)
         if amt <= 0:

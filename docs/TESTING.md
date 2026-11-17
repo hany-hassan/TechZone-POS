@@ -1,6 +1,6 @@
 # TechZone Testing Strategy
 
-## Current: `selfcheck.py` (200 Assertions)
+## Current: `selfcheck.py` (232 Assertions)
 
 TechZone ships with a single integration-level test suite in `app/selfcheck.py`. It validates the database schema, API functions, permission boundaries, business logic, owner controls, and static frontend-to-backend contracts in one pass.
 
@@ -13,7 +13,7 @@ python app/selfcheck.py
 A successful run prints each check with a ✓ and ends with:
 
 ```
-ALL 200 CHECKS PASSED
+ALL 232 CHECKS PASSED
 ```
 
 Any failure raises `AssertionError` with a descriptive message identifying the broken invariant.
@@ -22,13 +22,13 @@ Any failure raises `AssertionError` with a descriptive message identifying the b
 
 | Area | Example checks |
 |---|---|
-| **DB schema** | All 28 tables exist; required columns & indices present; foreign keys valid |
+| **DB schema** | All 31 tables exist; required columns & indices present; foreign keys valid |
 | **Settings** | Default seed values populated (store name, currency, VAT rate, login mode, print/preview flags, invoice templates, `business_profile`); cashiers read runtime settings (`tax_enabled`, currency, print prefs) with security keys stripped |
-| **Users & auth** | Admin account exists; PIN hashing and salt are non-empty; role values are `admin` or `cashier` |
+| **Users & auth** | Admin account exists; PIN hashing and salt are non-empty; role values are `admin` or `cashier`; `is_active` account activation toggle enforced |
 | **Default PIN Security** | Admin login with default `1234` flags `force_change_pin=True`; `profile_save` with `pin` alias updates PIN and clears flag |
 | **Owner Control & Structure** | Independent `owner_auth` passphrase setup, 5-attempt lockout, 10-min session expiry, recovery key rotation, admin PIN reset, audit logging, module registry CRUD/cloning, and `Api.call()` server-side disabled-module guard (`modules_map.py`) |
 | **Business Profiles & Fresh DB** | Built-in & custom profile CRUD (`business_profiles`), editable `demo_catalog` switching, custom `ui_labels` overrides, `exclusive_demo` category visibility, and atomic `build_fresh_profile_db` selective carry-over / clean rebuild |
-| **Permissions** | All 18 permission keys recognized (`installments_view`/`installments_manage` included); admin has full access; cashier permissions respect stored JSON; cashier blocked from backup and restore |
+| **Permissions & Zero-Leak RBAC** | All 49 permission keys / 10 groups / 7 presets (`app/permissions.py`); strict cashier baseline & v2 auto-migration; zero-leak tests (`customers_search` name/phone only, `shift` without store-wide sales, own-only `sale()`, Blind Close, 14+ blocked endpoints); `perm_audit_log` & account suspension checks |
 | **Database Backups & Restore** | `db_backup` creates valid zero-lock snapshot; `backups_list` enumerates snapshots; `db_restore` performs safe rollback with pre-restore safety snapshot |
 | **Hardware & POS** | `pos.html` global barcode keydown listener (<85ms burst) registered in DOM |
 | **Products & inventory** | SKU uniqueness; price/cost stored as integer minor units; `tracked` flag controls serial enforcement |
@@ -36,13 +36,13 @@ Any failure raises `AssertionError` with a descriptive message identifying the b
 | **Quotations** | Quote creation, item linkage, status transitions |
 | **Customers & installments** | Customer creation; unified `customer_ledger` debt tracking; `customer_payments` vouchers; installment plan scheduling, partial/full collection, cancellation, and alerts |
 | **Repairs & used devices** | Ticket creation; part linkage; valid statuses; used device purchases |
-| **Shifts** | Shift open/close; cash/wallet/installment counters; association with user; automatic shift-close backup trigger |
+| **Shifts** | Shift open/close (incl. Blind Close); cash/wallet/installment counters; association with user; automatic shift-close backup trigger |
 | **PDF generation** | Invoice and receipt PDF functions return valid bytes (PDF 1.4 header check) |
-| **API dispatcher** | `call(name, payload)` routes to correct methods; contract check ensures all frontend `api()` calls (`109` names) exist on `Api` and all `Api` methods are classified in `modules_map.py` |
+| **API dispatcher** | `call(name, payload)` routes to correct methods; contract check ensures all frontend `api()` calls (`112` names) exist on `Api` and all `Api` methods (`114`) are classified in `modules_map.py` |
 
 ### Running selfcheck After Every Change
 
-Every code or schema change **must** pass all 200 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
+Every code or schema change **must** pass all 232 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
 
 ---
 

@@ -41,9 +41,9 @@ Because the system is **100% offline** and binds to no public network interfaces
 - **Safe In-App Database Restore (`db_restore`):** Managers can restore any snapshot directly from `settings.html`. Before overwriting, a safety snapshot (`shop_YYYYMMDD_HHMMSS_before_restore.db`) is generated, ensuring zero data loss even if an incorrect backup is selected. Integrity is verified with `PRAGMA quick_check` prior to restore.
 
 ### 2.4 Server-Side Authorization (`_perm`)
-- **Backend-Enforced Authorization:** Authorization is verified strictly in Python (`app/api_*.py`) via `_perm(key)` and `_perm_any(*keys)`. Frontend checks in JavaScript (`hasPerm()`) are strictly for UI visibility and do not govern execution.
-- **18 Granular Permissions:** Cashiers operate under least-privilege principles covering sales, price modification, discounts, returns, customer data, installments, inventory, repairs, used devices, reports, and settings.
-- **Database Backup & Restore Isolation:** Endpoints `db_backup`, `backups_list`, and `db_restore` require `settings_manage` authorization; cashiers are strictly blocked.
+- **Backend-Enforced Authorization:** Authorization is verified strictly in Python (`app/api_*.py`) via `_perm(key)`, `_perm_any(*keys)`, `_perm_all(*keys)`, and ownership scope guards (`_scope_check`). Frontend checks in JavaScript (`hasPerm()`) are strictly for UI visibility and do not govern execution.
+- **49 Granular Permissions in 10 Groups:** Non-admin staff operate under least-privilege defaults (`cashier_strict`: only `pos_sell`, `shift_manage`, `receipt_view`, `customers_quick_pick`) with zero debt/history/cost/report leaks, Blind Close support (`shift_summary_view=False`), account activation toggles (`users.is_active`), and RBAC change auditing (`perm_audit_log`).
+- **Database Backup & Restore Isolation:** Endpoints `db_backup`, `backups_list`, and `db_restore` require `backups_manage` authorization; unauthorized users are strictly blocked.
 - **Immutable Historical Invoices:** Sales invoices (`sales`) cannot be deleted once committed. Adjustments must follow structured return procedures (`sale_returns`) with full audit traceability.
 
 ### 2.5 Injection and Input Defense
@@ -68,7 +68,7 @@ Under Egyptian Law No. 151 of 2020 (Personal Data Protection Law - PDPL):
 The following items are scheduled for hardening in **Phase 2** of the project roadmap:
 
 1. ✅ **Forced Default Credential Change (Implemented):** Mandatory PIN update on first run (`#modal-force-pin`) for default `admin` (`1234`) account, plus Owner PIN reset support.
-2. **Read-Endpoint Authorization Audit:** Ensure all read queries (`sale`, `quotation`, `repair`, `customer`, `shift_summary`) check granular view permissions rather than basic session presence.
+2. ✅ **Read-Endpoint Authorization & Zero-Leak Overhaul (Implemented 2026-11-17):** All read queries (`sale`, `quotation`, `repairs`, `customer`, `customers_list`, `shift`, `shift_summary`, `history_suggestions`, `sales_stats`, `used_stats`, `stock_stats`, `report_low`) enforce strict 49-key permissions, ownership scoping, name/phone-only POS customer quick-pick redaction, and Blind Close drawer redaction.
 3. **Database at Rest Encryption:** Provide an optional transparent encryption wrapper (e.g., SQLCipher) or BitLocker storage guidance for `data/shop.db`.
 4. **Session Idle Timeout:** Add an automatic desktop lock screen after configurable inactivity periods (e.g., 15 minutes of idle time).
 

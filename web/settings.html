@@ -1401,8 +1401,19 @@ $('btn-refresh-backups').addEventListener('click', async () => {
 });
 
 (async () => {
-  const user = await pageInit('settings', { perm: 'settings_manage' });
+  const user = await pageInit('settings', { perm: ['settings_view_edit', 'templates_manage', 'backups_manage'] });
   if (!user) return;
+
+  const canStore = hasPerm('settings_view_edit');
+  const canTpls = hasPerm('templates_manage');
+  const canBackups = hasPerm('backups_manage');
+  const staffLink = document.querySelector('a[href="staff.html"]');
+  if (staffLink && !hasPerm(['staff_view', 'staff_manage'])) staffLink.classList.add('hidden');
+
+  document.querySelector('[data-stab="store"]').classList.toggle('hidden', !canStore);
+  document.querySelector('[data-stab="login"]').classList.toggle('hidden', !canStore);
+  document.querySelector('[data-stab="invoices"]').classList.toggle('hidden', !canTpls);
+  document.querySelector('[data-stab="backups"]').classList.toggle('hidden', !canBackups);
 
   const tpls = await guard(() => api('templates_get'));
   if (tpls) {
@@ -1415,11 +1426,17 @@ $('btn-refresh-backups').addEventListener('click', async () => {
   fillLoginTab();
   fillInvoicesTab();
 
+  const allowedTabs = [
+    canStore ? 'store' : null,
+    canStore ? 'login' : null,
+    canTpls ? 'invoices' : null,
+    canBackups ? 'backups' : null,
+  ].filter(Boolean);
   const reqTab = new URLSearchParams(location.search).get('tab');
-  if (reqTab && ['store', 'login', 'invoices', 'backups'].includes(reqTab)) {
+  if (reqTab && allowedTabs.includes(reqTab)) {
     switchSettingsTab(reqTab);
-  } else {
-    switchSettingsTab('store');
+  } else if (allowedTabs.length) {
+    switchSettingsTab(allowedTabs[0]);
   }
 })();
 </script>

@@ -104,8 +104,12 @@
 <script src="app.js"></script>
 <script>
 (async () => {
-  const user = await pageInit('receipt');
+  const user = await pageInit('receipt', { perm: 'receipt_view' });
   if (!user) return;
+  if (!hasPerm('pos_whatsapp')) {
+    const waBtn = document.getElementById('btn-wa');
+    if (waBtn) waBtn.classList.add('hidden');
+  }
   let sale = null;
   let id = new URLSearchParams(location.search).get('id');
   let tplsLoaded = null;
@@ -124,7 +128,10 @@
 
   renderPaper();
   if (!id) {
-    const latest = await guard(() => api('sales', { kind: 'sale', limit: 1, offset: 0 }));
+    let latest = null;
+    if (hasPerm(['history_view_own', 'history_view_all'])) {
+      try { latest = await api('sales', { kind: 'sale', limit: 1, offset: 0 }); } catch (e) {}
+    }
     if (latest && latest.rows && latest.rows.length) {
       id = latest.rows[0].id;
     } else {

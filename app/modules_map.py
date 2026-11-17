@@ -10,6 +10,7 @@ CORE_METHODS = {
     "profile_save",
     "user_pref_save",
     "users",
+    "permissions_schema",
     # الإعدادات والنسخ الاحتياطي والقوالب (settings قسم أساسي)
     "settings",
     "settings_save",
@@ -131,6 +132,8 @@ API_MODULE_MAP = {
     # الموظفون والصلاحيات (staff)
     "user_save": "staff",
     "user_delete": "staff",
+    "user_toggle_active": "staff",
+    "perm_audit_list": "staff",
 }
 
 # تبعيات الأقسام: مفتاح القسم -> الأقسام التي يجب أن تظل مفعلة لكي يعمل

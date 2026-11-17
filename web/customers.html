@@ -133,13 +133,23 @@
 <script src="app.js"></script>
 <script>
 (async () => {
-  const user = await pageInit('customers', { perm: ['customers_view', 'customers_edit'] });
+  const user = await pageInit('customers', { perm: 'customers_view' });
   if (!user) return;
   
   const $ = (id) => document.getElementById(id);
   const canEdit = hasPerm('customers_edit');
   const canDelete = hasPerm('customers_delete');
+  const canDebt = hasPerm('customers_debt_view');
   if (!canEdit) $('btn-add').classList.add('hidden');
+  if (!canDebt) {
+    $('debt-only').checked = false;
+    $('debt-only').closest('label').classList.add('hidden');
+    ['sum-debt-count', 'sum-total-credit', 'sum-total-paid', 'sum-total-debt'].forEach((id) => {
+      const card = $(id) && $(id).closest('.bg-white');
+      if (card && id !== 'sum-debt-count') card.classList.add('hidden');
+      else if (id === 'sum-debt-count' && $(id)) $(id).closest('p').classList.add('hidden');
+    });
+  }
 
   let currentOffset = 0, lastTotal = 0, summaryLoaded = false, searchTimer = null;
   const LIMIT = 50;
@@ -147,15 +157,17 @@
   function renderSummary(sm) {
     if (!sm) return;
     $('sum-cust-count').textContent = n(sm.total_customers || 0);
-    $('sum-debt-count').textContent = n(sm.debt_customers_count || 0);
-    $('sum-total-credit').textContent = money(sm.total_credit || 0);
-    $('sum-total-paid').textContent = money(sm.total_paid || 0);
-    $('sum-total-debt').textContent = money(sm.total_debt || 0);
+    if (canDebt) {
+      $('sum-debt-count').textContent = n(sm.debt_customers_count || 0);
+      $('sum-total-credit').textContent = money(sm.total_credit || 0);
+      $('sum-total-paid').textContent = money(sm.total_paid || 0);
+      $('sum-total-debt').textContent = money(sm.total_debt || 0);
+    }
   }
 
   async function loadCustomers(forceSummary = false) {
     const q = $('q').value.trim();
-    const debtOnly = $('debt-only').checked;
+    const debtOnly = canDebt && $('debt-only').checked;
     let res;
     if (q) {
       if (!summaryLoaded || forceSummary) {
@@ -179,26 +191,27 @@
     const list = $('cust-list');
     list.innerHTML = rows.length ? rows.map(c => {
       const debt = c.debt || 0;
+      const finTd = (valHtml) => canDebt ? valHtml : '<td class="px-6 py-4 text-slate-400 text-xs">محجوب</td>';
       return `
-      <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer" onclick="location.href='customer_details.html?id=${c.id}'">
-        <td class="px-6 py-4 font-bold text-primary hover:underline">${esc(c.name)}</td>
+      <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${canDebt ? 'cursor-pointer' : ''}" ${canDebt ? `onclick="location.href='customer_details.html?id=${c.id}'"` : ''}>
+        <td class="px-6 py-4 font-bold text-primary ${canDebt ? 'hover:underline' : ''}">${esc(c.name)}</td>
         <td class="px-6 py-4 text-slate-600 dark:text-slate-400 font-num">${esc(c.phone || '—')}</td>
-        <td class="px-6 py-4 text-slate-700 dark:text-slate-300 font-num">${fmt(c.total_purchases || 0)} ${CURRENCY}</td>
-        <td class="px-6 py-4 text-amber-600 font-num font-medium">${fmt(c.credit_total || 0)} ${CURRENCY}</td>
-        <td class="px-6 py-4 text-emerald-600 font-num font-medium">${fmt(c.paid_total || 0)} ${CURRENCY}</td>
-        <td class="px-6 py-4 font-num font-bold">
+        ${finTd(`<td class="px-6 py-4 text-slate-700 dark:text-slate-300 font-num">${fmt(c.total_purchases || 0)} ${CURRENCY}</td>`)}
+        ${finTd(`<td class="px-6 py-4 text-amber-600 font-num font-medium">${fmt(c.credit_total || 0)} ${CURRENCY}</td>`)}
+        ${finTd(`<td class="px-6 py-4 text-emerald-600 font-num font-medium">${fmt(c.paid_total || 0)} ${CURRENCY}</td>`)}
+        ${finTd(`<td class="px-6 py-4 font-num font-bold">
           <span class="px-2.5 py-1 rounded-full text-xs ${debt > 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'}">
             ${debt > 0 ? fmt(debt) + ' ' + CURRENCY : 'خالص (0.00)'}
           </span>
-        </td>
+        </td>`)}
         <td class="px-6 py-4 text-center">
           <div class="flex justify-center gap-2">
             ${canEdit ? `<button onclick="editCustomer(${c.id}); event.stopPropagation()" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex items-center justify-center" title="تعديل"><span class="material-icons-outlined text-sm">edit</span></button>` : ''}
             ${canDelete ? `<button onclick="deleteCustomer(${c.id}); event.stopPropagation()" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center justify-center" title="حذف"><span class="material-icons-outlined text-sm">delete</span></button>` : ''}
-            <a href="customer_details.html?id=${c.id}" onclick="event.stopPropagation()" class="px-3 h-8 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors flex items-center justify-center gap-1 text-xs font-bold" title="كشف الحساب وسندات القبض">
+            ${canDebt ? `<a href="customer_details.html?id=${c.id}" onclick="event.stopPropagation()" class="px-3 h-8 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors flex items-center justify-center gap-1 text-xs font-bold" title="كشف الحساب وسندات القبض">
               <span class="material-icons-outlined text-sm">visibility</span>
               <span>كشف الحساب</span>
-            </a>
+            </a>` : ''}
           </div>
         </td>
       </tr>`;

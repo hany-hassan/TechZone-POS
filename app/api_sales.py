@@ -37,27 +37,39 @@ from api_common import (
 class SalesMixin:
     # ---------------------------------------------------------- ورديات
     def shift(self):
-        u = self._user()
+        u = self._perm_any("pos_sell", "shift_manage", "shift_summary_view", "history_view_own", "history_view_all", "reports_sales_view")
+        see_all = self._has_perm("history_view_all") or self._has_perm("reports_sales_view")
+        see_own = see_all or self._has_perm("shift_summary_view") or self._has_perm("history_view_own")
         with db.connect() as conn:
             s = self._open_shift(conn, u["id"])
-            today = conn.execute(
-                """SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
-                   WHERE created_at >= date('now','localtime')""",
-            ).fetchone()
+            today_data = None
             shift_sales = None
-            if s:
+            if see_all:
+                today = conn.execute(
+                    """SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+                       WHERE created_at >= date('now','localtime')""",
+                ).fetchone()
+                today_data = {"count": today["n"], "total": today["t"]}
+            elif see_own:
+                today = conn.execute(
+                    """SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales
+                       WHERE user_id=? AND created_at >= date('now','localtime')""",
+                    (u["id"],),
+                ).fetchone()
+                today_data = {"count": today["n"], "total": today["t"]}
+            if s and see_own:
                 shift_sales = conn.execute(
                     "SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE shift_id=?", (s["id"],)
                 ).fetchone()
             return {
                 "shift": dict(s) if s else None,
-                "today": {"count": today["n"], "total": today["t"]},
+                "today": today_data,
                 "shift_sales": dict(shift_sales) if shift_sales else None,
             }
 
     def shift_summary(self):
         """تقرير تفصيلي كامل للوردية المفتوحة قبل إغلاقها (جميع العمليات وتفصيل النقدي والمحفظة والآجل)."""
-        u = self._perm_any("pos_sell", "sales_all")
+        u = self._perm("shift_summary_view")
         with db.connect() as conn:
             s = self._open_shift(conn, u["id"])
             if not s:
@@ -199,7 +211,7 @@ class SalesMixin:
             }
 
     def shift_open(self, opening_cash=0):
-        u = self._user()
+        u = self._perm("shift_manage")
         with db.connect() as conn:
             if self._open_shift(conn, u["id"]):
                 raise ApiError("توجد وردية مفتوحة بالفعل")
@@ -210,7 +222,8 @@ class SalesMixin:
             return dict(conn.execute("SELECT * FROM shifts WHERE id=?", (cur.lastrowid,)).fetchone())
 
     def shift_close(self, counted_cash):
-        u = self._user()
+        u = self._perm("shift_manage")
+        can_see_summary = self._has_perm("shift_summary_view")
         with db.connect() as conn:
             s = self._open_shift(conn, u["id"])
             if not s:
@@ -226,7 +239,18 @@ class SalesMixin:
                    WHERE shift_id=? AND method='cash'""",
                 (s["id"],),
             ).fetchone()["c"]
-            expected = s["opening_cash"] + cash_sales + cash_vouchers
+            cash_inst = conn.execute(
+                """SELECT COALESCE(SUM(amount),0) c FROM installment_payments
+                   WHERE shift_id=? AND method='cash'""",
+                (s["id"],),
+            ).fetchone()["c"]
+            cash_inst += conn.execute(
+                """SELECT COALESCE(SUM(down_payment),0) c FROM installment_plans
+                   WHERE shift_id=? AND sale_id IS NULL AND status != 'cancelled'
+                     AND down_payment > 0 AND down_method='cash'""",
+                (s["id"],),
+            ).fetchone()["c"]
+            expected = s["opening_cash"] + cash_sales + cash_vouchers + cash_inst
             counted = _money(counted_cash)
             conn.execute(
                 "UPDATE shifts SET closed_at=?, counted_cash=?, expected_cash=?, diff=? WHERE id=?",
@@ -238,10 +262,18 @@ class SalesMixin:
             db.backup_database("shift_close")
         except Exception:
             pass
+        if not can_see_summary:
+            return {
+                "id": res["id"],
+                "opened_at": res["opened_at"],
+                "closed_at": res["closed_at"],
+                "counted_cash": res["counted_cash"],
+                "blind": True,
+            }
         return res
 
     def shifts(self):
-        self._perm("reports_view")
+        self._perm("reports_shifts_view")
         with db.connect() as conn:
             rows = conn.execute(
                 """SELECT s.*, u.name user_name,
@@ -254,7 +286,10 @@ class SalesMixin:
     # ---------------------------------------------------------- مبيعات
     def sale_create(self, items, discount=0, payments=None, customer_name=None, customer_phone=None, notes=None):
         u = self._perm("pos_sell")
-        can_edit_price = self._has_perm("pos_price") or self._has_perm("pos_item_discount")
+        can_edit_price = self._has_perm("pos_price")
+        can_item_disc = self._has_perm("pos_item_discount")
+        can_inv_disc = self._has_perm("pos_invoice_discount")
+        can_credit = self._has_perm("pos_credit_sale")
         items = items or []
         if not items:
             raise ApiError("السلة فارغة")
@@ -270,6 +305,8 @@ class SalesMixin:
             rate = int(Decimal(st.get("tax_rate", "14") or 0)) if tax_enabled else 0
 
             has_credit = any((p.get("method") == "credit" and _money(p.get("amount"), 0) > 0) for p in payments)
+            if has_credit and not can_credit:
+                raise ApiError("ممنوع: ليست لديك صلاحية البيع الآجل وتسجيل مديونيات على العملاء")
             if has_credit and not customer_name:
                 raise ApiError("لا يمكن البيع الآجل بدون اختيار أو إدخال اسم العميل")
 
@@ -286,10 +323,17 @@ class SalesMixin:
                     raise ApiError("منتج غير موجود في السلة")
                 up = it.get("unit_price")
                 unit = p["price"]
-                if up is not None and can_edit_price:
-                    unit = _money(up)
-                    if unit < 0:
+                if up is not None:
+                    req_unit = _money(up)
+                    if req_unit < 0:
                         raise ApiError("سعر الوحدة بعد الخصم لا يمكن أن يكون سالباً")
+                    if req_unit != p["price"]:
+                        if req_unit < p["price"] and (can_edit_price or can_item_disc):
+                            unit = req_unit
+                        elif req_unit > p["price"] and can_edit_price:
+                            unit = req_unit
+                        else:
+                            raise ApiError("ممنوع: ليست لديك صلاحية تعديل سعر الصنف أو عمل خصم عليه")
                 if p["tracked"]:
                     serial_ids = it.get("serial_ids") or []
                     if len(serial_ids) != qty:
@@ -308,6 +352,8 @@ class SalesMixin:
                     lines.append((p, qty, unit, []))
 
             discount = _money(discount)
+            if discount > 0 and not can_inv_disc:
+                raise ApiError("ممنوع: ليست لديك صلاحية عمل خصم على إجمالي الفاتورة")
             subtotal = sum(q * up for _, q, up, _ in lines)
             if discount < 0 or discount > subtotal:
                 raise ApiError("قيمة الخصم غير صالحة")
@@ -398,7 +444,7 @@ class SalesMixin:
             return {"sale_id": sale_id, "invoice_no": invoice}
 
     def sale(self, id):
-        self._perm_any("pos_sell", "sales_all", "sales_return")
+        u = self._perm_any("pos_sell", "receipt_view", "history_view_own", "history_view_all", "sales_return", "sales_return_own", "sales_post_discount")
         with db.connect() as conn:
             r = conn.execute(
                 """SELECT s.*, u.name user_name FROM sales s JOIN users u ON u.id=s.user_id WHERE s.id=?""",
@@ -406,6 +452,8 @@ class SalesMixin:
             ).fetchone()
             if not r:
                 raise ApiError("الفاتورة غير موجودة")
+            if r["user_id"] != u["id"] and not (self._has_perm("history_view_all") or self._has_perm("sales_return")):
+                raise ApiError("ممنوع: لا يمكنك عرض فواتير موظفين آخرين")
             items_raw = [dict(x) for x in conn.execute(
                 """SELECT si.*, COALESCE(NULLIF(si.sku, ''), p.sku, '') AS sku, p.image, p.price AS catalog_price, p.tracked
                    FROM sale_items si LEFT JOIN products p ON p.id=si.product_id
@@ -451,16 +499,16 @@ class SalesMixin:
             return d
 
     def sale_discount(self, sale_id, discount=0):
-        """تعديل أو إضافة خصم على فاتورة تم دفعها (يتطلب صلاحية المرتجعات أو خصم الأصناف)."""
-        u = self._user()
-        if not (self._has_perm("sales_return") or self._has_perm("pos_item_discount")):
-            raise ApiError("ممنوع: للمدير أو لمن يملك صلاحية المرتجعات والخصم فقط")
+        """تعديل أو إضافة خصم على فاتورة تم دفعها (يتطلب صلاحية الخصم بعد البيع)."""
+        u = self._perm("sales_post_discount")
         sid = _int(sale_id)
         disc = _money(discount)
         with db.connect() as conn:
             s = conn.execute("SELECT * FROM sales WHERE id=?", (sid,)).fetchone()
             if not s:
                 raise ApiError("الفاتورة غير موجودة")
+            if s["user_id"] != u["id"] and not self._has_perm("history_view_all"):
+                raise ApiError("ممنوع: لا يمكنك تعديل خصم فاتورة موظف آخر")
             if disc < 0 or disc > s["subtotal"]:
                 raise ApiError("قيمة الخصم غير صالحة (يجب ألا تتجاوز المجموع الفرعي)")
             prev_net_credit = _sale_net_credit(conn, sid)
@@ -490,9 +538,7 @@ class SalesMixin:
 
     def sale_modify_from_cart(self, sale_id, items=None, discount=0, notes=None, reason=None):
         """حفظ تعديل / مرتجع فاتورة مدفوعة من داخل سلة المشتريات مع توثيق المستخدم والوقت لمنع التلاعب."""
-        u = self._user()
-        if not (self._has_perm("sales_return") or self._has_perm("pos_item_discount") or self._has_perm("pos_price")):
-            raise ApiError("ممنوع: ليست لديك صلاحية تعديل الفواتير أو عمل مرتجع")
+        u = self._perm_any("sales_return", "sales_return_own", "sales_post_discount", "pos_item_discount", "pos_price")
         sid = _int(sale_id)
         items = items or []
         sub_map = {_int(it.get("sale_item_id")): it for it in items if it.get("sale_item_id")}
@@ -500,6 +546,8 @@ class SalesMixin:
             s = conn.execute("SELECT * FROM sales WHERE id=?", (sid,)).fetchone()
             if not s:
                 raise ApiError("الفاتورة غير موجودة")
+            if s["user_id"] != u["id"] and not (self._has_perm("sales_return") or self._has_perm("history_view_all")):
+                raise ApiError("ممنوع: لا يمكنك تعديل فواتير موظفين آخرين")
             if s["status"] == "returned":
                 raise ApiError("هذه الفاتورة مرتجعة بالكامل مسبقاً")
             prev_net_credit = _sale_net_credit(conn, sid)
@@ -525,8 +573,9 @@ class SalesMixin:
                     raise ApiError(f"الكمية للصنف «{si['name']}» غير صالحة (المتاح في الفاتورة: {orig_rem})")
 
                 if new_rem < orig_rem:
-                    if not self._has_perm("sales_return"):
-                        raise ApiError("ممنوع: ليست لديك صلاحية استرجاع أصناف من الفاتورة")
+                    can_ret_this = self._has_perm("sales_return") or (self._has_perm("sales_return_own") and s["user_id"] == u["id"])
+                    if not can_ret_this:
+                        raise ApiError("ممنوع: ليست لديك صلاحية استرجاع أصناف من هذه الفاتورة")
                     ret_qty = orig_rem - new_rem
                     conn.execute("UPDATE products SET qty=qty+? WHERE id=?", (ret_qty, si["product_id"]))
                     if si["serial_id"]:
@@ -555,7 +604,7 @@ class SalesMixin:
 
             new_disc = _money(discount)
             if new_disc != s["discount"]:
-                if not (self._has_perm("pos_item_discount") or self._has_perm("pos_price") or self._has_perm("sales_return")):
+                if not (self._has_perm("sales_post_discount") or self._has_perm("sales_return") or (self._has_perm("sales_return_own") and s["user_id"] == u["id"])):
                     raise ApiError("ممنوع: ليست لديك صلاحية تعديل خصم الفاتورة")
                 price_changes.append(f"تعديل خصم الفاتورة من {_fmt_money(s['discount'])} إلى {_fmt_money(new_disc)}")
 
@@ -709,6 +758,8 @@ class SalesMixin:
         import urllib.parse
         import webbrowser
 
+        self._perm("pos_whatsapp")
+
         with db.connect() as conn:
             st = self._settings(conn)
             if str(st.get("whatsapp_send_enabled", "1")).strip() == "0":
@@ -831,16 +882,18 @@ class SalesMixin:
         return clauses, args
 
     def sales(self, date=None, kind=None, q=None, limit=100, offset=0, date_from=None, date_to=None, all_dates=False):
-        u = self._user()
-        see_all = self._has_perm("sales_all") or self._has_perm("sales_return")
+        u = self._perm_any("history_view_own", "history_view_all", "sales_return", "sales_return_own", "sales_post_discount")
+        see_all = self._has_perm("history_view_all") or self._has_perm("sales_return")
+        can_quotes = self._has_perm("quotes_view")
+        can_repairs = self._has_perm("repair_view")
         limit, offset = _int(limit, 100), _int(offset, 0)
         q_str = (q or "").strip()
         k_norm = (kind or "").strip().lower()
         with db.connect() as conn:
             out = []
             include_sales = k_norm in ("", "all", "sale", "pos", "b2b", "invoice", "returned")
-            include_quotes = k_norm in ("", "all", "quote", "quotes")
-            include_repairs = k_norm in ("", "all", "repair", "repairs")
+            include_quotes = can_quotes and k_norm in ("", "all", "quote", "quotes")
+            include_repairs = can_repairs and k_norm in ("", "all", "repair", "repairs")
 
             if include_sales:
                 where, args = ["1=1"], []
@@ -917,95 +970,121 @@ class SalesMixin:
             return {"rows": out[offset:offset + limit], "total": tot}
 
     def history_suggestions(self, q=""):
-        self._user()
+        u = self._perm_any("history_view_own", "history_view_all", "sales_return", "sales_return_own", "quotes_view", "repair_view")
+        can_sales = self._has_perm("history_view_own") or self._has_perm("history_view_all") or self._has_perm("sales_return") or self._has_perm("sales_return_own")
+        see_all = self._has_perm("history_view_all") or self._has_perm("sales_return")
+        can_quotes = self._has_perm("quotes_view")
+        can_repairs = self._has_perm("repair_view")
         q_str = (q or "").strip()
         like = f"%{q_str}%"
         with db.connect() as conn:
             items = []
-            for r in conn.execute(
-                """SELECT id, invoice_no AS ref, customer_name, customer_phone, total, COALESCE(doc_type, 'pos') AS doc_type, created_at
-                   FROM sales
-                   WHERE (? = '' OR invoice_no LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)
-                   ORDER BY id DESC LIMIT 6""",
-                (q_str, like, like, like),
-            ).fetchall():
-                items.append({
-                    "kind": "b2b" if r["doc_type"] == "b2b" else "pos",
-                    "id": r["id"],
-                    "ref": r["ref"],
-                    "customer_name": r["customer_name"] or "",
-                    "customer_phone": r["customer_phone"] or "",
-                    "amount": r["total"],
-                    "created_at": r["created_at"],
-                })
-            for r in conn.execute(
-                """SELECT id, quote_no AS ref, customer_name, customer_phone, total, created_at
-                   FROM quotations
-                   WHERE doc_type='quote' AND status!='converted'
-                     AND (? = '' OR quote_no LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)
-                   ORDER BY id DESC LIMIT 5""",
-                (q_str, like, like, like),
-            ).fetchall():
-                items.append({
-                    "kind": "quote",
-                    "id": r["id"],
-                    "ref": r["ref"],
-                    "customer_name": r["customer_name"] or "",
-                    "customer_phone": r["customer_phone"] or "",
-                    "amount": r["total"],
-                    "created_at": r["created_at"],
-                })
-            for r in conn.execute(
-                """SELECT id, ref, customer_name, customer_phone, cost, created_at
-                   FROM repairs
-                   WHERE (? = '' OR ref LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)
-                   ORDER BY id DESC LIMIT 5""",
-                (q_str, like, like, like),
-            ).fetchall():
-                items.append({
-                    "kind": "repair",
-                    "id": r["id"],
-                    "ref": r["ref"],
-                    "customer_name": r["customer_name"] or "",
-                    "customer_phone": r["customer_phone"] or "",
-                    "amount": r["cost"],
-                    "created_at": r["created_at"],
-                })
+            if can_sales:
+                u_sql = "" if see_all else " AND user_id=?"
+                u_args = (q_str, like, like, like) if see_all else (q_str, like, like, like, u["id"])
+                for r in conn.execute(
+                    f"""SELECT id, invoice_no AS ref, customer_name, customer_phone, total, COALESCE(doc_type, 'pos') AS doc_type, created_at
+                        FROM sales
+                        WHERE (? = '' OR invoice_no LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?){u_sql}
+                        ORDER BY id DESC LIMIT 6""",
+                    u_args,
+                ).fetchall():
+                    items.append({
+                        "kind": "b2b" if r["doc_type"] == "b2b" else "pos",
+                        "id": r["id"],
+                        "ref": r["ref"],
+                        "customer_name": r["customer_name"] or "",
+                        "customer_phone": r["customer_phone"] or "",
+                        "amount": r["total"],
+                        "created_at": r["created_at"],
+                    })
+            if can_quotes:
+                u_sql = "" if see_all else " AND user_id=?"
+                u_args = (q_str, like, like, like) if see_all else (q_str, like, like, like, u["id"])
+                for r in conn.execute(
+                    f"""SELECT id, quote_no AS ref, customer_name, customer_phone, total, created_at
+                        FROM quotations
+                        WHERE doc_type='quote' AND status!='converted'
+                          AND (? = '' OR quote_no LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?){u_sql}
+                        ORDER BY id DESC LIMIT 5""",
+                    u_args,
+                ).fetchall():
+                    items.append({
+                        "kind": "quote",
+                        "id": r["id"],
+                        "ref": r["ref"],
+                        "customer_name": r["customer_name"] or "",
+                        "customer_phone": r["customer_phone"] or "",
+                        "amount": r["total"],
+                        "created_at": r["created_at"],
+                    })
+            if can_repairs:
+                for r in conn.execute(
+                    """SELECT id, ref, customer_name, customer_phone, cost, created_at
+                       FROM repairs
+                       WHERE (? = '' OR ref LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)
+                       ORDER BY id DESC LIMIT 5""",
+                    (q_str, like, like, like),
+                ).fetchall():
+                    items.append({
+                        "kind": "repair",
+                        "id": r["id"],
+                        "ref": r["ref"],
+                        "customer_name": r["customer_name"] or "",
+                        "customer_phone": r["customer_phone"] or "",
+                        "amount": r["cost"],
+                        "created_at": r["created_at"],
+                    })
             items.sort(key=lambda x: x["created_at"], reverse=True)
             return items[:12]
 
     def sales_stats(self, date=None, date_from=None, date_to=None, all_dates=False):
-        self._user()
+        u = self._perm_any("history_view_own", "history_view_all", "sales_return", "sales_return_own", "quotes_view", "repair_view", "reports_sales_view")
+        can_sales = self._has_perm("history_view_own") or self._has_perm("history_view_all") or self._has_perm("sales_return") or self._has_perm("sales_return_own") or self._has_perm("reports_sales_view")
+        see_all = self._has_perm("history_view_all") or self._has_perm("reports_sales_view") or self._has_perm("sales_return")
+        can_quotes = self._has_perm("quotes_view") or self._has_perm("reports_sales_view")
+        can_repairs = self._has_perm("repair_view") or self._has_perm("reports_sales_view")
         if not date and not date_from and not date_to and not all_dates:
             date = datetime.datetime.now().strftime("%Y-%m-%d")
         d_cl, d_ar = self._history_date_clause("", date=date, date_from=date_from, date_to=date_to, all_dates=all_dates)
         w_sql = (" AND ".join(d_cl)) if d_cl else "1=1"
+        u_filter = "" if see_all else " AND user_id=?"
+        u_args = list(d_ar) + ([] if see_all else [u["id"]])
         with db.connect() as conn:
-            s = conn.execute(
-                f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE {w_sql} AND status != 'returned'",
-                d_ar,
-            ).fetchone()
-            pos_s = conn.execute(
-                f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE {w_sql} AND status != 'returned' AND COALESCE(doc_type,'pos') != 'b2b'",
-                d_ar,
-            ).fetchone()
-            b2b_s = conn.execute(
-                f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE {w_sql} AND status != 'returned' AND doc_type = 'b2b'",
-                d_ar,
-            ).fetchone()
-            q_s = conn.execute(
-                f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM quotations WHERE {w_sql} AND doc_type = 'quote' AND status != 'converted'",
-                d_ar,
-            ).fetchone()
-            ret = conn.execute(
-                f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sale_returns WHERE {w_sql}",
-                d_ar,
-            ).fetchone()
-            rp = conn.execute(
-                f"""SELECT COUNT(*) n, SUM(CASE WHEN status IN ('received','in_review','pending_approval')
-                   THEN 1 ELSE 0 END) active FROM repairs WHERE {w_sql}""",
-                d_ar,
-            ).fetchone()
+            if can_sales:
+                s = conn.execute(
+                    f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE {w_sql}{u_filter} AND status != 'returned'",
+                    u_args,
+                ).fetchone()
+                pos_s = conn.execute(
+                    f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE {w_sql}{u_filter} AND status != 'returned' AND COALESCE(doc_type,'pos') != 'b2b'",
+                    u_args,
+                ).fetchone()
+                b2b_s = conn.execute(
+                    f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE {w_sql}{u_filter} AND status != 'returned' AND doc_type = 'b2b'",
+                    u_args,
+                ).fetchone()
+                ret = conn.execute(
+                    f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sale_returns WHERE {w_sql}{u_filter}",
+                    u_args,
+                ).fetchone()
+            else:
+                s = pos_s = b2b_s = ret = {"n": 0, "t": 0}
+            if can_quotes:
+                q_s = conn.execute(
+                    f"SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM quotations WHERE {w_sql}{u_filter} AND doc_type = 'quote' AND status != 'converted'",
+                    u_args,
+                ).fetchone()
+            else:
+                q_s = {"n": 0, "t": 0}
+            if can_repairs:
+                rp = conn.execute(
+                    f"""SELECT COUNT(*) n, SUM(CASE WHEN status IN ('received','in_review','pending_approval')
+                       THEN 1 ELSE 0 END) active FROM repairs WHERE {w_sql}""",
+                    d_ar,
+                ).fetchone()
+            else:
+                rp = {"n": 0, "active": 0}
             return {
                 "sales": {"count": s["n"], "total": s["t"]},
                 "pos_sales": {"count": pos_s["n"], "total": pos_s["t"]},
@@ -1016,7 +1095,7 @@ class SalesMixin:
             }
 
     def sale_return(self, sale_id, items, reason=None):
-        u = self._perm("sales_return")
+        u = self._perm_any("sales_return", "sales_return_own")
         items = items or []
         if not items:
             raise ApiError("اختر أصنافاً للإرجاع")
@@ -1024,6 +1103,8 @@ class SalesMixin:
             s = conn.execute("SELECT * FROM sales WHERE id=?", (_int(sale_id),)).fetchone()
             if not s:
                 raise ApiError("الفاتورة غير موجودة")
+            if s["user_id"] != u["id"] and not self._has_perm("sales_return"):
+                raise ApiError("ممنوع: صلاحيتك تقتصر على مرتجع فواتيرك فقط")
             if s["status"] == "returned":
                 raise ApiError("الفاتورة مرتجعة بالكامل مسبقاً")
             prev_net_credit = _sale_net_credit(conn, s["id"])
