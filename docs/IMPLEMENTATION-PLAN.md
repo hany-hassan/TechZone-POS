@@ -121,7 +121,7 @@
 ---
 
 ### المهمة 3.2: تقسيم كلاس Api العملاق في app/api.py إلى وحدات خدمات ✅ (مكتملة)
-- **الحالة:** تم تقسيم `app/api.py` إلى Facade يجمع 8 وحدات متخصصة (`api_common.py`, `api_auth.py`, `api_owner.py`, `api_inventory.py`, `api_customers.py`, `api_installments.py`, `api_sales.py`, `api_quotes.py`, `api_services.py`, `api_reports.py`) مع حارس `modules_map.py` واجتياز كافة فحوصات `selfcheck.py` (195 فحصاً).
+- **الحالة:** تم تقسيم `app/api.py` إلى Facade يجمع 8 وحدات متخصصة (`api_common.py`, `api_auth.py`, `api_owner.py`, `api_inventory.py`, `api_customers.py`, `api_installments.py`, `api_sales.py`, `api_quotes.py`, `api_services.py`, `api_reports.py`) مع حارس `modules_map.py` واجتياز كافة فحوصات `selfcheck.py` (200 فحصاً).
 - **الهدف الأصلي:** رفع تقييم القابلية للصيانة (Maintainability) من 4.0/10 إلى 8.5/10 وتسهيل عمل أي وكيل ذكاء اصطناعي أو مطور دون حدوث تضارب في كود الملف الذي يتجاوز 3500 سطر.
 - **الملفات المتأثرة:** `app/api.py` والهيكل الجديد في `app/services/`.
 - **خطوات التنفيذ:**

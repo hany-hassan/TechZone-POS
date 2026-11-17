@@ -34,7 +34,7 @@
 @page { margin: 0; }
 @media print {
   @page { margin: 0; }
-  html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
+  html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   body > *:not(#pos-print-paper) { display: none !important; }
   #pos-print-paper {
     display: block !important;
@@ -46,6 +46,19 @@
     color: #000 !important;
     font-family: monospace, sans-serif !important;
     font-size: 12px !important;
+  }
+  #pos-print-paper[data-print-mode="58mm"] {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    padding: 2mm !important;
+    font-size: 11px !important;
+  }
+  #pos-print-paper[data-print-mode="a4"] {
+    width: 210mm !important;
+    max-width: 210mm !important;
+    padding: 0 !important;
+    font-family: "IBM Plex Sans Arabic", "Cairo", sans-serif !important;
+    font-size: 13px !important;
   }
 }
 </style>
@@ -482,7 +495,52 @@
   </div>
 </div>
 
-<!-- Direct Thermal Print Container (80mm) -->
+<!-- نافذة معاينة الفاتورة / الإيصال قبل الطباعة داخل البرنامج -->
+<div id="pos-print-preview-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col">
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <span class="material-icons-outlined text-primary">receipt_long</span>
+        <div>
+          <h3 class="font-bold text-sm md:text-base text-slate-900 dark:text-white flex items-center gap-2">
+            <span>معاينة الإيصال قبل الطباعة</span>
+            <span id="pos-preview-invno" class="px-2 py-0.5 rounded-lg bg-primary/10 text-primary text-xs font-num"></span>
+          </h3>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400">راجع الفاتورة ثم اضغط «طباعة الإيصال» أو «إغلاق بدون طباعة»</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-bold">
+          <button id="pos-preview-fmt-thermal" type="button" class="px-3 py-1 rounded-lg bg-primary text-white">إيصال كاشير</button>
+          <button id="pos-preview-fmt-a4" type="button" class="px-3 py-1 rounded-lg text-slate-600 dark:text-slate-300">فاتورة A4</button>
+        </div>
+        <button id="pos-preview-x" type="button" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" title="إغلاق">
+          <span class="material-icons-outlined">close</span>
+        </button>
+      </div>
+    </div>
+    <div class="p-4 md:p-6 bg-slate-100 dark:bg-slate-950 overflow-y-auto flex-1 flex justify-center items-start">
+      <div id="pos-preview-paper" class="bg-white text-black shadow-xl rounded-md overflow-hidden w-full max-w-[360px]" dir="rtl"></div>
+    </div>
+    <div class="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-wrap items-center justify-between gap-2">
+      <button id="pos-preview-close-btn" type="button" class="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800">
+        إغلاق (بدون طباعة)
+      </button>
+      <div class="flex items-center gap-2">
+        <button id="pos-preview-wa-btn" type="button" data-wa-toggle class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20">
+          <span class="material-icons-outlined text-base">send</span>
+          <span>واتساب PDF</span>
+        </button>
+        <button id="pos-preview-print-btn" type="button" class="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/25">
+          <span class="material-icons-outlined text-lg">print</span>
+          <span>طباعة الإيصال</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Direct Thermal Print Container (80mm / 58mm / A4) -->
 <div id="pos-print-paper" dir="rtl"></div>
 
 <script src="app.js"></script>
@@ -518,23 +576,125 @@ document.getElementById('btn-size-default').addEventListener('click', async () =
   }
 });
 
-/* ===== طباعة الإيصال مباشرة 80mm من شاشة نقاط البيع ===== */
-async function printSaleDirectly(saleId) {
+/* ===== معاينة وطباعة الإيصال (معاينة داخل البرنامج + طباعة صامتة أو نافذة الطابعة حسب الإعدادات) ===== */
+let PREVIEW_SALE = null;
+let PREVIEW_FORMAT = 'thermal';
+
+function buildPosSalePrintData(s, format = 'thermal') {
+  let posCfg = {};
+  let a4Cfg = {};
+  try { if (SETTINGS.template_pos_config) posCfg = JSON.parse(SETTINGS.template_pos_config) || {}; } catch (e) {}
+  try { if (SETTINGS.template_a4_config) a4Cfg = JSON.parse(SETTINGS.template_a4_config) || {}; } catch (e) {}
+  if (format === 'a4') {
+    return { html: buildA4InvoiceHtml(s, a4Cfg), mode: 'a4' };
+  }
+  const mode = posCfg.paper_width === '58mm' ? '58mm' : 'thermal';
+  return { html: buildPosThermalReceiptHtml(s, posCfg, SETTINGS), mode };
+}
+
+function renderPosPrintPreview() {
+  if (!PREVIEW_SALE) return;
+  const { html, mode } = buildPosSalePrintData(PREVIEW_SALE, PREVIEW_FORMAT);
+  const box = document.getElementById('pos-preview-paper');
+  box.innerHTML = html;
+  if (PREVIEW_FORMAT === 'a4') {
+    box.className = 'bg-white text-black shadow-xl rounded-md overflow-x-auto w-full';
+  } else {
+    box.className = `bg-white text-black shadow-xl rounded-md overflow-hidden w-full ${mode === '58mm' ? 'max-w-[260px]' : 'max-w-[360px]'}`;
+  }
+  const bTh = document.getElementById('pos-preview-fmt-thermal');
+  const bA4 = document.getElementById('pos-preview-fmt-a4');
+  bTh.className = PREVIEW_FORMAT === 'thermal' ? 'px-3 py-1 rounded-lg bg-primary text-white' : 'px-3 py-1 rounded-lg text-slate-600 dark:text-slate-300';
+  bA4.className = PREVIEW_FORMAT === 'a4' ? 'px-3 py-1 rounded-lg bg-primary text-white' : 'px-3 py-1 rounded-lg text-slate-600 dark:text-slate-300';
+  const waBtnSpan = document.querySelector('#pos-preview-wa-btn span:last-child');
+  if (waBtnSpan) waBtnSpan.textContent = PREVIEW_FORMAT === 'a4' ? 'واتساب PDF (A4)' : 'واتساب PDF';
+}
+
+function closePosPrintPreview() {
+  const modal = document.getElementById('pos-print-preview-modal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+async function openPosPrintPreview(saleId) {
   const s = await guard(() => api('sale', { id: +saleId }));
   if (!s) return;
-  let posCfg = {};
-  try {
-    if (SETTINGS.template_pos_config) posCfg = JSON.parse(SETTINGS.template_pos_config) || {};
-  } catch (e) {}
-  const paper = document.getElementById('pos-print-paper');
-  paper.innerHTML = buildPosThermalReceiptHtml(s, posCfg, SETTINGS);
-  const mode = posCfg.paper_width === '58mm' ? '58mm' : 'thermal';
+  PREVIEW_SALE = s;
+  PREVIEW_FORMAT = 'thermal';
+  document.getElementById('pos-preview-invno').textContent = '#' + s.invoice_no;
+  applyWhatsappVisibility();
+  renderPosPrintPreview();
+  const modal = document.getElementById('pos-print-preview-modal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+async function printSaleDirectly(saleId, format = 'thermal', opts = {}) {
+  const s = (PREVIEW_SALE && PREVIEW_SALE.id === +saleId) ? PREVIEW_SALE : await guard(() => api('sale', { id: +saleId }));
+  if (!s) return;
+  const { html, mode } = buildPosSalePrintData(s, format);
   if (window.parent && window.parent !== window && window.parent.TZOS && window.parent.TZOS.printHtml) {
-    window.parent.TZOS.printHtml(paper.innerHTML, mode);
+    return await window.parent.TZOS.printHtml(html, mode, opts);
+  }
+  const paper = document.getElementById('pos-print-paper');
+  paper.dataset.printMode = mode;
+  paper.innerHTML = html;
+  let pageStyle = document.getElementById('pos-dynamic-page-style');
+  if (!pageStyle) {
+    pageStyle = document.createElement('style');
+    pageStyle.id = 'pos-dynamic-page-style';
+    document.head.appendChild(pageStyle);
+  }
+  if (mode === 'a4') pageStyle.textContent = '@page { size: A4 portrait; margin: 0; }';
+  else if (mode === '58mm') pageStyle.textContent = '@page { size: 58mm auto; margin: 0; }';
+  else pageStyle.textContent = '@page { size: 80mm auto; margin: 0; }';
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  return await tzPrintPage(mode, opts);
+}
+
+async function handleSalePrintFlow(saleId) {
+  if (SETTINGS && SETTINGS.pos_print_preview === '0') {
+    await printSaleDirectly(saleId, 'thermal');
   } else {
-    setTimeout(() => window.print(), 80);
+    await openPosPrintPreview(saleId);
   }
 }
+
+document.getElementById('pos-preview-fmt-thermal').addEventListener('click', () => {
+  PREVIEW_FORMAT = 'thermal';
+  renderPosPrintPreview();
+});
+document.getElementById('pos-preview-fmt-a4').addEventListener('click', () => {
+  PREVIEW_FORMAT = 'a4';
+  renderPosPrintPreview();
+});
+document.getElementById('pos-preview-x').addEventListener('click', closePosPrintPreview);
+document.getElementById('pos-preview-close-btn').addEventListener('click', closePosPrintPreview);
+document.getElementById('pos-preview-wa-btn').addEventListener('click', async () => {
+  if (!PREVIEW_SALE) return;
+  let a4Cfg = null;
+  if (PREVIEW_FORMAT === 'a4') {
+    try { if (SETTINGS.template_a4_config) a4Cfg = JSON.parse(SETTINGS.template_a4_config) || {}; } catch (e) {}
+  }
+  await sendInvoicePdfToWhatsapp(PREVIEW_SALE.id, PREVIEW_SALE.customer_phone || '', PREVIEW_FORMAT, a4Cfg);
+});
+document.getElementById('pos-preview-print-btn').addEventListener('click', async () => {
+  if (!PREVIEW_SALE) return;
+  const btn = document.getElementById('pos-preview-print-btn');
+  btn.disabled = true;
+  try {
+    const res = await printSaleDirectly(PREVIEW_SALE.id, PREVIEW_FORMAT);
+    if (!res || res.ok) closePosPrintPreview();
+  } finally {
+    btn.disabled = false;
+  }
+});
+window.addEventListener('keydown', (e) => {
+  const pm = document.getElementById('pos-print-preview-modal');
+  if (e.key === 'Escape' && pm && !pm.classList.contains('hidden')) {
+    closePosPrintPreview();
+  }
+});
 
 /* ===== إدارة الوردية (فتح + تقرير إغلاق تفصيلي) ===== */
 async function refreshShift() {
@@ -1292,7 +1452,7 @@ async function saveCartInvoiceModification() {
   const modifiedId = res.sale_id;
   clearAllCartFields(true);
   await search();
-  await printSaleDirectly(modifiedId);
+  await handleSalePrintFlow(modifiedId);
 }
 
 async function openLookupSale(saleId) {
@@ -1327,7 +1487,7 @@ document.getElementById('lu-wa-btn').addEventListener('click', () => {
   if (SELECTED_LOOKUP_SALE) sendInvoicePdfToWhatsapp(SELECTED_LOOKUP_SALE.id, SELECTED_LOOKUP_SALE.customer_phone || '');
 });
 document.getElementById('lu-print-btn').addEventListener('click', () => {
-  if (SELECTED_LOOKUP_SALE) printSaleDirectly(SELECTED_LOOKUP_SALE.id);
+  if (SELECTED_LOOKUP_SALE) openPosPrintPreview(SELECTED_LOOKUP_SALE.id);
 });
 
 document.getElementById('lu-ret-submit').addEventListener('click', async () => {
@@ -1598,7 +1758,8 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
     notes: document.getElementById('notes').value || null,
   }));
   if (!res) return;
-  toast('تم البيع — فاتورة ' + res.invoice_no + ' (جاري فتح الطباعة...)');
+  const usePreview = !SETTINGS || SETTINGS.pos_print_preview !== '0';
+  toast(usePreview ? `تم البيع بنجاح — فاتورة ${res.invoice_no}` : `تم البيع — فاتورة ${res.invoice_no} (جاري الطباعة...)`);
   lastSale = res.sale_id;
   document.getElementById('invno').textContent = '#' + res.invoice_no;
   CART = [];
@@ -1613,8 +1774,7 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
   if (sendWa) {
     await sendInvoicePdfToWhatsapp(res.sale_id, custPhone);
   }
-  // فتح نافذة الطباعة مباشرة دون مغادرة شاشة نقاط البيع
-  await printSaleDirectly(res.sale_id);
+  await handleSalePrintFlow(res.sale_id);
 });
 
   // Autocomplete for Customers
@@ -1713,17 +1873,24 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
     }
   });
 
+  function syncSettingsRuntime() {
+    CURRENCY = (SETTINGS && SETTINGS.currency) || CURRENCY || 'ج.م';
+    document.getElementById('cur').textContent = CURRENCY;
+    document.querySelectorAll('.cur-lbl').forEach((el) => { el.textContent = CURRENCY; });
+    TAX_ON = !SETTINGS || SETTINGS.tax_enabled !== '0';
+    RATE = +(((SETTINGS && SETTINGS.tax_rate) || '14'));
+    document.getElementById('taxrate').textContent = RATE;
+    totals();
+  }
+  window.syncSettingsRuntime = syncSettingsRuntime;
+
   (async () => {
   user = await pageInit('pos');
   if (!user) return;
   document.getElementById('user-name').textContent = user.name;
   document.getElementById('user-role').textContent = user.role === 'admin' ? 'مدير' : 'موظف / كاشير';
   document.getElementById('user-initial').textContent = (user.name || '؟').slice(0, 1);
-  document.getElementById('cur').textContent = CURRENCY;
-  document.querySelectorAll('.cur-lbl').forEach((el) => { el.textContent = CURRENCY; });
-  TAX_ON = SETTINGS.tax_enabled !== '0';
-  RATE = +((SETTINGS.tax_rate || '14'));
-  document.getElementById('taxrate').textContent = RATE;
+  syncSettingsRuntime();
 
   // تطبيق حجم البلوك: الأولوية لتفضيل المستخدم الخاص، وإلا فالحجم الافتراضي الذي حدده الأدمن
   const defaultCardSize = +(SETTINGS.pos_card_size || 200);

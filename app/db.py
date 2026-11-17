@@ -1040,6 +1040,9 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
             conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('custom_payment_methods', ?)", (json.dumps(DEFAULT_PAYMENT_METHODS, ensure_ascii=False),))
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('business_profile', 'retail_electronics')")
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('structure_version', '1')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('pos_print_preview', '1')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('print_show_dialog', '0')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('print_printer_name', '')")
         conn.commit()
     except Exception as e:
         print(f"Schema upgrade error: {e}")
@@ -1338,6 +1341,9 @@ def _seed(conn: sqlite3.Connection) -> None:
         "default_start_mode": "window",
         "os_default_theme": "dark",
         "whatsapp_send_enabled": "1",
+        "pos_print_preview": "1",
+        "print_show_dialog": "0",
+        "print_printer_name": "",
         "login_max_attempts": "5",
         "login_lockout_minutes": "10",
     }

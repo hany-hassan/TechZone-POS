@@ -20,9 +20,11 @@ CORE_METHODS = {
     "db_backup",
     "backups_list",
     "db_restore",
-    # الإيصال وقراءة الفاتورة الواحدة (receipt قسم أساسي)
+    # الإيصال وقراءة الفاتورة الواحدة والطباعة (receipt قسم أساسي)
     "receipt_text",
     "sale",
+    "printers_list",
+    "silent_print",
     # واجهة النظام ووضع المالك الرئيسي
     "ui_config",
     "owner_status",

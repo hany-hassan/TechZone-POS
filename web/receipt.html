@@ -159,12 +159,12 @@
     </div>`).join('');
   renderPaper();
 
-  document.getElementById('btn-print-thermal').addEventListener('click', () => {
+  document.getElementById('btn-print-thermal').addEventListener('click', async () => {
     const mode = posCfg.paper_width === '58mm' ? '58mm' : 'thermal';
     if (window.parent && window.parent !== window && window.parent.TZOS && window.parent.TZOS.printHtml) {
-      window.parent.TZOS.printHtml(document.getElementById('paper').innerHTML, mode);
+      await window.parent.TZOS.printHtml(document.getElementById('paper').innerHTML, mode);
     } else {
-      window.print();
+      await tzPrintPage(mode);
     }
   });
 

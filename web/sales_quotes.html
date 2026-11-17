@@ -1107,7 +1107,7 @@ function printA4HtmlNow(htmlContent) {
     pageStyle.textContent = '@page { size: A4 portrait; margin: 0; }';
     const area = $('standalone-print-area');
     area.innerHTML = htmlContent;
-    window.print();
+    tzPrintPage('a4');
   }
 }
 

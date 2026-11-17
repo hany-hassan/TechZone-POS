@@ -488,9 +488,14 @@ class AuthSettingsMixin:
 
     # ---------------------------------------------------------- إعدادات
     def settings(self):
-        self._perm("settings_manage")
+        """قراءة إعدادات التشغيل للمستخدم الحالي (مع حجب بيانات الأمان الداخلية لغير المخولين)."""
+        self._user()
         with db.connect() as conn:
-            return self._settings(conn)
+            st = dict(self._settings(conn))
+            if not self._has_perm("settings_manage"):
+                for priv in ("login_fail_state", "login_max_attempts", "login_lockout_minutes", "customer_ledger_migrated"):
+                    st.pop(priv, None)
+            return st
 
     def settings_save(self, **kv):
         self._perm("settings_manage")
@@ -500,9 +505,10 @@ class AuthSettingsMixin:
                     "store_email", "store_cr", "store_vat", "receipt_thanks", "receipt_footer",
                     "receipt_logo", "receipt_show_logo", "receipt_show_barcode",
                     "receipt_show_tax", "receipt_show_payments", "whatsapp_send_enabled",
+                    "pos_print_preview", "print_show_dialog", "print_printer_name",
                     "login_max_attempts", "login_lockout_minutes",
                     "template_a4_config", "template_pos_config", "pos_categories_config"}
-        show = {"tax_enabled", "receipt_show_logo", "receipt_show_barcode", "receipt_show_tax", "receipt_show_payments", "whatsapp_send_enabled"}
+        show = {"tax_enabled", "receipt_show_logo", "receipt_show_barcode", "receipt_show_tax", "receipt_show_payments", "whatsapp_send_enabled", "pos_print_preview", "print_show_dialog"}
         valid_login_modes = {"pin_only", "select_user_pin", "username_password"}
         valid_start_modes = {"window", "maximized", "direct"}
         with db.connect() as conn:
@@ -511,7 +517,7 @@ class AuthSettingsMixin:
                 if k not in allowed or v is None:
                     continue
                 s = str(v)
-                if s == "" and k not in show and k not in ("os_default_custom_bg", "os_default_layout", "receipt_logo", "pos_categories_config"):
+                if s == "" and k not in show and k not in ("os_default_custom_bg", "os_default_layout", "receipt_logo", "pos_categories_config", "print_printer_name"):
                     continue
                 if k in show:
                     if s not in ("0", "1"):
@@ -730,4 +736,137 @@ class AuthSettingsMixin:
             self._tpl_cache = None
             self._settings_cache = None
             return self._load_templates(conn)
+
+    # ---------------------------------------------------------- الطباعة المباشرة والطابعات
+    def printers_list(self):
+        """جلب قائمة الطابعات المثبتة على نظام ويندوز والطابعة الافتراضية."""
+        self._user()
+        printers = []
+        default_printer = ""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                import ctypes.wintypes as wt
+
+                class _PRINTER_INFO_4W(ctypes.Structure):
+                    _fields_ = [
+                        ("pPrinterName", wt.LPWSTR),
+                        ("pServerName", wt.LPWSTR),
+                        ("Attributes", wt.DWORD),
+                    ]
+
+                ws = ctypes.WinDLL("winspool.drv", use_last_error=True)
+                needed = wt.DWORD(0)
+                returned = wt.DWORD(0)
+                flags = 2 | 4  # PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS
+                ws.EnumPrintersW(flags, None, 4, None, 0, ctypes.byref(needed), ctypes.byref(returned))
+                if needed.value > 0:
+                    buf = ctypes.create_string_buffer(needed.value)
+                    if ws.EnumPrintersW(flags, None, 4, buf, needed.value, ctypes.byref(needed), ctypes.byref(returned)):
+                        arr = (_PRINTER_INFO_4W * returned.value).from_buffer(buf)
+                        for i in range(returned.value):
+                            name = arr[i].pPrinterName
+                            if name and name not in printers:
+                                printers.append(name)
+                sz = wt.DWORD(512)
+                dbuf = ctypes.create_unicode_buffer(512)
+                if ws.GetDefaultPrinterW(dbuf, ctypes.byref(sz)):
+                    default_printer = dbuf.value or ""
+            except Exception:
+                pass
+        return {"printers": printers, "default_printer": default_printer}
+
+    def silent_print(self, mode="thermal", printer_name=""):
+        """طباعة الصفحة الحالية مباشرة عبر WebView2 PrintAsync دون فتح نافذة إعدادات الطابعة في ويندوز."""
+        self._user()
+        chosen_printer = str(printer_name or "").strip()
+        if not chosen_printer:
+            with db.connect() as conn:
+                chosen_printer = (self._settings(conn).get("print_printer_name") or "").strip()
+        try:
+            import webview
+        except Exception:
+            return {"ok": False, "fallback": "dialog", "reason": "no_webview"}
+
+        wins = getattr(webview, "windows", None) or []
+        if not wins:
+            return {"ok": False, "fallback": "dialog", "reason": "no_window"}
+        if sys.platform != "win32":
+            return {"ok": False, "fallback": "dialog", "reason": "unsupported_os"}
+
+        try:
+            import threading
+            from System import Action, Func, Object
+            from System.Threading.Tasks import Task
+            from Microsoft.Web.WebView2.Core import CoreWebView2PrintStatus
+            from webview.platforms.winforms import BrowserView
+
+            win = wins[0]
+            form = BrowserView.instances.get(win.uid)
+            if not form or not getattr(form, "browser", None) or not getattr(form.browser, "webview", None):
+                return {"ok": False, "fallback": "dialog", "reason": "no_browser"}
+
+            browser = form.browser
+            wv = browser.webview
+            done = threading.Event()
+            outcome = {"ok": False, "status": "OtherError", "error": "تعذر بدء الطباعة المباشرة"}
+
+            def _on_print_done(task):
+                try:
+                    if task.IsFaulted or task.IsCanceled:
+                        ex = getattr(task, "Exception", None)
+                        outcome["ok"] = False
+                        outcome["status"] = "OtherError"
+                        outcome["error"] = str(ex) if ex else "تعذر إتمام الطباعة"
+                    else:
+                        st = task.Result
+                        outcome["status"] = str(st)
+                        if st == CoreWebView2PrintStatus.Succeeded:
+                            outcome["ok"] = True
+                            outcome.pop("error", None)
+                        elif st == CoreWebView2PrintStatus.PrinterUnavailable:
+                            outcome["ok"] = False
+                            outcome["error"] = "الطابعة غير متصلة أو غير متوفرة حالياً — تأكد من تشغيل الطابعة أو فعّل نافذة اختيار الطابعة من الإعدادات"
+                        else:
+                            outcome["ok"] = False
+                            outcome["error"] = "تعذر إرسال أمر الطباعة المباشرة للطابعة"
+                except Exception as exc:
+                    outcome["ok"] = False
+                    outcome["error"] = str(exc)
+                finally:
+                    done.set()
+
+            def _start_print():
+                try:
+                    cwv2 = wv.CoreWebView2
+                    if not cwv2:
+                        outcome["fallback"] = "dialog"
+                        done.set()
+                        return None
+                    ps = cwv2.Environment.CreatePrintSettings()
+                    ps.ShouldPrintBackgrounds = True
+                    ps.ShouldPrintHeaderAndFooter = False
+                    ps.MarginTop = 0.0
+                    ps.MarginBottom = 0.0
+                    ps.MarginLeft = 0.0
+                    ps.MarginRight = 0.0
+                    if chosen_printer:
+                        ps.PrinterName = chosen_printer
+                    task = cwv2.PrintAsync(ps)
+                    task.ContinueWith(
+                        Action[Task[CoreWebView2PrintStatus]](_on_print_done),
+                        browser.syncContextTaskScheduler,
+                    )
+                except Exception as exc:
+                    outcome["ok"] = False
+                    outcome["error"] = f"تعذر تشغيل الطباعة المباشرة: {exc}"
+                    done.set()
+                return None
+
+            wv.Invoke(Func[Object](_start_print))
+            if not done.wait(30.0):
+                return {"ok": False, "status": "Timeout", "error": "انتهت مهلة انتظار الطابعة"}
+            return outcome
+        except Exception as exc:
+            return {"ok": False, "fallback": "dialog", "reason": str(exc)}
 

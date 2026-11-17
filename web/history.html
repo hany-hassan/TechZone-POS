@@ -715,7 +715,7 @@ document.getElementById('d-print').addEventListener('click', () => {
       pageStyle.textContent = '@page { size: A4 portrait; margin: 0; }';
       const area = document.getElementById('history-print-area');
       area.innerHTML = html;
-      window.print();
+      tzPrintPage('a4');
     }
   } else if (ACTIVE_REPAIR) {
     const html = buildRepairTicketPrintHtml(ACTIVE_REPAIR, POS_TPL, SETTINGS);
@@ -731,7 +731,7 @@ document.getElementById('d-print').addEventListener('click', () => {
       pageStyle.textContent = '@page { size: 80mm auto; margin: 0; }';
       const area = document.getElementById('history-print-area');
       area.innerHTML = html;
-      window.print();
+      tzPrintPage('thermal');
     }
   }
 });

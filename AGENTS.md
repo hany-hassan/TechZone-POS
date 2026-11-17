@@ -30,7 +30,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 28 tables schema, minor-unit money rules, and 18-permission matrix | English |
 | [`docs/STACK.md`](docs/STACK.md) | Pinned runtime stack, versions, and upgrade policies | English |
 | [`docs/CODING-STANDARDS.md`](docs/CODING-STANDARDS.md) | Coding style, SQL guidelines, money formatting, and RTL conventions | English |
-| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (195 checks), test gates, and manual QA | English |
+| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (200 checks), test gates, and manual QA | English |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, PBKDF2 hashing, lockout rules, and Egyptian PDPL | English |
 | [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | TechZone OS color tokens, Arabic typography, layout, and invoice specs | English |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Standalone .exe compilation (PyInstaller), backup routines, and setup | English |
@@ -55,7 +55,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (195 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (200 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Build Windows Setup Installer | Double-click `build-installer.bat` or run `.\build-installer.bat` (outputs `dist/TechZone-Setup-v2.0.0.exe` + `SHA256SUMS.txt`) |
@@ -84,7 +84,7 @@ project001/
 │   ├── api_services.py  # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py   # ReportsMixin: daily/monthly financials & top-selling reports
 │   ├── db.py            # SQLite schema (28 tables), connection wrapper, seed, migration & backups
-│   └── selfcheck.py     # Comprehensive automated regression suite (195 checks)
+│   └── selfcheck.py     # Comprehensive automated regression suite (200 checks)
 ├── web/
 │   ├── index.html       # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html       # Hidden owner control panel (setup, login, recovery, security & audit log)
@@ -153,12 +153,25 @@ The administrator (`role='admin'`) possesses unrestricted system access. All oth
 3. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api.py`.
 4. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 5. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 195 checks).
+6. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently 200 checks).
 7. **Commit Documentation:** Always update `AGENTS.md` and document changes in the same commit.
 
 ---
 
 ## 8. Changelog
+
+### 2026-11-17 — Cashier Tax Settings Fix, In-App POS Print Preview & Silent Direct Print (`main`)
+- **Cashier Tax / Runtime Settings Fix (`app/api_auth.py`, `web/pos.html`, `web/settings.html`)**:
+  1. Fixed root cause where `AuthSettingsMixin.settings()` required `settings_manage`, causing `pageInit()` to silently set `SETTINGS = {}` for cashiers and leaving `TAX_ON = SETTINGS.tax_enabled !== '0'` (`true`) even when tax was disabled in Settings.
+  2. Allowed any authenticated user (`self._user()`) to read store/runtime settings via `settings()`, stripping sensitive security keys (`login_fail_state`, `login_max_attempts`, `login_lockout_minutes`, `customer_ledger_migrated`) when lacking `settings_manage` (while `settings_save()` still requires `settings_manage`).
+  3. Added `syncSettingsRuntime()` in `web/pos.html` and wired `settings.html` save broadcast to update `window.top.SETTINGS` and refresh open POS iframes live.
+- **In-App POS Print Preview & Silent Direct Printing (`app/db.py`, `app/api_auth.py`, `app/modules_map.py`, `web/app.js`, `web/desktop.html`, `web/pos.html`, `web/settings.html`, `web/receipt.html`, `web/history.html`, `web/repair.html`, `web/sales_quotes.html`, `web/app.css`)**:
+  1. Added settings `pos_print_preview` (default `'1'`), `print_show_dialog` (default `'0'`), and `print_printer_name` (default `''`) in `db.py` and `settings_save()`.
+  2. Implemented `printers_list()` (via Windows `winspool.drv`) and `silent_print()` (via WebView2 `CoreWebView2.PrintAsync`, falling back to dialog only if WebView2 isn't active), registered in `CORE_METHODS` (`app/modules_map.py`).
+  3. Added `#pos-print-preview-modal` in `web/pos.html` (thermal 80mm/58mm + A4 preview toggle, Print button, format-aware WhatsApp PDF button sending A4 PDF via `renderA4DocumentToJpeg` when A4 is selected, Close without printing) shown after sale completion/lookup/modification when `pos_print_preview !== '0'`.
+  4. Added `tzPrintPage()` in `web/app.js` and updated `TZOS.printHtml()` + standalone print handlers to print silently by default (`print_show_dialog === '0'`) or open the Windows printer selection dialog when enabled (`print_show_dialog === '1'`).
+  5. Added the "إعدادات الطباعة ومعاينة الفواتير" control card in `web/settings.html` and recompiled `web/app.css`.
+- **Verification (`app/selfcheck.py`)**: Added 5 automated checks covering cashier settings read, security key stripping, print settings persistence, `printers_list`/`silent_print`, and frontend contract; all `200/200` checks pass (`contract ok (109 names)`).
 
 ### 2026-11-16 — Windows Setup Installer (Inno Setup 6) & GitHub Release v2.0.0 (`main`)
 - **Installer (`installer/TechZone.iss`, `build-installer.bat`)**:

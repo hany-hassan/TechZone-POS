@@ -1719,7 +1719,7 @@ const TZOS = {
     }
   },
 
-  printHtml(htmlContent, mode = 'thermal') {
+  async printHtml(htmlContent, mode = 'thermal', opts = {}) {
     const stage = document.getElementById('os-print-stage');
     stage.dataset.printMode = mode || 'thermal';
     stage.innerHTML = htmlContent;
@@ -1736,7 +1736,8 @@ const TZOS = {
     } else {
       pageStyle.textContent = '@page { size: 80mm auto; margin: 0; }';
     }
-    setTimeout(() => window.print(), 90);
+    await new Promise((resolve) => setTimeout(resolve, 90));
+    return await tzPrintPage(mode, opts);
   },
 };
 

@@ -1,6 +1,6 @@
 # TechZone Testing Strategy
 
-## Current: `selfcheck.py` (195 Assertions)
+## Current: `selfcheck.py` (200 Assertions)
 
 TechZone ships with a single integration-level test suite in `app/selfcheck.py`. It validates the database schema, API functions, permission boundaries, business logic, owner controls, and static frontend-to-backend contracts in one pass.
 
@@ -13,7 +13,7 @@ python app/selfcheck.py
 A successful run prints each check with a ✓ and ends with:
 
 ```
-ALL 195 CHECKS PASSED
+ALL 200 CHECKS PASSED
 ```
 
 Any failure raises `AssertionError` with a descriptive message identifying the broken invariant.
@@ -23,7 +23,7 @@ Any failure raises `AssertionError` with a descriptive message identifying the b
 | Area | Example checks |
 |---|---|
 | **DB schema** | All 28 tables exist; required columns & indices present; foreign keys valid |
-| **Settings** | Default seed values populated (store name, currency, VAT rate, login mode, invoice templates, `business_profile`) |
+| **Settings** | Default seed values populated (store name, currency, VAT rate, login mode, print/preview flags, invoice templates, `business_profile`); cashiers read runtime settings (`tax_enabled`, currency, print prefs) with security keys stripped |
 | **Users & auth** | Admin account exists; PIN hashing and salt are non-empty; role values are `admin` or `cashier` |
 | **Default PIN Security** | Admin login with default `1234` flags `force_change_pin=True`; `profile_save` with `pin` alias updates PIN and clears flag |
 | **Owner Control & Structure** | Independent `owner_auth` passphrase setup, 5-attempt lockout, 10-min session expiry, recovery key rotation, admin PIN reset, audit logging, module registry CRUD/cloning, and `Api.call()` server-side disabled-module guard (`modules_map.py`) |
@@ -38,11 +38,11 @@ Any failure raises `AssertionError` with a descriptive message identifying the b
 | **Repairs & used devices** | Ticket creation; part linkage; valid statuses; used device purchases |
 | **Shifts** | Shift open/close; cash/wallet/installment counters; association with user; automatic shift-close backup trigger |
 | **PDF generation** | Invoice and receipt PDF functions return valid bytes (PDF 1.4 header check) |
-| **API dispatcher** | `call(name, payload)` routes to correct methods; contract check ensures all frontend `api()` calls (`107` names) exist on `Api` and all `Api` methods are classified in `modules_map.py` |
+| **API dispatcher** | `call(name, payload)` routes to correct methods; contract check ensures all frontend `api()` calls (`109` names) exist on `Api` and all `Api` methods are classified in `modules_map.py` |
 
 ### Running selfcheck After Every Change
 
-Every code or schema change **must** pass all 195 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
+Every code or schema change **must** pass all 200 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
 
 ---
 

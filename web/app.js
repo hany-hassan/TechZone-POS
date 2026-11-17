@@ -700,7 +700,7 @@ function renderInvoiceToJpeg(s) {
   return { dataUrl: canvas.toDataURL('image/jpeg', 0.92), width: W, height: H };
 }
 
-async function sendInvoicePdfToWhatsapp(saleId, phoneOverride = '') {
+async function sendInvoicePdfToWhatsapp(saleId, phoneOverride = '', format = 'thermal', a4CfgOverride = null) {
   if (!whatsappEnabled()) { toast('إرسال WhatsApp معطّل من قبل المدير', 'warn'); return null; }
   const s = await guard(() => api('sale', { id: +saleId }));
   if (!s) return null;
@@ -710,8 +710,28 @@ async function sendInvoicePdfToWhatsapp(saleId, phoneOverride = '') {
     if (!phone || !phone.trim()) return null;
     phone = phone.trim();
   }
-  toast('جاري إنشاء ملف الفاتورة PDF وإرفاقه إلى واتساب...');
-  const rendered = renderInvoiceToJpeg(s);
+  let rendered;
+  if (format === 'a4') {
+    let a4Cfg = a4CfgOverride;
+    if (!a4Cfg) {
+      try {
+        if (SETTINGS && SETTINGS.template_a4_config) a4Cfg = JSON.parse(SETTINGS.template_a4_config) || null;
+      } catch (e) {}
+    }
+    if (!a4Cfg) {
+      try {
+        const tpls = await api('templates_get');
+        a4Cfg = (tpls && tpls.a4) || {};
+      } catch (e) {
+        a4Cfg = {};
+      }
+    }
+    toast('جاري إنشاء ملف الفاتورة A4 (PDF) وإرفاقه إلى واتساب...');
+    rendered = await renderA4DocumentToJpeg(s, a4Cfg);
+  } else {
+    toast('جاري إنشاء ملف الفاتورة PDF وإرفاقه إلى واتساب...');
+    rendered = renderInvoiceToJpeg(s);
+  }
   const res = await guard(() => api('whatsapp_send_invoice', {
     sale_id: s.id,
     phone,
@@ -1634,4 +1654,32 @@ function buildRepairTicketPrintHtml(rep, posCfg = {}, stOverride = null) {
       ${cfg.thanks_text ? `<div style="text-align:center;font-size:11px;font-weight:bold">${esc(cfg.thanks_text)}</div>` : ""}
     </div>
   `;
+}
+
+/* ===== طباعة ذكية موحدة (طباعة صامتة مباشرة أو نافذة إعدادات الطابعة من الويندوز حسب الإعدادات) ===== */
+async function tzPrintPage(mode = 'thermal', opts = {}) {
+  const showDialog = Boolean((opts && opts.forceDialog) || (SETTINGS && SETTINGS.print_show_dialog === '1'));
+  if (showDialog) {
+    window.print();
+    return { ok: true, mode: 'dialog' };
+  }
+  try {
+    const res = await api('silent_print', {
+      mode: mode || 'thermal',
+      printer_name: (SETTINGS && SETTINGS.print_printer_name) || '',
+    });
+    if (res && res.ok) {
+      toast('تم إرسال أمر الطباعة مباشرة للطابعة', 'success');
+      return res;
+    }
+    if (res && res.fallback === 'dialog') {
+      window.print();
+      return { ok: true, mode: 'dialog', fallback: true };
+    }
+    toast((res && res.error) || 'تعذر إرسال أمر الطباعة المباشرة', 'error');
+    return res || { ok: false };
+  } catch (err) {
+    toast((err && err.message) || 'تعذر إرسال أمر الطباعة', 'error');
+    return { ok: false, error: err && err.message };
+  }
 }

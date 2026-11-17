@@ -1197,6 +1197,41 @@ check("pages include data-label hooks and main.py clears owner state on window c
       all("data-label=" in (ROOT / "web" / fn).read_text(encoding="utf-8") for fn in ("pos.html", "inventory.html", "customers.html", "repair.html", "buy_used.html"))
       and "_on_window_closed" in _main_py and '_STATE["owner"] = None' in _main_py)
 
+# 13g) إصلاح قراءة الضريبة للكاشير + معاينة الطباعة والطباعة المباشرة من الإعدادات
+call(a, "login", {"username": "admin", "pin": "1234"})
+r_prt_save = call(a, "settings_save", {
+    "tax_enabled": "0",
+    "pos_print_preview": "1",
+    "print_show_dialog": "0",
+    "print_printer_name": "",
+})
+check("print settings saved & persisted",
+      r_prt_save["ok"]
+      and r_prt_save["data"].get("tax_enabled") == "0"
+      and r_prt_save["data"].get("pos_print_preview") == "1"
+      and r_prt_save["data"].get("print_show_dialog") == "0")
+call(a, "login", {"username": "cashier", "pin": "1111"})
+r_cash_st = call(a, "settings")
+check("cashier reads store settings (tax_enabled=0) with security keys stripped",
+      r_cash_st["ok"]
+      and r_cash_st["data"].get("tax_enabled") == "0"
+      and "login_fail_state" not in r_cash_st["data"]
+      and "login_max_attempts" not in r_cash_st["data"])
+check("cashier still denied settings_save", not call(a, "settings_save", {"tax_enabled": "1"})["ok"])
+r_plist = call(a, "printers_list")
+r_sprint = call(a, "silent_print", {"mode": "thermal"})
+check("printers_list & silent_print callable cleanly",
+      r_plist["ok"] and isinstance(r_plist["data"].get("printers"), list)
+      and r_sprint["ok"] and r_sprint["data"].get("fallback") == "dialog")
+call(a, "login", {"username": "admin", "pin": "1234"})
+_pos_html = (ROOT / "web" / "pos.html").read_text(encoding="utf-8")
+_st_html = (ROOT / "web" / "settings.html").read_text(encoding="utf-8")
+_app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+check("pos.html & settings.html & app.js wire print preview modal, silent print toggle & syncSettingsRuntime",
+      all(tok in _pos_html for tok in ("pos-print-preview-modal", "openPosPrintPreview", "handleSalePrintFlow", "syncSettingsRuntime", "PREVIEW_FORMAT"))
+      and all(tok in _st_html for tok in ("st-pos-print-preview", "st-print-show-dialog", "st-print-printer-name"))
+      and all(tok in _app_js for tok in ("tzPrintPage", "renderA4DocumentToJpeg(s, a4Cfg)")))
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:

@@ -146,6 +146,45 @@
         <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer"><input id="st-c-pays" type="checkbox" class="w-4 h-4 accent-blue-600"/> إظهار المدفوعات</label>
       <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer"><input id="st-whatsapp-enabled" type="checkbox" class="w-4 h-4 accent-blue-600"/> إظهار إرسال الفاتورة عبر واتساب</label>
       </div>
+
+      <!-- إعدادات معاينة وطباعة الفواتير والإيصالات -->
+      <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="material-icons-round text-primary text-lg">print</span>
+            <div>
+              <h4 class="text-xs md:text-sm font-bold text-slate-900 dark:text-white">إعدادات الطباعة ومعاينة الفواتير</h4>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400">تحكم في ظهور معاينة البرنامج قبل الطباعة والطباعة المباشرة بدون نافذة الويندوز</p>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 gap-2.5 text-xs">
+          <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer">
+            <input id="st-pos-print-preview" type="checkbox" class="mt-0.5 w-4 h-4 accent-blue-600"/>
+            <div>
+              <span class="font-bold text-slate-900 dark:text-white block">إظهار صفحة معاينة الإيصال من البرنامج قبل الطباعة (في الكاشير)</span>
+              <span class="text-[11px] text-slate-500 dark:text-slate-400">عند إتمام البيع تظهر نافذة معاينة داخل البرنامج أولاً ليختار المستخدم الطباعة أو الإغلاق بدون طباعة</span>
+            </div>
+          </label>
+          <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer">
+            <input id="st-print-show-dialog" type="checkbox" class="mt-0.5 w-4 h-4 accent-blue-600"/>
+            <div>
+              <span class="font-bold text-slate-900 dark:text-white block">السماح بظهور نافذة اختيار وإعدادات الطابعة من الويندوز عند الطباعة</span>
+              <span class="text-[11px] text-slate-500 dark:text-slate-400">عند الإلغاء (موصى به): يطبع البرنامج مباشرة على الطابعة دون إظهار نافذة الويندوز، وعند التفعيل تظهر نافذة الويندوز لاختيار الطابعة</span>
+            </div>
+          </label>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+          <label for="st-print-printer-name" class="text-xs font-bold text-slate-700 dark:text-slate-300">الطابعة الافتراضية للطباعة المباشرة:</label>
+          <select id="st-print-printer-name" class="flex-1 min-w-[200px] px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-xs font-bold">
+            <option value="">الطابعة الافتراضية للنظام (Windows Default)</option>
+          </select>
+          <button id="btn-refresh-printers" type="button" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold hover:bg-white dark:hover:bg-slate-800 flex items-center gap-1" title="تحديث قائمة الطابعات">
+            <span class="material-icons-round text-sm">refresh</span>
+            <span>تحديث</span>
+          </button>
+        </div>
+      </div>
       <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-3">
           <div class="w-14 h-14 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
@@ -727,11 +766,40 @@ function fillStoreTab() {
   $('st-c-logo').checked = show('receipt_show_logo');
   $('st-c-barcode').checked = show('receipt_show_barcode');
   $('st-c-tax').checked = show('receipt_show_tax');
-   $('st-c-pays').checked = show('receipt_show_payments');
-   $('st-whatsapp-enabled').checked = show('whatsapp_send_enabled');
+  $('st-c-pays').checked = show('receipt_show_payments');
+  $('st-whatsapp-enabled').checked = show('whatsapp_send_enabled');
+  $('st-pos-print-preview').checked = SETTINGS.pos_print_preview !== '0';
+  $('st-print-show-dialog').checked = SETTINGS.print_show_dialog === '1';
+  loadPrintersOptions(SETTINGS.print_printer_name || '');
   drawLogoPreview(PENDING_LOGO !== null ? PENDING_LOGO : (SETTINGS.receipt_logo || ''));
   renderPayMethodsList();
 }
+
+async function loadPrintersOptions(selectedName = '') {
+  const sel = $('st-print-printer-name');
+  if (!sel) return;
+  const cur = selectedName !== undefined ? selectedName : sel.value;
+  let res = { printers: [], default_printer: '' };
+  try { res = (await api('printers_list')) || res; } catch (e) {}
+  const list = Array.isArray(res.printers) ? res.printers : [];
+  const defLbl = res.default_printer
+    ? `الطابعة الافتراضية للنظام (${res.default_printer})`
+    : 'الطابعة الافتراضية للنظام (Windows Default)';
+  const opts = [`<option value="">${esc(defLbl)}</option>`];
+  for (const name of list) {
+    opts.push(`<option value="${esc(name)}">${esc(name)}</option>`);
+  }
+  if (cur && !list.includes(cur)) {
+    opts.push(`<option value="${esc(cur)}">${esc(cur)} (غير متصلة حالياً)</option>`);
+  }
+  sel.innerHTML = opts.join('');
+  sel.value = cur || '';
+}
+
+$('btn-refresh-printers').addEventListener('click', async () => {
+  await loadPrintersOptions($('st-print-printer-name').value);
+  toast('تم تحديث قائمة الطابعات المتاحة');
+});
 
 function drawLogoPreview(src) {
   const img = $('st-logo-thumb');
@@ -797,8 +865,11 @@ $('btn-save-store-settings').addEventListener('click', async () => {
     receipt_show_logo: $('st-c-logo').checked ? '1' : '0',
     receipt_show_barcode: $('st-c-barcode').checked ? '1' : '0',
     receipt_show_tax: $('st-c-tax').checked ? '1' : '0',
-     receipt_show_payments: $('st-c-pays').checked ? '1' : '0',
-     whatsapp_send_enabled: $('st-whatsapp-enabled').checked ? '1' : '0',
+    receipt_show_payments: $('st-c-pays').checked ? '1' : '0',
+    whatsapp_send_enabled: $('st-whatsapp-enabled').checked ? '1' : '0',
+    pos_print_preview: $('st-pos-print-preview').checked ? '1' : '0',
+    print_show_dialog: $('st-print-show-dialog').checked ? '1' : '0',
+    print_printer_name: ($('st-print-printer-name') && $('st-print-printer-name').value) || '',
   };
   if (PENDING_LOGO !== null) {
     payload.receipt_logo = PENDING_LOGO;
@@ -809,15 +880,19 @@ $('btn-save-store-settings').addEventListener('click', async () => {
    CURRENCY = SETTINGS.currency || 'ج.م';
    applyWhatsappVisibility();
    try {
-     if (window.top && window.top.document) {
-       window.top.document.querySelectorAll('iframe').forEach((f) => {
-         try {
-           if (f.contentWindow) {
-             f.contentWindow.SETTINGS = SETTINGS;
-             if (typeof f.contentWindow.applyWhatsappVisibility === 'function') f.contentWindow.applyWhatsappVisibility();
-           }
-         } catch (e) {}
-       });
+     if (window.top) {
+       window.top.SETTINGS = SETTINGS;
+       if (window.top.document) {
+         window.top.document.querySelectorAll('iframe').forEach((f) => {
+           try {
+             if (f.contentWindow) {
+               f.contentWindow.SETTINGS = SETTINGS;
+               if (typeof f.contentWindow.applyWhatsappVisibility === 'function') f.contentWindow.applyWhatsappVisibility();
+               if (typeof f.contentWindow.syncSettingsRuntime === 'function') f.contentWindow.syncSettingsRuntime();
+             }
+           } catch (e) {}
+         });
+       }
      }
    } catch (e) {}
 
@@ -853,7 +928,10 @@ $('btn-reset-egypt-defaults').addEventListener('click', () => {
   $('st-currency').value = 'ج.م';
   $('st-tax-rate').value = '14';
   $('st-tax-enabled').checked = false;
-   $('st-c-logo').checked = $('st-c-barcode').checked = $('st-c-tax').checked = $('st-c-pays').checked = $('st-whatsapp-enabled').checked = true;
+  $('st-c-logo').checked = $('st-c-barcode').checked = $('st-c-tax').checked = $('st-c-pays').checked = $('st-whatsapp-enabled').checked = true;
+  $('st-pos-print-preview').checked = true;
+  $('st-print-show-dialog').checked = false;
+  if ($('st-print-printer-name')) $('st-print-printer-name').value = '';
   toast('أُعيدت الحقول لافتراضي مصر — اضغط حفظ لتثبيتها', 'warn');
 });
 
