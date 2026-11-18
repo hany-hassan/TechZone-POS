@@ -36,7 +36,7 @@
           <span class="material-icons-round text-primary">manage_accounts</span>
           <span>مركز إدارة الموظفين والصلاحيات التفصيلية</span>
         </h1>
-        <p class="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-0.5">تحكم صارم ومفصّل في 49 صلاحية موزعة على 10 أقسام — قوالب جاهزة، تعطيل الحسابات، وسجل رقابي لتغييرات الصلاحيات</p>
+        <p class="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-0.5">تحكم صارم ومفصّل في 63 صلاحية موزعة على 12 قسماً — قوالب جاهزة، تعطيل الحسابات، وسجل رقابي لتغييرات الصلاحيات</p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <a href="profile.html" class="px-3.5 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors">
@@ -135,7 +135,7 @@
             <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">الدور الأساسي</label>
             <select id="u-role" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2 text-xs font-bold">
               <option value="cashier">موظف / كاشير (صلاحيات تفصيلية مخصصة)</option>
-              <option value="admin">مدير كامل الصلاحيات (Admin — جميع الـ 49 صلاحية)</option>
+              <option value="admin">مدير كامل الصلاحيات (Admin — جميع الـ 63 صلاحية)</option>
             </select>
           </div>
           <div>
@@ -145,6 +145,8 @@
               <option value="pos">نقاط البيع السريعة (الكاشير)</option>
               <option value="sales_quotes">المبيعات وعروض الأسعار (A4)</option>
               <option value="inventory">المخزون والمنتجات</option>
+              <option value="purchases">المشتريات والموردون</option>
+              <option value="accounting">المحاسبة العامة والمالية</option>
               <option value="customers">العملاء والمديونيات</option>
               <option value="installments">نظام الأقساط والمتابعة</option>
               <option value="repair">مركز الصيانة</option>
@@ -195,7 +197,7 @@
             <input id="perm-search" type="text" class="w-full pr-9 pl-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs" placeholder="ابحث عن صلاحية (مثال: مديونية، خصم، جرد، مرتجع، آجل...)"/>
           </div>
           <div class="flex flex-wrap items-center gap-2 text-[11px] font-bold">
-            <span class="px-2.5 py-1 rounded-lg bg-primary/10 text-primary">المفعل: <b id="perm-cnt-active" class="font-num">0</b> / <b id="perm-cnt-total" class="font-num">49</b></span>
+            <span class="px-2.5 py-1 rounded-lg bg-primary/10 text-primary">المفعل: <b id="perm-cnt-active" class="font-num">0</b> / <b id="perm-cnt-total" class="font-num">63</b></span>
             <span class="px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">مالية: <b id="perm-cnt-fin" class="font-num">0</b></span>
             <span class="px-2.5 py-1 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">حساسة: <b id="perm-cnt-crit" class="font-num">0</b></span>
             <span id="active-preset-pill" class="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">مخصص</span>

@@ -996,6 +996,8 @@ const OS_APPS = [
   { id: 'customers', title: 'العملاء والمديونيات', url: 'customers.html', icon: 'groups', color: 'linear-gradient(135deg,#7c3aed,#a855f7)', perm: ['customers_view', 'customers_debt_view', 'customers_edit', 'customers_payment'] },
   { id: 'installments', title: 'نظام الأقساط', url: 'installments.html', icon: 'event_repeat', color: 'linear-gradient(135deg,#0ea5e9,#0369a1)', perm: ['installments_view', 'installments_collect', 'installments_create'] },
   { id: 'inventory', title: 'المخزون والمنتجات', url: 'inventory.html', icon: 'inventory_2', color: 'linear-gradient(135deg,#059669,#10b981)', perm: ['inventory_view', 'inventory_edit', 'inventory_adjust'] },
+  { id: 'purchases', title: 'المشتريات والموردون', url: 'purchases.html', icon: 'local_shipping', color: 'linear-gradient(135deg,#0891b2,#06b6d4)', perm: ['suppliers_view', 'suppliers_manage', 'purchases_view', 'purchases_create_post', 'purchases_return', 'purchases_payment'] },
+  { id: 'accounting', title: 'المحاسبة والمالية', url: 'accounting.html', icon: 'account_balance', color: 'linear-gradient(135deg,#be185d,#e11d48)', perm: ['expenses_view', 'expenses_manage', 'treasury_view', 'treasury_transfer', 'accounting_coa_view', 'accounting_journal_manual', 'accounting_statements_view'] },
   { id: 'history', title: 'سجل المبيعات والمرتجعات', url: 'history.html', icon: 'receipt_long', color: 'linear-gradient(135deg,#ea580c,#f97316)', perm: ['history_view_own', 'history_view_all', 'sales_return_own', 'sales_return', 'sales_post_discount'] },
   { id: 'repair', title: 'مركز الصيانة', url: 'repair.html', icon: 'build', color: 'linear-gradient(135deg,#d97706,#f59e0b)', perm: ['repair_view', 'repair_create', 'repair_edit'] },
   { id: 'buy_used', title: 'شراء أجهزة مستعملة', url: 'buy_used.html', icon: 'phonelink_setup', color: 'linear-gradient(135deg,#0d9488,#14b8a6)', perm: ['used_view', 'used_manage'] },
@@ -1415,24 +1417,43 @@ const TZOS = {
     return { x, y };
   },
 
+  applyUserIconPrefs(newLayout) {
+    if (newLayout && typeof newLayout === 'object') {
+      ICON_LAYOUT = newLayout;
+    } else if (typeof newLayout === 'string' && newLayout.trim()) {
+      try { ICON_LAYOUT = JSON.parse(newLayout) || {}; } catch (e) { ICON_LAYOUT = {}; }
+    } else {
+      ICON_LAYOUT = {};
+    }
+    if (CURRENT_USER) CURRENT_USER.desktop_layout = JSON.stringify(ICON_LAYOUT);
+    this.renderDesktopIcons();
+    this.renderTaskbar();
+  },
+
   resetIconsLayout(save = false) {
+    const hiddenDesk = Array.isArray(ICON_LAYOUT && ICON_LAYOUT._hidden_desktop) ? [...ICON_LAYOUT._hidden_desktop] : [];
+    const hiddenTask = Array.isArray(ICON_LAYOUT && ICON_LAYOUT._hidden_taskbar) ? [...ICON_LAYOUT._hidden_taskbar] : [];
     ICON_LAYOUT = {};
+    if (hiddenDesk.length) ICON_LAYOUT._hidden_desktop = hiddenDesk;
+    if (hiddenTask.length) ICON_LAYOUT._hidden_taskbar = hiddenTask;
     this.renderDesktopIcons();
     if (save) {
       localStorage.removeItem('tz-desktop-layout');
-      guard(() => api('user_pref_save', { desktop_layout: '' }));
+      guard(() => api('user_pref_save', { desktop_layout: Object.keys(ICON_LAYOUT).length ? ICON_LAYOUT : '' }));
       toast('تم إعادة ترتيب أيقونات سطح المكتب تلقائياً');
     }
   },
 
   renderDesktopIcons() {
     const box = document.getElementById('os-desktop-icons');
+    const hiddenDesk = new Set(Array.isArray(ICON_LAYOUT && ICON_LAYOUT._hidden_desktop) ? ICON_LAYOUT._hidden_desktop : []);
     const allIcons = [
       ...PERMITTED_APPS,
       { id: '_wp', title: 'المظهر والخلفية', icon: 'palette', color: 'linear-gradient(135deg,#db2777,#ec4899)' },
-    ];
+    ].filter((a) => !hiddenDesk.has(a.id));
     box.innerHTML = allIcons.map((a, idx) => {
-      const pos = ICON_LAYOUT[a.id] || this._defaultIconPos(idx);
+      const savedPos = ICON_LAYOUT && ICON_LAYOUT[a.id];
+      const pos = (savedPos && typeof savedPos.x === 'number' && typeof savedPos.y === 'number') ? savedPos : this._defaultIconPos(idx);
       return `
         <div class="desk-icon" data-icon-id="${a.id}" style="left:${pos.x}px;top:${pos.y}px" title="اضغط للفتح — أو اسحب الأيقونة لتغيير مكانها على سطح المكتب">
           <div class="desk-icon-box" style="background:${a.color}">
@@ -1546,7 +1567,9 @@ const TZOS = {
 
   renderTaskbar() {
     const dock = document.getElementById('os-dock-apps');
-    dock.innerHTML = PERMITTED_APPS.map((a) => {
+    const hiddenTask = new Set(Array.isArray(ICON_LAYOUT && ICON_LAYOUT._hidden_taskbar) ? ICON_LAYOUT._hidden_taskbar : []);
+    const dockApps = PERMITTED_APPS.filter((a) => !hiddenTask.has(a.id) || !!WINDOWS[a.id]);
+    dock.innerHTML = dockApps.map((a) => {
       const w = WINDOWS[a.id];
       const isRunning = !!w;
       const isActive = ACTIVE_WIN_ID === a.id && w && !w.minimized;

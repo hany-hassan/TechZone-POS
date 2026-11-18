@@ -255,6 +255,7 @@ class AuthSettingsMixin:
         accent_color=None,
         wallpaper=None,
         custom_bg=None,
+        desktop_layout=None,
         pin=None,
     ):
         """تحديث الملف الشخصي للموظف الحالي (الاسم، معرف الدخول، الصورة الشخصية، كلمة السر/الرمز السري، وإعدادات الفتح والمظهر)."""
@@ -307,12 +308,13 @@ class AuthSettingsMixin:
             )
             conn.commit()
 
-        if any(x is not None for x in (start_page, start_mode, theme_mode, card_size, accent_color, wallpaper, custom_bg)):
+        if any(x is not None for x in (start_page, start_mode, theme_mode, card_size, accent_color, wallpaper, custom_bg, desktop_layout)):
             self.user_pref_save(
                 card_size=card_size,
                 wallpaper=wallpaper,
                 custom_bg=custom_bg,
                 accent_color=accent_color,
+                desktop_layout=desktop_layout,
                 start_page=start_page,
                 start_mode=start_mode,
                 theme_mode=theme_mode,

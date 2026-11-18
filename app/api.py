@@ -17,11 +17,13 @@ from api_common import (  # noqa: F401
     _money,
     _upsert_customer,
 )
+from api_accounting import AccountingMixin
 from api_auth import AuthSettingsMixin
 from api_customers import CustomersMixin
 from api_installments import InstallmentsMixin
 from api_inventory import InventoryMixin
 from api_owner import OwnerMixin
+from api_purchases import PurchasesMixin
 from api_quotes import QuotesMixin
 from api_reports import ReportsMixin
 from api_sales import SalesMixin
@@ -35,6 +37,8 @@ class Api(
     InventoryMixin,
     CustomersMixin,
     InstallmentsMixin,
+    PurchasesMixin,
+    AccountingMixin,
     SalesMixin,
     QuotesMixin,
     ServicesMixin,
@@ -43,7 +47,7 @@ class Api(
 ):
     def __init__(self):
         with db.connect():
-            pass  # إنشاء المخطط + الـ seed + ترحيل دفتر الأستاذ عند الإقلاع
+            pass  # إنشاء المخطط + الـ seed + ترحيل دفتر الأستاذ وشجرة الحسابات عند الإقلاع
         self._methods = {
             n for n in dir(self)
             if not n.startswith("_") and callable(getattr(self, n)) and n != "call"

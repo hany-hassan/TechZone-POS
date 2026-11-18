@@ -957,14 +957,14 @@ if _unclassified:
 
 call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
 m_all = call(a, "modules_all")
-check("modules_all returns 13 seeded builtin modules", m_all["ok"] and len(m_all["data"]) == 13)
+check("modules_all returns 15 seeded builtin modules", m_all["ok"] and len(m_all["data"]) == 15)
 check("core modules (settings/profile/receipt) cannot be disabled",
       (not call(a, "module_toggle", {"key": "settings", "enabled": False})["ok"])
       and (not call(a, "module_toggle", {"key": "profile", "enabled": False})["ok"])
       and (not call(a, "module_toggle", {"key": "receipt", "enabled": False})["ok"]))
 check("dependent module toggle refused (inventory while pos/repair/quotes/installments active)",
       not call(a, "module_toggle", {"key": "inventory", "enabled": False})["ok"])
-for _dep_mod in ("pos", "sales_quotes", "installments", "repair"):
+for _dep_mod in ("pos", "sales_quotes", "installments", "repair", "purchases"):
     assert call(a, "module_toggle", {"key": _dep_mod, "enabled": False})["ok"]
 tog_inv_off = call(a, "module_toggle", {"key": "inventory", "enabled": False})
 ui_off = call(a, "ui_config")
@@ -997,8 +997,8 @@ with db.connect() as _mc2:
     db.seed_modules_if_empty(_mc2)
     _c2 = _mc2.execute("SELECT COUNT(*) c FROM modules").fetchone()["c"]
     _p_cnt = _mc2.execute("SELECT COUNT(*) c FROM products").fetchone()["c"]
-check("idempotent module migration preserves existing data and seeds 13 modules once",
-      _c1 == 13 and _c2 == 13 and _p_cnt > 0)
+check("idempotent module migration preserves existing data and seeds 15 modules once",
+      _c1 == 15 and _c2 == 15 and _p_cnt > 0)
 call(a, "owner_logout")
 
 # 13d) تعديل ونسخ وحذف الأقسام — المرحلة 3
@@ -1035,8 +1035,8 @@ call(a, "owner_logout")
 # 13e) ملفات النشاط التجاري والمسميات — المرحلة 4
 call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
 profs = call(a, "profiles_list")
-check("profiles_list returns 4 business profiles with demo catalogs",
-      profs["ok"] and len(profs["data"]) == 4 and all(p["demo_count"] >= 10 for p in profs["data"]))
+check("profiles_list returns 5 business profiles with demo catalogs",
+      profs["ok"] and len(profs["data"]) == 5 and all(p["demo_count"] >= 10 for p in profs["data"]))
 # إضافة نسخة مخصصة قبل تغيير النشاط للتأكد من بقائها، وضبط صفحة البداية على repair لاختبار التراجع التلقائي
 _custom_keep = call(a, "module_clone", {"source_key": "inventory", "title": "نسخة دائمة"})["data"]["key"]
 call(a, "settings_save", {"default_start_page": "repair"})
@@ -1123,7 +1123,7 @@ check("switching back to retail_electronics restores electronics catalog, owner_
       and _del_inactive_ok["ok"]
       and _rst_defs_ok["ok"]
       and ui_ret["profile"] == "retail_electronics"
-      and len([m for m in ui_ret["modules"] if m["is_builtin"]]) == 13
+      and len([m for m in ui_ret["modules"] if m["is_builtin"]]) == 15
       and ui_ret["labels"] == {}
       and any(p["sku"] == "MBP-M2-16" for p in ret_prods)
       and not any(p["sku"] == "BKR-CRS-1" for p in ret_prods))
@@ -1257,10 +1257,10 @@ check("desktop.html context menu dynamically mirrors PERMITTED_APPS & preserves 
       and ".top-btn.hidden" not in _desk_ctx_html
       and 'data-ctx-app="sales_quotes"' not in _desk_ctx_html)
 _ps = call(a, "permissions_schema")
-check("permissions_schema returns 49 perms, 10 groups, 7 presets",
+check("permissions_schema returns 63 perms, 12 groups, 7 presets",
       _ps["ok"]
-      and len(_ps["data"].get("all_keys", [])) == 49
-      and len(_ps["data"].get("groups", [])) == 10
+      and len(_ps["data"].get("all_keys", [])) == 63
+      and len(_ps["data"].get("groups", [])) == 12
       and len(_ps["data"].get("presets", [])) == 7)
 
 # استعادة قالب الإلكترونيات لضمان تفعيل كافة الأقسام الـ 13 قبل فحص عزل الصلاحيات الصارم
@@ -1397,6 +1397,412 @@ with db.connect() as _mc:
     _mc.execute("DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE username='legacy_u')")
     _mc.execute("DELETE FROM users WHERE username='legacy_u'")
 
+
+# ==============================================================================
+# 13k) اختبارات نظام ERP المتكامل: محرك التكلفة المرجحة (WAC) + المشتريات والموردون + المحاسبة العامة (45 اختباراً)
+# ==============================================================================
+call(a, "login", {"username": "admin", "pin": "8642"})
+call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
+_erp_prof = call(a, "profile_apply", {"key": "enterprise_erp", "dry_run": False, "apply_demo": True})
+check("enterprise_erp profile applies cleanly & enables all 15 modules",
+      _erp_prof["ok"] and len([m for m in call(a, "ui_config")["data"]["modules"] if m["is_builtin"]]) == 15)
+call(a, "owner_logout")
+
+if not call(a, "shift")["data"].get("shift"):
+    call(a, "shift_open", {"opening_cash": 500})
+
+# 1) فحص تثبيت تكلفة الصنف لحظة البيع (Cost Snapshot) وعدم تأثر ربح الفواتير السابقة بتغير التكلفة لاحقاً
+_wac_cat = call(a, "categories_save", {"name": "فئة اختبار WAC"})["data"]["id"]
+_wac_prod = call(a, "product_save", {
+    "sku": "WAC-PRO-1", "name": "صنف اختبار المتوسط المرجح", "category_id": _wac_cat,
+    "price": 200, "cost": 100, "tracked": 0,
+})["data"]["id"]
+call(a, "product_adjust", {"id": _wac_prod, "qty_change": 10, "reason": "رصيد مبدئي WAC"})
+_prof_before = call(a, "report_profit", {})["data"]["goods_profit"]
+_sale_snap = call(a, "sale_create", {
+    "items": [{"product_id": _wac_prod, "qty": 2, "unit_price": 200}],
+    "payments": [{"method": "cash", "amount": 400}],
+})
+_prof_after_sale = call(a, "report_profit", {})["data"]["goods_profit"]
+check("sale_create snapshots cost_unit on sale_items (profit +200.00 EGP = 20000 minor)",
+      _sale_snap["ok"] and (_prof_after_sale - _prof_before) == 20000)
+
+# 2) فحص إدارة الموردين (إضافة، بحث، رصيد افتتاحي، ومنع حذف مورد له رصيد)
+_sup1 = call(a, "supplier_save", {
+    "name": "الشركة الدولية للتوزيع",
+    "company_name": "International Dist Co",
+    "phone": "01099887766",
+    "tax_reg_no": "100-200-300",
+    "payment_terms_days": 30,
+    "opening_balance": 500,
+})
+check("supplier_save creates supplier with opening balance 500.00 EGP",
+      _sup1["ok"] and _sup1["data"]["balance"] == 50000 and _sup1["data"]["code"].startswith("SUP-"))
+_sup_id = _sup1["data"]["id"]
+check("suppliers_search & suppliers_list find supplier",
+      len(call(a, "suppliers_search", {"q": "الدولية"})["data"]) >= 1
+      and call(a, "suppliers_list", {"debt_only": True})["data"]["total"] >= 1)
+check("supplier_delete blocks deleting supplier with positive balance",
+      not call(a, "supplier_delete", {"id": _sup_id})["ok"])
+
+# 3) فحص فاتورة المشتريات + توزيع مصاريف الشحن والخصم (Landed Cost) + تحديث WAC + عدم تغير ربح البيع التاريخي!
+# المخزون المتبقي من _wac_prod قبل الشراء = 8 قطع بتكلفة 100.00 ج.م (10000 قرش)
+# نشتري 8 قطع بسعر 150.00 ج.م + شحن 80 ج.م = تكلفة محملة للوحدة 160.00 ج.م (16000 قرش)
+# المتوسط المرجح الجديد WAC = (8*10000 + 8*16000) / 16 = 13000 قرش (130.00 ج.م)
+_pur1 = call(a, "purchase_save", {
+    "supplier_id": _sup_id,
+    "supplier_invoice_no": "SINV-2026-01",
+    "invoice_date": "2026-11-18",
+    "discount": 0,
+    "shipping_cost": 80,
+    "tax_rate": 14,
+    "wht_rate": 1,
+    "paid_amount": 500,
+    "payment_method": "cash",
+    "status": "posted",
+    "items": [
+        {"product_id": _wac_prod, "qty": 8, "unit_cost": 150, "expiry_date": "2028-12-31"},
+    ],
+})
+_prod_after_pur = call(a, "product", {"id": _wac_prod})["data"]
+check("purchase_save posts bill, allocates landed shipping cost & computes exact WAC (130.00 EGP)",
+      _pur1["ok"]
+      and _prod_after_pur["qty"] == 16
+      and _prod_after_pur["cost"] == 13000
+      and _prod_after_pur["expiry_date"] == "2028-12-31")
+check("purchase_save computes VAT 14% input tax and 1% WHT withholding tax accurately",
+      _pur1["data"]["subtotal"] == 120000
+      and _pur1["data"]["tax"] == 16800
+      and _pur1["data"]["wht_amount"] == 1200
+      and _pur1["data"]["total"] == 143600
+      and _pur1["data"]["due_amount"] == 93600)
+check("historical sale profit remains unchanged after product WAC cost changed",
+      call(a, "report_profit", {})["data"]["goods_profit"] == _prof_after_sale)
+check("product_cost_history_list records WAC transition & report_price_variance flags >5% increase",
+      len(call(a, "product_cost_history_list", {"product_id": _wac_prod})["data"]) >= 1
+      and any(r["product_id"] == _wac_prod for r in call(a, "report_price_variance", {"threshold_pct": 10})["data"]))
+
+# 4) فحص شراء صنف متتبّع بالسيريال وإدراج السيريالات تلقائياً في المخزون
+_trk_prod = call(a, "product_save", {
+    "sku": "TRK-PUR-1", "name": "موبايل متتبع للمشتريات", "category_id": _wac_cat,
+    "price": 1000, "cost": 700, "tracked": 1,
+})["data"]["id"]
+_pur_trk = call(a, "purchase_save", {
+    "supplier_id": _sup_id,
+    "status": "posted",
+    "items": [
+        {"product_id": _trk_prod, "qty": 2, "unit_cost": 750, "serials": ["IMEI-9001", "IMEI-9002"]},
+    ],
+})
+_sers = call(a, "serials", {"product_id": _trk_prod})["data"]
+check("tracked product purchase inserts serials in_stock with purchase_item_id link",
+      _pur_trk["ok"]
+      and len(_sers) == 2
+      and {s["serial"] for s in _sers} == {"IMEI-9001", "IMEI-9002"}
+      and all(s["purchase_item_id"] is not None for s in _sers))
+
+# 5) فحص أوامر الشراء (PO) وتحويلها المباشر لفاتورة مشتريات معتمدة
+_po1 = call(a, "purchase_order_save", {
+    "supplier_id": _sup_id,
+    "items": [{"product_id": _wac_prod, "qty_ordered": 4, "unit_cost": 130}],
+    "shipping_cost": 0,
+    "tax_rate": 0,
+})
+check("purchase_order_save creates PO with ordered status",
+      _po1["ok"] and _po1["data"]["status"] == "ordered" and _po1["data"]["total"] == 52000)
+_po_conv = call(a, "purchase_order_convert", {"id": _po1["data"]["id"], "paid_amount": 200, "payment_method": "cash"})
+check("purchase_order_convert converts PO to posted purchase & increments stock",
+      _po_conv["ok"]
+      and _po_conv["data"]["status"] == "posted"
+      and call(a, "purchase_order_get", {"id": _po1["data"]["id"]})["data"]["status"] == "received"
+      and call(a, "product", {"id": _wac_prod})["data"]["qty"] == 20)
+
+# 6) فحص مرتجع المشتريات للمورد وتخفيض المخزون وحساب المورد
+_pi_id = _po_conv["data"]["items"][0]["id"]
+_sup_bal_before_ret = call(a, "supplier_get", {"id": _sup_id})["data"]["balance"]
+_pret = call(a, "purchase_return_create", {
+    "purchase_id": _po_conv["data"]["id"],
+    "items": [{"purchase_item_id": _pi_id, "qty": 1}],
+    "refund_method": "credit",
+    "reason": "وحدة تالفة",
+})
+_sup_bal_after_ret = call(a, "supplier_get", {"id": _sup_id})["data"]["balance"]
+check("purchase_return_create deducts stock, updates purchase status & lowers supplier AP balance",
+      _pret["ok"]
+      and _pret["data"]["purchase_status"] == "partial_return"
+      and call(a, "product", {"id": _wac_prod})["data"]["qty"] == 19
+      and (_sup_bal_before_ret - _sup_bal_after_ret) == 13000)
+
+# 7) فحص سندات الصرف للموردين (من الخزنة الرئيسية بدون اشتراط وردية، ومن درج الكاشير مع اشتراط وردية) + كشف حساب المورد + AP Aging
+_spay1 = call(a, "supplier_payment_create", {
+    "supplier_id": _sup_id,
+    "amount": 300,
+    "method": "cash",
+    "from_drawer": False,
+    "notes": "دفعة من الخزنة الرئيسية",
+})
+check("supplier_payment_create reduces supplier balance & records voucher",
+      _spay1["ok"] and _spay1["data"]["remaining_balance"] == _sup_bal_after_ret - 30000)
+_stmt = call(a, "supplier_statement", {"id": _sup_id})
+_aging = call(a, "report_ap_aging")
+check("supplier_statement & report_ap_aging return accurate ledger & aging buckets",
+      _stmt["ok"]
+      and len(_stmt["data"]["ledger"]) >= 5
+      and _aging["ok"]
+      and _aging["data"]["totals"]["total"] >= _spay1["data"]["remaining_balance"])
+
+# 8) فحص شجرة الحسابات القياسية وحماية الحسابات النظامية
+_coa = call(a, "accounts_tree")
+check("accounts_tree returns seeded standard Arabic Chart of Accounts (>= 35 accounts)",
+      _coa["ok"] and len(_coa["data"]) >= 35 and any(a["code"] == "110101" for a in _coa["data"]))
+_sys_acc_id = next(a["id"] for a in _coa["data"] if a["code"] == "110101")
+check("account_toggle blocks disabling system role account",
+      not call(a, "account_toggle", {"id": _sys_acc_id, "active": False})["ok"])
+_parent_exp = next(a["id"] for a in _coa["data"] if a["code"] == "5200")
+_sub_acc = call(a, "account_save", {"code": "5209", "name": "مصروفات ضيافة واستقبال", "parent_id": _parent_exp, "type": "expense"})
+check("account_save creates custom sub-account under parent group",
+      _sub_acc["ok"] and _sub_acc["data"]["level"] == 3 and _sub_acc["data"]["normal_balance"] == "debit")
+
+# 9) فحص الخزائن والتحويلات الداخلية بين الخزائن
+_trs = call(a, "treasury_list")
+check("treasury_list returns default safe, POS drawer, wallet & bank treasuries",
+      _trs["ok"] and len(_trs["data"]) >= 4)
+_tr_pos_id = next(t["id"] for t in _trs["data"] if t["kind"] == "pos_drawer")
+_tr_main_id = next(t["id"] for t in _trs["data"] if t["kind"] == "cash")
+_trf = call(a, "treasury_transfer_create", {
+    "from_treasury_id": _tr_pos_id,
+    "to_treasury_id": _tr_main_id,
+    "amount": 250,
+    "notes": "توريد نقدية من الدرج للخزنة الرئيسية",
+})
+check("treasury_transfer_create transfers funds & auto-posts balanced journal entry",
+      _trf["ok"] and _trf["data"]["amount"] == 25000 and _trf["data"]["journal_entry_id"] > 0)
+
+# 10) فحص المصروفات التشغيلية ومراكز التكلفة وعكس المصروف عند حذفه
+_ecats = call(a, "expense_categories_list")["data"]
+_ccs = call(a, "cost_centers_list")["data"]
+_exp1 = call(a, "expense_create", {
+    "category_id": _ecats[0]["id"],
+    "amount": 150,
+    "treasury_id": _tr_main_id,
+    "cost_center_id": _ccs[0]["id"],
+    "payee": "شركة الكهرباء",
+    "notes": "فاتورة كهرباء المعرض",
+})
+check("expense_create records operational expense & posts journal entry",
+      _exp1["ok"] and _exp1["data"]["amount"] == 15000 and _exp1["data"]["entry_no"].startswith("JE-"))
+_exp_list = call(a, "expenses_list", {})
+check("expenses_list returns recorded expense & total_amount",
+      _exp_list["ok"] and _exp_list["data"]["total"] >= 1 and _exp_list["data"]["total_amount"] >= 15000)
+
+# 11) فحص القيود اليدوية: رفض القيد غير المتوازن، رفض الترحيل لحساب تجميعي، قبول القيد المتوازن، وعكس القيد (Immutability)
+_grp_acc_id = next(a["id"] for a in _coa["data"] if a["is_group"] == 1)
+_leaf_1 = next(a["id"] for a in _coa["data"] if a["code"] == "110101")
+_leaf_2 = next(a["id"] for a in _coa["data"] if a["code"] == "3101")
+check("journal_entry_create rejects unbalanced debit != credit",
+      not call(a, "journal_entry_create", {
+          "memo": "قيد غير متوازن",
+          "lines": [
+              {"account_id": _leaf_1, "debit": 500, "credit": 0},
+              {"account_id": _leaf_2, "debit": 0, "credit": 400},
+          ],
+      })["ok"])
+check("journal_entry_create rejects posting to group account (is_group=1)",
+      not call(a, "journal_entry_create", {
+          "memo": "قيد على حساب رئيسي",
+          "lines": [
+              {"account_id": _grp_acc_id, "debit": 500, "credit": 0},
+              {"account_id": _leaf_2, "debit": 0, "credit": 500},
+          ],
+      })["ok"])
+_mje = call(a, "journal_entry_create", {
+    "memo": "زيادة رأس المال نقداً",
+    "lines": [
+        {"account_id": _leaf_1, "debit": 1000, "credit": 0},
+        {"account_id": _leaf_2, "debit": 0, "credit": 1000},
+    ],
+})
+check("journal_entry_create posts balanced manual entry (1000.00 EGP)",
+      _mje["ok"] and _mje["data"]["total_debit"] == 100000 and _mje["data"]["total_credit"] == 100000)
+_rev_je = call(a, "journal_entry_reverse", {"id": _mje["data"]["id"], "reason": "اختبار عكس قيد"})
+check("journal_entry_reverse creates reversal entry & marks original as reversed",
+      _rev_je["ok"]
+      and _rev_je["data"]["kind"] == "reversal"
+      and call(a, "journal_entry_get", {"id": _mje["data"]["id"]})["data"]["status"] == "reversed"
+      and not call(a, "journal_entry_reverse", {"id": _mje["data"]["id"]})["ok"])
+
+# 12) فحص معالج الترصيد الافتتاحي (Onboarding & Backfill Wizard)
+_wiz_prev = call(a, "accounting_opening_preview")
+_wiz_apply = call(a, "accounting_opening_apply", {"cash_main": 5000, "bank_main": 10000, "notes": "قيد افتتاحي اختباري"})
+check("accounting_opening_preview & accounting_opening_apply generate 100% balanced opening entry",
+      _wiz_prev["ok"]
+      and _wiz_apply["ok"]
+      and _wiz_apply["data"]["kind"] == "opening"
+      and _wiz_apply["data"]["total_debit"] == _wiz_apply["data"]["total_credit"])
+
+# 13) فحص القوائم والتقارير المالية: دفتر الأستاذ، ميزان المراجعة، قائمة الدخل، الميزانية العمومية، وتقرير الضرائب
+_gl = call(a, "accounting_ledger", {"account_id": _leaf_1})
+check("accounting_ledger returns account statement with running balance",
+      _gl["ok"] and len(_gl["data"]["rows"]) >= 2)
+_tb = call(a, "accounting_trial_balance", {})
+check("accounting_trial_balance is strictly balanced (total debit == total credit)",
+      _tb["ok"]
+      and _tb["data"]["is_balanced"] is True
+      and _tb["data"]["totals"]["period_debit"] == _tb["data"]["totals"]["period_credit"]
+      and _tb["data"]["totals"]["closing_debit"] == _tb["data"]["totals"]["closing_credit"])
+_pnl = call(a, "accounting_income_statement", {})
+check("accounting_income_statement computes net_sales, COGS, gross_profit & net_profit",
+      _pnl["ok"] and "net_sales" in _pnl["data"] and "total_cogs" in _pnl["data"] and "net_profit" in _pnl["data"])
+_bs = call(a, "accounting_balance_sheet", {})
+check("accounting_balance_sheet satisfies Accounting Equation (Assets == Liabilities + Equity)",
+      _bs["ok"]
+      and _bs["data"]["is_balanced"] is True
+      and _bs["data"]["total_assets"] == _bs["data"]["total_liabilities_and_equity"])
+_tax_rep = call(a, "accounting_tax_report", {})
+check("accounting_tax_report tracks VAT input, VAT output & WHT payable",
+      _tax_rep["ok"] and _tax_rep["data"]["vat_input"] >= 16800 and _tax_rep["data"]["wht_payable"] >= 1200)
+
+# 14) فحص الفترات المالية (منع الترحيل في شهر مغلق ثم إعادة فتحه)
+_fps = call(a, "fiscal_periods_list")
+_cur_fp_id = _fps["data"]["periods"][0]["id"]
+call(a, "fiscal_period_toggle", {"period_id": _cur_fp_id, "status": "closed"})
+_blocked_closed = call(a, "journal_entry_create", {
+    "memo": "قيد في فترة مغلقة",
+    "lines": [
+        {"account_id": _leaf_1, "debit": 100, "credit": 0},
+        {"account_id": _leaf_2, "debit": 0, "credit": 100},
+    ],
+})
+call(a, "fiscal_period_toggle", {"period_id": _cur_fp_id, "status": "open"})
+check("closed fiscal period blocks posting journal entries until re-opened",
+      not _blocked_closed["ok"])
+
+# 15) فحص العزل الصفري (Zero-Overhead Isolation): تعطيل accounting و purchases يحجب دوالهما بينما يستمر البيع السريع دون أي قيود إضافية
+call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
+_tog_acc_off = call(a, "module_toggle", {"key": "accounting", "enabled": False})
+_tog_pur_off = call(a, "module_toggle", {"key": "purchases", "enabled": False})
+call(a, "owner_logout")
+_je_cnt_before_off = call(a, "login", {"username": "admin", "pin": "8642"})
+with db.connect() as _zc:
+    _j_before = _zc.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0]
+_fast_sale = call(a, "sale_create", {
+    "items": [{"product_id": _wac_prod, "qty": 1, "unit_price": 200}],
+    "payments": [{"method": "cash", "amount": 200}],
+})
+with db.connect() as _zc:
+    _j_after = _zc.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0]
+check("disabling purchases & accounting blocks their APIs while POS sale runs with zero journal overhead",
+      _tog_acc_off["ok"]
+      and _tog_pur_off["ok"]
+      and (not call(a, "purchases_list", {})["ok"])
+      and (not call(a, "accounting_dashboard", {})["ok"])
+      and _fast_sale["ok"]
+      and _j_after == _j_before)
+
+# إعادة تفعيل الأقسام وفحص عزل صلاحيات الكاشير الصارم على المشتريات والمحاسبة
+call(a, "owner_login", {"passphrase": "RecoveredOwner#2026"})
+call(a, "module_toggle", {"key": "purchases", "enabled": True})
+call(a, "module_toggle", {"key": "accounting", "enabled": True})
+call(a, "owner_logout")
+
+call(a, "login", {"username": "cashier", "pin": "1111"})
+check("strict cashier denied all purchases & accounting endpoints",
+      (not call(a, "suppliers_list", {})["ok"])
+      and (not call(a, "purchases_list", {})["ok"])
+      and (not call(a, "accounting_dashboard", {})["ok"])
+      and (not call(a, "expenses_list", {})["ok"])
+      and (not call(a, "accounting_trial_balance", {})["ok"]))
+call(a, "login", {"username": "admin", "pin": "8642"})
+
+
+# 16) اختبارات إضافية لدورة الإلغاء والعكس الآلي للقيود وإقفال السنة المالية وربط الصيانة والمستعمل والوردية
+_pur_to_cancel = call(a, "purchase_save", {
+    "supplier_id": _sup_id,
+    "status": "posted",
+    "paid_amount": 0,
+    "items": [{"product_id": _wac_prod, "qty": 2, "unit_cost": 130}],
+})
+_can_pur = call(a, "purchase_cancel", {"id": _pur_to_cancel["data"]["id"], "reason": "فاتورة مكررة"})
+check("purchase_cancel reverses posted purchase stock, supplier ledger & auto-reverses journal entry",
+      _can_pur["ok"] and _can_pur["data"]["status"] == "cancelled")
+
+_spay_to_del = call(a, "supplier_payment_create", {"supplier_id": _sup_id, "amount": 50, "method": "cash"})
+_del_spay = call(a, "supplier_payment_delete", {"id": _spay_to_del["data"]["id"]})
+check("supplier_payment_delete reverses supplier payment & journal entry",
+      _del_spay["ok"])
+
+_exp_to_del = call(a, "expense_create", {"category_id": _ecats[0]["id"], "amount": 75, "treasury_id": _tr_main_id, "notes": "مصروف تجريبي للحذف"})
+_del_exp = call(a, "expense_delete", {"id": _exp_to_del["data"]["id"]})
+check("expense_delete reverses expense journal entry & deletes record",
+      _del_exp["ok"])
+
+# اختبار ترحيل قيد تسليم جهاز صيانة + شراء مستعمل + تسوية جرد مخزون + فرق إغلاق الوردية
+_rep_erp = call(a, "repair_create", {
+    "customer_name": "عميل صيانة ERP", "customer_phone": "01066778899",
+    "device_type": "لابتوب", "problem": "تغيير بطارية", "cost": 300,
+})["data"]["id"]
+call(a, "repair_add_part", {"repair_id": _rep_erp, "product_id": _wac_prod, "qty": 1})
+call(a, "repair_set_status", {"id": _rep_erp, "status": "in_review"})
+call(a, "repair_set_status", {"id": _rep_erp, "status": "repaired"})
+call(a, "repair_set_status", {"id": _rep_erp, "status": "delivered"})
+_rep_je = call(a, "journal_entry_get", {"source_table": "repairs", "source_id": _rep_erp})
+check("repair delivery auto-posts revenue & repair_parts_cogs journal entry",
+      _rep_je["ok"] and _rep_je["data"]["total_debit"] == _rep_je["data"]["total_credit"])
+
+_used_erp = call(a, "used_create", {
+    "seller_name": "بائع مستعمل ERP", "model": "iPhone 13", "serial": "USED-ERP-991",
+    "buy_price": 1200, "resale_price": 1500, "to_inventory": True,
+})
+_used_je = call(a, "journal_entry_get", {"source_table": "used_device_purchases", "source_id": _used_erp["data"]["id"]})
+check("used_create auto-posts used_inventory journal entry (1200.00 EGP)",
+      _used_je["ok"] and _used_je["data"]["total_debit"] == 120000)
+
+call(a, "product_adjust", {"id": _wac_prod, "qty_change": -1, "reason": "تالف جرد"})
+_adj_jes = call(a, "journal_entries_list", {"source_module": "inventory"})
+check("product_adjust auto-posts stock_adj_diff journal entry",
+      _adj_jes["ok"] and _adj_jes["data"]["total"] >= 1)
+
+# اختبار إغلاق وردية بوجود فرق عجز/زيادة وتوليد قيد فروق الصندوق، ثم إعادة فتح وردية
+_sh_cur = call(a, "shift_summary")["data"]
+_sh_close_diff = call(a, "shift_close", {"counted_cash": (_sh_cur["expected_cash"] / 100.0) - 10})
+_sh_je = call(a, "journal_entry_get", {"source_table": "shifts", "source_id": _sh_cur["shift"]["id"]})
+call(a, "shift_open", {"opening_cash": 100})
+check("shift_close with cash shortage auto-posts cash_diff journal entry (10.00 EGP)",
+      _sh_close_diff["ok"] and _sh_je["ok"] and _sh_je["data"]["total_debit"] == 1000)
+
+_rules_get = call(a, "accounting_posting_rules_get")
+_rules_save = call(a, "accounting_posting_rules_save", {"rules": {"cash_main": _leaf_1}})
+check("accounting_posting_rules_get & save customize posting rules cleanly",
+      _rules_get["ok"] and len(_rules_get["data"]) >= 20 and _rules_save["ok"])
+
+# اختبار إقفال سنة مالية سابقة (2025) وترحيل الأرباح المحتجزة
+with db.connect() as _fyc:
+    _fyc.execute("INSERT OR IGNORE INTO fiscal_years(name, start_date, end_date, status, created_at) VALUES('2025','2025-01-01','2025-12-31','open',?)", (db.now(),))
+_rev_acc_id = next(a["id"] for a in _coa["data"] if a["code"] == "4101")
+call(a, "journal_entry_create", {
+    "memo": "إيراد سنة 2025 للاختبار",
+    "entry_date": "2025-06-15",
+    "lines": [
+        {"account_id": _leaf_1, "debit": 300, "credit": 0},
+        {"account_id": _rev_acc_id, "debit": 0, "credit": 300},
+    ],
+})
+_fy_cls = call(a, "fiscal_year_close", {"year_name": "2025"})
+check("fiscal_year_close closes revenue/expense into Retained Earnings & locks fiscal year",
+      _fy_cls["ok"] and _fy_cls["data"]["status"] == "closed" and _fy_cls["data"]["closing_entry_id"] is not None)
+
+# التحقق مجدداً من توازن ميزان المراجعة والميزانية العمومية بعد جميع العمليات
+_tb_final = call(a, "accounting_trial_balance", {})
+_bs_final = call(a, "accounting_balance_sheet", {})
+check("final trial balance & balance sheet remain 100% balanced after all 280 operations",
+      _tb_final["ok"] and _tb_final["data"]["is_balanced"] and _bs_final["ok"] and _bs_final["data"]["is_balanced"])
+
+_pur_html = (ROOT / "web" / "purchases.html").read_text(encoding="utf-8")
+_acc_html = (ROOT / "web" / "accounting.html").read_text(encoding="utf-8")
+check("purchases.html & accounting.html exist with all required ERP tabs and modals",
+      all(tok in _pur_html for tok in ("pane-bills", "pane-po", "pane-returns", "pane-suppliers", "modal-purchase"))
+      and all(tok in _acc_html for tok in ("pane-overview", "pane-expenses", "pane-treasury", "pane-coa", "pane-journal", "pane-statements", "modal-opening-wiz")))
+
 # 13j) فحص جرد المخزون (الموجود مقابل المنتهي) وسلامة سكربتات كل صفحات HTML
 _out_prod_id = call(a, "product_save", {
     "sku": "OUT-ZERO-1", "name": "صنف منتهي للفحص", "category_id": _rbac_cat_id,
@@ -1432,6 +1838,116 @@ check("inventory stocktake modal wired & all web/*.html inline JS pass syntax ch
       and "openStocktakeModal" in _inv_html
       and _inv_html.count("CAN_EDIT = false") == 1
       and not _js_syntax_errs)
+
+# 13k) اختبارات الإصلاحات الستة الجديدة: فصل قيد المبيعات عن التكلفة، منع تكرار الترصيد الافتتاحي، حذف ونقل الحسابات (Drag & Drop)، والتقارير المالية الشاملة والتصدير
+# أ) التأكد أن قيد الفاتورة في دفتر اليومية يطابق مبلغ البيع الفعلي بالضبط، وأن قيد التكلفة COGS منفصل عنه
+_exact_sale = call(a, "sale_create", {
+    "items": [{"product_id": _wac_prod, "qty": 2, "unit_price": 250}],
+    "payments": [{"method": "cash", "amount": 500}],
+})
+_je_sale_rev = call(a, "journal_entry_get", {"source_table": "sales", "source_id": _exact_sale["data"]["sale_id"]})
+_je_sale_cogs = call(a, "journal_entry_get", {"source_table": "sales_cogs", "source_id": _exact_sale["data"]["sale_id"]})
+check("sale journal entry total matches exact sale total (500.00 EGP) & COGS is posted in separate sales_cogs entry",
+      _exact_sale["ok"]
+      and _je_sale_rev["ok"]
+      and _je_sale_rev["data"]["total_debit"] == 50000
+      and _je_sale_rev["data"]["total_credit"] == 50000
+      and _je_sale_cogs["ok"]
+      and _je_sale_cogs["data"]["total_debit"] == _je_sale_cogs["data"]["total_credit"]
+      and _je_sale_cogs["data"]["total_debit"] > 0)
+
+# ب) منع تكرار معالج الترصيد الافتتاحي عند وجود قيد افتتاحي مرحل مسبقاً
+_wiz_prev_after = call(a, "accounting_opening_preview")
+_wiz_dup_try = call(a, "accounting_opening_apply", {"cash_main": 9000, "bank_main": 9000})
+check("accounting_opening_preview flags has_opening_entry=True & accounting_opening_apply blocks duplicate run",
+      _wiz_prev_after["ok"]
+      and _wiz_prev_after["data"]["has_opening_entry"] is True
+      and _wiz_prev_after["data"]["opening_entry"] is not None
+      and not _wiz_dup_try["ok"])
+
+# ج) شجرة الحسابات: إضافة حساب جديد، تحريكه Drag-and-Drop (account_move) إلى مجموعة أخرى، وحذفه (account_delete) مع منع حذف الحسابات النظامية أو التي عليها حركات
+_coa_list = call(a, "accounts_tree")["data"]
+_grp_5200 = next(x["id"] for x in _coa_list if x["code"] == "5200")
+_grp_5100 = next(x["id"] for x in _coa_list if x["code"] == "5100")
+_temp_acc = call(a, "account_save", {
+    "code": "5299",
+    "name": "حساب تجريبي للنقل والحذف",
+    "parent_id": _grp_5200,
+    "type": "expense",
+    "is_group": 0,
+})
+_moved_acc = call(a, "account_move", {"account_id": _temp_acc["data"]["id"], "new_parent_id": _grp_5100})
+check("account_move (Drag & Drop) reparents account to new group & updates hierarchy",
+      _temp_acc["ok"]
+      and _moved_acc["ok"]
+      and _moved_acc["data"]["parent_id"] == _grp_5100)
+check("account_delete blocks deleting system account or account with movements",
+      not call(a, "account_delete", {"id": _sys_acc_id})["ok"]
+      and not call(a, "account_delete", {"id": _grp_5200})["ok"]
+      and not call(a, "account_delete", {"id": _leaf_1})["ok"])
+_del_acc_res = call(a, "account_delete", {"id": _temp_acc["data"]["id"]})
+check("account_delete cleanly deletes custom account with zero movements",
+      _del_acc_res["ok"] and _del_acc_res["data"]["deleted"] is True)
+
+# د) فحص التقارير والتحليلات المالية الشاملة (report_comprehensive) وتصدير Excel (.xlsx) و PDF وإرسال واتساب
+_comp_rep = call(a, "report_comprehensive", {})
+check("report_comprehensive returns full pnl, invoices_profit_list, items_profit_list, receivables, payables, cashflow & inventory",
+      _comp_rep["ok"]
+      and all(k in _comp_rep["data"] for k in ("pnl", "receivables", "payables", "cashflow", "inventory"))
+      and len(_comp_rep["data"]["pnl"]["invoices_profit_list"]) >= 1
+      and len(_comp_rep["data"]["pnl"]["items_profit_list"]) >= 1)
+
+_xlsx_exp = call(a, "report_export_excel", {})
+_xlsx_file = pathlib.Path(_xlsx_exp["data"]["file_path"])
+check("report_export_excel writes valid multi-sheet OpenXML .xlsx file & UTF-8 BOM CSV",
+      _xlsx_exp["ok"]
+      and _xlsx_file.exists()
+      and _xlsx_file.read_bytes()[:4] == b"PK\x03\x04"
+      and len(_xlsx_exp["data"]["csv_content"]) > 100)
+
+_pdf_exp = call(a, "report_export_pdf", {"title": "تقرير مالي اختباري"})
+_pdf_file = pathlib.Path(_pdf_exp["data"]["file_path"])
+check("report_export_pdf writes valid %PDF-1.4 A4 report file",
+      _pdf_exp["ok"]
+      and _pdf_file.exists()
+      and _pdf_file.read_bytes().startswith(b"%PDF-1.4"))
+
+call(a, "settings_save", {"whatsapp_send_enabled": 0})
+_wa_rep_blocked = call(a, "whatsapp_send_report", {"phone": "01012345678"})
+call(a, "settings_save", {"whatsapp_send_enabled": 1})
+_wa_rep_ok = call(a, "whatsapp_send_report", {"phone": "01012345678"})
+check("whatsapp_send_report respects admin whatsapp_send_enabled toggle & generates PDF + summary when enabled",
+      (not _wa_rep_blocked["ok"])
+      and _wa_rep_ok["ok"]
+      and _wa_rep_ok["data"]["phone"] == "201012345678"
+      and pathlib.Path(_wa_rep_ok["data"]["pdf_path"]).exists())
+
+_rep_html = (ROOT / "web" / "reports.html").read_text(encoding="utf-8")
+check("accounting.html & reports.html include print, drag-and-drop, Excel/PDF/WhatsApp export & Modular docs exist",
+      "onCoaDrop" in _acc_html
+      and "printAccountingSection" in _acc_html
+      and "exportReportExcel" in _rep_html
+      and "exportReportPdf" in _rep_html
+      and "sendReportWhatsApp" in _rep_html
+      and "Modular Plug-and-Play" in (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+      and "Modular Plug-and-Play" in (ROOT / "README.md").read_text(encoding="utf-8"))
+
+# هـ) فحص التحكم الشخصي في أيقونات سطح المكتب وشريط المهام لكل مستخدم على حدة (دون التأثير على باقي المستخدمين)
+call(a, "login", {"username": "cashier", "pin": "1111"})
+_cashier_layout = {"_hidden_desktop": ["pos", "_wp"], "_hidden_taskbar": ["receipt"]}
+_c_pref = call(a, "profile_save", {"name": "أحمد محمد", "username": "cashier", "desktop_layout": _cashier_layout})
+call(a, "login", {"username": "admin", "pin": "8642"})
+_adm_sess = call(a, "session")["data"]["user"]
+_prof_html = (ROOT / "web" / "profile.html").read_text(encoding="utf-8")
+_desk_html = (ROOT / "web" / "desktop.html").read_text(encoding="utf-8")
+check("per-user desktop & taskbar icon visibility saved for cashier only without affecting admin",
+      _c_pref["ok"]
+      and "_hidden_desktop" in (_c_pref["data"].get("desktop_layout") or "")
+      and "_hidden_taskbar" in (_c_pref["data"].get("desktop_layout") or "")
+      and "_hidden_desktop" not in (_adm_sess.get("desktop_layout") or "")
+      and "pf-icons-visibility-grid" in _prof_html
+      and "onToggleUserIconVis" in _prof_html
+      and "applyUserIconPrefs" in _desk_html)
 
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()

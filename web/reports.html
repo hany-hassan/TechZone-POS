@@ -2,11 +2,18 @@
 <html class="scroll-smooth" dir="rtl" lang="ar"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>التقارير والتحليلات المالية - تك زون للإلكترونيات</title>
+<title>التقارير والتحليلات المالية الشاملة - تك زون للإلكترونيات</title>
 <link rel="icon" type="image/x-icon" href="favicon.ico"/>
 <link rel="icon" type="image/png" href="icon.png"/>
 <link href="app.css" rel="stylesheet"/>
 <script>if(localStorage.getItem('tz-theme')==='dark')document.documentElement.classList.add('dark');</script>
+<style>
+  @media print {
+    header, .no-print { display: none !important; }
+    body, main, #reports-zone { overflow: visible !important; height: auto !important; background: #fff !important; color: #000 !important; }
+    .rep-pane { display: block !important; page-break-after: always; }
+  }
+</style>
 </head>
 <body id="shell" class="bg-background-light dark:bg-background-dark text-text-primary dark:text-white transition-colors duration-200 min-h-screen flex overflow-hidden">
 <!-- Main Content -->
@@ -14,8 +21,8 @@
 <!-- Top Header -->
 <header class="h-16 bg-background-light dark:bg-background-dark/95 backdrop-blur-sm sticky top-0 z-10 px-6 sm:px-8 flex items-center justify-between border-b border-gray-200/50 dark:border-gray-800/50">
 <div class="hidden lg:block">
-<h2 class="text-xl font-bold text-gray-800 dark:text-white">التقارير والتحليلات المالية</h2>
-<p class="text-xs text-gray-500">ملخص الأداء المالي، الأرباح الصافية، الأكثر مبيعاً، النواقص، وسجل الورديات وحركة الصندوق</p>
+<h2 class="text-xl font-bold text-gray-800 dark:text-white" data-label="module_reports">مركز التقارير والتحليلات المالية الشاملة</h2>
+<p class="text-xs text-gray-500">الأرباح والخسائر التفصيلية، ربحية الفواتير والأصناف، مديونيات العملاء والأقساط والموردين، الخزائن والورديات، وتقييم المخزون</p>
 </div>
 <div class="flex flex-wrap items-center gap-2">
 <div class="flex items-center gap-1.5 bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs shadow-sm">
@@ -26,71 +33,320 @@
   <input id="f-date-to" type="date" class="bg-transparent font-num font-bold focus:outline-none"/>
 </div>
 <button type="button" id="btn-rep-today" class="px-3 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-sm">اليوم</button>
+<button type="button" onclick="setThisMonthRange()" class="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-xs font-bold">هذا الشهر</button>
 <button onclick="toggleTheme()" class="p-2 text-gray-500 hover:text-primary transition-colors relative" title="تبديل الوضع الليلي / النهاري">
 <span class="material-icons-round dark:hidden">dark_mode</span>
 <span class="material-icons-round hidden dark:inline">light_mode</span>
 </button>
 </div>
 </header>
+
 <!-- Scrollable Content -->
 <div class="flex-1 overflow-y-auto p-6 sm:p-8">
-<div class="max-w-7xl mx-auto space-y-8">
+<div class="max-w-7xl mx-auto space-y-6">
 <!-- Reports Section -->
-<div id="reports-zone" class="space-y-8">
-<!-- Quick Actions & Period -->
-<div class="flex flex-wrap items-center justify-between gap-4">
-<div class="flex gap-2">
-<button onclick="window.print()" class="flex items-center gap-2 bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-<span class="material-icons-round text-lg">print</span>
-<span>طباعة التقرير</span>
-</button>
-<select id="f-month" class="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"></select>
+<div id="reports-zone" class="space-y-6">
+
+<!-- شريط الاستخراج والتصدير والطباعة وإرسال واتساب -->
+<div class="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-card-dark p-4 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm no-print">
+  <div class="flex flex-wrap items-center gap-2">
+    <button onclick="printReportA4()" class="flex items-center gap-1.5 bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors">
+      <span class="material-icons-round text-base">print</span>
+      <span>طباعة التقرير A4</span>
+    </button>
+    <button onclick="exportReportExcel()" class="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-colors">
+      <span class="material-icons-round text-base">table_view</span>
+      <span>تصدير Excel (.xlsx)</span>
+    </button>
+    <button onclick="exportReportCsv()" class="flex items-center gap-1.5 bg-teal-600/15 text-teal-700 dark:text-teal-300 hover:bg-teal-600/25 px-3 py-2 rounded-xl text-xs font-bold transition-colors">
+      <span class="material-icons-round text-base">download</span>
+      <span>تصدير CSV</span>
+    </button>
+    <button onclick="exportReportPdf()" class="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-colors">
+      <span class="material-icons-round text-base">picture_as_pdf</span>
+      <span>تصدير PDF (A4)</span>
+    </button>
+    <button data-wa-toggle onclick="sendReportWhatsApp()" class="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-colors">
+      <span class="material-icons-round text-base">chat</span>
+      <span>إرسال لواتساب PDF</span>
+    </button>
+  </div>
+
+  <div class="flex items-center gap-2 text-xs">
+    <select id="f-month" class="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-xs font-bold"></select>
+    <div class="flex gap-1.5" id="tabs">
+      <button data-p="day" class="px-3.5 py-2 rounded-xl bg-primary text-white font-bold">حسب الفترة (من / إلى)</button>
+      <button data-p="month" class="px-3.5 py-2 rounded-xl bg-gray-100 dark:bg-slate-800 font-bold">شهري</button>
+    </div>
+  </div>
 </div>
-<div class="flex gap-2 text-sm" id="tabs">
-<button data-p="day" class="px-4 py-2 rounded-lg bg-primary text-white font-medium">حسب الفترة (من / إلى)</button>
-<button data-p="month" class="px-4 py-2 rounded-lg bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700 font-medium">شهري</button>
+
+<!-- بطاقات الملخص المالي التنفيذي السريع (6 مؤشرات) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="cards"></div>
+
+<!-- تبويبات التقارير التفصيلية الـ 5 -->
+<div class="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-3 no-print">
+  <button data-rtab="pnl" onclick="switchRepTab('pnl')" class="rep-subtab px-4 py-2.5 rounded-xl text-xs font-bold bg-primary text-white">1. الأرباح والخسائر وربحية الفواتير والأصناف</button>
+  <button data-rtab="receivables" onclick="switchRepTab('receivables')" class="rep-subtab px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700">2. مديونيات العملاء والأقساط والتحصيلات</button>
+  <button data-rtab="payables" onclick="switchRepTab('payables')" class="rep-subtab px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700">3. مديونيات الموردين والمشتريات</button>
+  <button data-rtab="cashflow" onclick="switchRepTab('cashflow')" class="rep-subtab px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700">4. السيولة والخزائن والورديات</button>
+  <button data-rtab="inventory" onclick="switchRepTab('inventory')" class="rep-subtab px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700">5. تقييم المخزون والنواقص والحركات</button>
 </div>
-</div>
-<!-- Metrics Cards -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="cards"></div>
-<!-- Charts & Tables Section -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-<!-- Payments Breakdown -->
-<div class="lg:col-span-2 bg-card-light dark:bg-card-dark rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-800">
-<div class="flex items-center justify-between mb-6">
-<h3 class="font-bold text-lg text-gray-800 dark:text-white">تفصيل الدفعات والفترة</h3>
-</div>
-<div class="space-y-3" id="breakdown"></div>
-<div class="mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
-<h3 class="font-bold text-lg text-gray-800 dark:text-white mb-4">الأرباح الصافية</h3>
-<div class="grid grid-cols-2 gap-3 text-sm" id="profit"></div>
-</div>
-</div>
-<!-- Top Selling Products -->
-<div class="bg-card-light dark:bg-card-dark rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col">
-<div class="flex items-center justify-between mb-6">
-<h3 class="font-bold text-lg text-gray-800 dark:text-white">الأكثر مبيعاً</h3>
-</div>
-<div class="flex-1 space-y-4" id="top"></div>
-</div>
-</div>
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-<!-- Low stock -->
-<div class="bg-card-light dark:bg-card-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-<div class="p-6 border-b border-gray-100 dark:border-gray-800"><h3 class="font-bold text-lg text-gray-800 dark:text-white">النواقص (مخزون منخفض)</h3></div>
-<div class="divide-y divide-gray-100 dark:divide-gray-800" id="low"></div>
-</div>
-<!-- Movements log -->
-<div class="bg-card-light dark:bg-card-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-<div class="p-6 border-b border-gray-100 dark:border-gray-800"><h3 class="font-bold text-lg text-gray-800 dark:text-white">سجل حركات المخزون (أحدث)</h3></div>
-<div class="divide-y divide-gray-100 dark:divide-gray-800" id="moves"></div>
-</div>
-</div>
-<!-- Shifts History -->
-<div class="bg-card-light dark:bg-card-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-  <div class="p-6 border-b border-gray-100 dark:border-gray-800"><h3 class="font-bold text-lg text-gray-800 dark:text-white">سجل الورديات وحركة الصندوق (يشمل مبيعات الكاش وسندات القبض)</h3></div>
-  <div class="divide-y divide-gray-100 dark:divide-gray-800 max-h-80 overflow-y-auto" id="shifts-list"></div>
-</div>
+
+<!-- ==================== القسم 1: الأرباح والخسائر التفصيلية وربحية الفواتير والأصناف ==================== -->
+<section id="rep-pane-pnl" class="rep-pane space-y-6">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- قائمة الدخل والأرباح والخسائر التفصيلية -->
+    <div class="lg:col-span-2 bg-card-light dark:bg-card-dark rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-base text-gray-800 dark:text-white">بيان الأرباح والخسائر التفصيلي (Detailed P&L Statement)</h3>
+        <span id="pnl-period-badge" class="text-xs font-num px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-bold"></span>
+      </div>
+      <div id="pnl-waterfall" class="space-y-2 text-xs"></div>
+
+      <!-- عناصر التوافق مع الواجهة الأساسية -->
+      <div class="mt-6 pt-5 border-t border-gray-100 dark:border-gray-800">
+        <h4 class="font-bold text-sm text-gray-800 dark:text-white mb-3">توزيع طرق الدفع وملخص الأرباح</h4>
+        <div class="space-y-3" id="breakdown"></div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mt-4" id="profit"></div>
+      </div>
+    </div>
+
+    <!-- الأكثر مبيعاً + المصروفات حسب التصنيف -->
+    <div class="space-y-6">
+      <div class="bg-card-light dark:bg-card-dark rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800">
+        <h3 class="font-bold text-base text-gray-800 dark:text-white mb-4">الأصناف الأكثر مبيعاً</h3>
+        <div class="space-y-3" id="top"></div>
+      </div>
+      <div class="bg-card-light dark:bg-card-dark rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800">
+        <h3 class="font-bold text-base text-gray-800 dark:text-white mb-4">المصروفات التشغيلية حسب التصنيف</h3>
+        <div class="space-y-2 text-xs" id="expenses-by-cat-box"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- جدول ربحية الفواتير التفصيلية -->
+  <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-2">
+      <h3 class="font-bold text-sm text-gray-800 dark:text-white">تفاصيل ربحية الفواتير خلال الفترة (Invoice-by-Invoice Profitability)</h3>
+      <input id="inv-profit-search" type="text" oninput="filterTableRows('invoices-profit-tbody', this.value)" placeholder="بحث برقم الفاتورة أو اسم العميل..." class="no-print px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-transparent text-xs w-64"/>
+    </div>
+    <div class="overflow-x-auto max-h-96">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-gray-50 dark:bg-gray-800/70 text-gray-500 sticky top-0">
+          <tr>
+            <th class="p-3">رقم الفاتورة</th>
+            <th class="p-3">التاريخ</th>
+            <th class="p-3">العميل</th>
+            <th class="p-3">إجمالي الفاتورة</th>
+            <th class="p-3">المرتجعات</th>
+            <th class="p-3">صافي البيع (بدون ضريبة)</th>
+            <th class="p-3">تكلفة البضاعة (COGS)</th>
+            <th class="p-3">صافي ربح الفاتورة</th>
+          </tr>
+        </thead>
+        <tbody id="invoices-profit-tbody" class="divide-y divide-gray-100 dark:divide-gray-800"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- جدول ربحية الأصناف المباعة التفصيلية -->
+  <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-2">
+      <h3 class="font-bold text-sm text-gray-800 dark:text-white">تفاصيل ربحية الأصناف المباعة (Product Profitability Breakdown)</h3>
+      <input id="item-profit-search" type="text" oninput="filterTableRows('items-profit-tbody', this.value)" placeholder="بحث باسم الصنف أو الكود..." class="no-print px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-transparent text-xs w-64"/>
+    </div>
+    <div class="overflow-x-auto max-h-96">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-gray-50 dark:bg-gray-800/70 text-gray-500 sticky top-0">
+          <tr>
+            <th class="p-3">كود الصنف (SKU)</th>
+            <th class="p-3">اسم الصنف</th>
+            <th class="p-3">الكمية الصافية</th>
+            <th class="p-3">صافي الإيراد</th>
+            <th class="p-3">إجمالي التكلفة الفعلية</th>
+            <th class="p-3">صافي الربح</th>
+            <th class="p-3">هامش الربح %</th>
+          </tr>
+        </thead>
+        <tbody id="items-profit-tbody" class="divide-y divide-gray-100 dark:divide-gray-800"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== القسم 2: تفاصيل مديونيات العملاء والأقساط والتحصيلات ==================== -->
+<section id="rep-pane-receivables" class="rep-pane hidden space-y-6">
+  <div id="receivables-kpis" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+  <!-- كشف مديونيات العملاء (الحسابات الجارية الآجلة) -->
+  <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-2">
+      <h3 class="font-bold text-sm text-gray-800 dark:text-white">كشف مديونيات العملاء التفصيلي (الحسابات الآجلة المستحقة)</h3>
+      <input type="text" oninput="filterTableRows('cust-debt-tbody', this.value)" placeholder="بحث باسم العميل أو الهاتف..." class="no-print px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-transparent text-xs w-64"/>
+    </div>
+    <div class="overflow-x-auto max-h-96">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-gray-50 dark:bg-gray-800/70 text-gray-500 sticky top-0">
+          <tr>
+            <th class="p-3">اسم العميل</th>
+            <th class="p-3">رقم الهاتف</th>
+            <th class="p-3">العنوان</th>
+            <th class="p-3">عدد الفواتير</th>
+            <th class="p-3">إجمالي المسحوبات</th>
+            <th class="p-3">إجمالي المسدد</th>
+            <th class="p-3">الرصيد المتبقي (المديونية)</th>
+          </tr>
+        </thead>
+        <tbody id="cust-debt-tbody" class="divide-y divide-gray-100 dark:divide-gray-800"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- كشف عقود الأقساط النشطة والمتأخرة -->
+  <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-2">
+      <h3 class="font-bold text-sm text-gray-800 dark:text-white">تفاصيل عقود التقسيط النشطة والأقساط المتأخرة</h3>
+      <input type="text" oninput="filterTableRows('inst-debt-tbody', this.value)" placeholder="بحث برقم العقد أو اسم العميل..." class="no-print px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-transparent text-xs w-64"/>
+    </div>
+    <div class="overflow-x-auto max-h-96">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-gray-50 dark:bg-gray-800/70 text-gray-500 sticky top-0">
+          <tr>
+            <th class="p-3">رقم العقد</th>
+            <th class="p-3">العميل</th>
+            <th class="p-3">الهاتف</th>
+            <th class="p-3">إجمالي العقد</th>
+            <th class="p-3">الأقساط المسددة</th>
+            <th class="p-3">أقساط متأخرة</th>
+            <th class="p-3">تاريخ الاستحقاق القادم</th>
+            <th class="p-3">المتبقي على العميل</th>
+          </tr>
+        </thead>
+        <tbody id="inst-debt-tbody" class="divide-y divide-gray-100 dark:divide-gray-800"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- سندات القبض المحصلة في الفترة -->
+  <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div class="p-4 border-b border-gray-100 dark:border-gray-800">
+      <h3 class="font-bold text-sm text-gray-800 dark:text-white">سجل سندات القبض والتحصيلات من العملاء خلال الفترة</h3>
+    </div>
+    <div class="overflow-x-auto max-h-80">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-gray-50 dark:bg-gray-800/70 text-gray-500 sticky top-0">
+          <tr>
+            <th class="p-3">رقم السند</th>
+            <th class="p-3">التاريخ</th>
+            <th class="p-3">العميل</th>
+            <th class="p-3">طريقة الدفع</th>
+            <th class="p-3">المبلغ المحصل</th>
+            <th class="p-3">ملاحظات</th>
+          </tr>
+        </thead>
+        <tbody id="vouchers-rep-tbody" class="divide-y divide-gray-100 dark:divide-gray-800"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== القسم 3: تفاصيل مديونيات الموردين والمشتريات ==================== -->
+<section id="rep-pane-payables" class="rep-pane hidden space-y-6">
+  <div id="payables-kpis" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+  <!-- كشف أرصدة الموردين -->
+  <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-2">
+      <h3 class="font-bold text-sm text-gray-800 dark:text-white">كشف أرصدة ومديونيات الموردين (Accounts Payable)</h3>
+      <input type="text" oninput="filterTableRows('sup-debt-tbody', this.value)" placeholder="بحث باسم المورد أو الشركة..." class="no-print px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-transparent text-xs w-64"/>
+    </div>
+    <div class="overflow-x-auto max-h-96">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-gray-50 dark:bg-gray-800/70 text-gray-500 sticky top-0">
+          <tr>
+            <th class="p-3">كود المورد</th>
+            <th class="p-3">اسم المورد</th>
+            <th class="p-3">الشركة</th>
+            <th class="p-3">الهاتف</th>
+            <th class="p-3">عدد الفواتير</th>
+            <th class="p-3">الرصيد المستحق للمورد</th>
+          </tr>
+        </thead>
+        <tbody id="sup-debt-tbody" class="divide-y divide-gray-100 dark:divide-gray-800"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- فواتير المشتريات وسندات الصرف للموردين -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+      <div class="p-4 border-b border-gray-100 dark:border-gray-800"><h3 class="font-bold text-sm">فواتير المشتريات خلال الفترة</h3></div>
+      <div class="overflow-x-auto max-h-80">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-gray-50 dark:bg-gray-800/70 text-gray-500">
+            <tr>
+              <th class="p-2.5">رقم الفاتورة</th>
+              <th class="p-2.5">التاريخ</th>
+              <th class="p-2.5">المورد</th>
+              <th class="p-2.5">الإجمالي</th>
+              <th class="p-2.5">المتبقي</th>
+            </tr>
+          </thead>
+          <tbody id="purchases-rep-tbody" class="divide-y divide-gray-100 dark:divide-gray-800"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+      <div class="p-4 border-b border-gray-100 dark:border-gray-800"><h3 class="font-bold text-sm">سندات الصرف والدفعات للموردين خلال الفترة</h3></div>
+      <div class="overflow-x-auto max-h-80">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-gray-50 dark:bg-gray-800/70 text-gray-500">
+            <tr>
+              <th class="p-2.5">رقم السند</th>
+              <th class="p-2.5">التاريخ</th>
+              <th class="p-2.5">المورد</th>
+              <th class="p-2.5">الصافي المدفوع</th>
+              <th class="p-2.5">خصم المنبع</th>
+            </tr>
+          </thead>
+          <tbody id="sup-payments-rep-tbody" class="divide-y divide-gray-100 dark:divide-gray-800"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== القسم 4: السيولة والخزائن والورديات ==================== -->
+<section id="rep-pane-cashflow" class="rep-pane hidden space-y-6">
+  <div id="cashflow-summary-box" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
+  <div id="treasuries-rep-box" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+  <!-- Shifts History -->
+  <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div class="p-5 border-b border-gray-100 dark:border-gray-800"><h3 class="font-bold text-base text-gray-800 dark:text-white">سجل الورديات وحركة الصندوق (يشمل مبيعات الكاش وسندات القبض)</h3></div>
+    <div class="divide-y divide-gray-100 dark:divide-gray-800 max-h-96 overflow-y-auto" id="shifts-list"></div>
+  </div>
+</section>
+
+<!-- ==================== القسم 5: تقييم المخزون والنواقص وحركة الأصناف ==================== -->
+<section id="rep-pane-inventory" class="rep-pane hidden space-y-6">
+  <div id="inventory-val-kpis" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Low stock -->
+    <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-800"><h3 class="font-bold text-base text-gray-800 dark:text-white">النواقص (مخزون منخفض أو نافد)</h3></div>
+      <div class="divide-y divide-gray-100 dark:divide-gray-800 max-h-96 overflow-y-auto" id="low"></div>
+    </div>
+    <!-- Movements log -->
+    <div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+      <div class="p-5 border-b border-gray-100 dark:border-gray-800"><h3 class="font-bold text-base text-gray-800 dark:text-white">سجل حركات المخزون خلال الفترة</h3></div>
+      <div class="divide-y divide-gray-100 dark:divide-gray-800 max-h-96 overflow-y-auto" id="moves"></div>
+    </div>
+  </div>
+</section>
+
 </div>
 </div>
 <div class="h-8"></div>
@@ -99,24 +355,73 @@
 <script src="app.js"></script>
 <script>
 let PERIOD = 'day';
-const AR = { cash: 'نقدي', wallet: 'محفظة', credit: 'آجل' };
+let ACTIVE_REP_TAB = 'pnl';
+let LAST_COMP_DATA = null;
+const AR = { cash: 'نقدي', wallet: 'محفظة', credit: 'آجل', bank: 'تحويل بنكي' };
 
-function card(title, val, unit, icon, bg) {
-  return `<div class="bg-card-light dark:bg-card-dark rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 relative overflow-hidden group">
-  <div class="absolute top-0 right-0 w-32 h-32 ${bg} rounded-full -mr-10 -mt-10 group-hover:scale-110 transition-transform duration-500"></div>
-  <div class="relative z-10"><div class="flex justify-between items-start mb-4">
-    <div><p class="text-sm font-medium text-gray-500 dark:text-gray-400">${title}</p>
-      <h3 class="text-3xl font-bold text-gray-900 dark:text-white font-num mt-1">${val} <span class="text-lg font-normal text-gray-500">${unit}</span></h3></div>
-    <div class="w-10 h-10 rounded-lg flex items-center justify-center ${icon.c}"><span class="material-icons-round">${icon.i}</span></div>
+function card(title, val, unit, icon, bg, subText = '') {
+  return `<div class="bg-card-light dark:bg-card-dark rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-800 relative overflow-hidden group">
+  <div class="absolute top-0 right-0 w-28 h-28 ${bg} rounded-full -mr-8 -mt-8 group-hover:scale-110 transition-transform duration-500"></div>
+  <div class="relative z-10"><div class="flex justify-between items-start">
+    <div><p class="text-xs font-bold text-gray-500 dark:text-gray-400">${title}</p>
+      <h3 class="text-2xl font-bold text-gray-900 dark:text-white font-num mt-1">${val} <span class="text-xs font-normal text-gray-500">${unit}</span></h3>
+      ${subText ? `<p class="text-[11px] text-gray-400 mt-1">${subText}</p>` : ''}
+    </div>
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center ${icon.c}"><span class="material-icons-round">${icon.i}</span></div>
   </div></div></div>`;
 }
 
 function barRow(label, val, max) {
   const pct = max ? Math.max(2, Math.round(val / max * 100)) : 0;
   return `<div class="flex items-center gap-3">
-    <span class="w-20 text-sm text-gray-500 shrink-0">${label}</span>
-    <div class="flex-1 h-4 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden"><div class="h-full bg-primary rounded-full" style="width:${pct}%"></div></div>
-    <span class="w-28 text-left text-sm font-num font-bold">${fmt(val)} ${CURRENCY}</span></div>`;
+    <span class="w-20 text-xs font-bold text-gray-500 shrink-0">${label}</span>
+    <div class="flex-1 h-3.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden"><div class="h-full bg-primary rounded-full" style="width:${pct}%"></div></div>
+    <span class="w-28 text-left text-xs font-num font-bold">${fmt(val)} ${CURRENCY}</span></div>`;
+}
+
+function switchRepTab(tab) {
+  ACTIVE_REP_TAB = tab;
+  ['pnl', 'receivables', 'payables', 'cashflow', 'inventory'].forEach((t) => {
+    const el = document.getElementById('rep-pane-' + t);
+    if (el) el.classList.toggle('hidden', t !== tab);
+  });
+  document.querySelectorAll('.rep-subtab').forEach((b) => {
+    const active = b.dataset.rtab === tab;
+    b.className = 'rep-subtab px-4 py-2.5 rounded-xl text-xs font-bold ' +
+      (active ? 'bg-primary text-white shadow-sm' : 'bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700');
+  });
+}
+
+function filterTableRows(tbodyId, q) {
+  const term = String(q || '').trim().toLowerCase();
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  Array.from(tbody.querySelectorAll('tr')).forEach((tr) => {
+    const txt = tr.textContent.toLowerCase();
+    tr.style.display = (!term || txt.includes(term)) ? '' : 'none';
+  });
+}
+
+function getEffectiveRange() {
+  const df = document.getElementById('f-date-from').value || todayISO();
+  const dt = document.getElementById('f-date-to').value || todayISO();
+  if (PERIOD === 'day') return { from: df, to: dt };
+  const [y, m] = document.getElementById('f-month').value.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return {
+    from: `${y}-${String(m).padStart(2, '0')}-01`,
+    to: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
+function setThisMonthRange() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  document.getElementById('f-date-from').value = `${y}-${m}-01`;
+  document.getElementById('f-date-to').value = todayISO();
+  PERIOD = 'day';
+  load();
 }
 
 async function load() {
@@ -128,78 +433,69 @@ async function load() {
   const df = document.getElementById('f-date-from').value || todayISO();
   const dt = document.getElementById('f-date-to').value || todayISO();
   const [y, m] = document.getElementById('f-month').value.split('-').map(Number);
+  const range = getEffectiveRange();
 
   if (canSales) {
     let d;
     if (PERIOD === 'day') d = await guard(() => api('report_daily', { date_from: df, date_to: dt }));
     else d = await guard(() => api('report_monthly', { year: y, month: m }));
     if (d) {
-      document.getElementById('cards').innerHTML =
-        card('إجمالي المبيعات', fmt(d.sales.total), CURRENCY, { i: 'attach_money', c: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' }, 'bg-primary/5') +
-        card('المرتجعات', fmt(d.returns.total), CURRENCY, { i: 'assignment_return', c: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' }, 'bg-orange-500/5') +
-        card('تحصيل مديونيات (سندات قبض)', fmt((d.vouchers && d.vouchers.total) || 0), CURRENCY, { i: 'payments', c: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' }, 'bg-purple-500/5');
-
       const max = Math.max(d.payments.cash || 0, d.payments.wallet || 0, d.payments.credit || 0, 1);
       document.getElementById('breakdown').innerHTML =
-        `<div class="grid grid-cols-3 gap-3 mb-4 text-sm">
-          <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">المجموع الفرعي</p><p class="font-num font-bold">${fmt(d.sales.subtotal)}</p></div>
-          <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">الخصم</p><p class="font-num font-bold text-green-600">-${fmt(d.sales.discount)}</p></div>
-          <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">الضريبة</p><p class="font-num font-bold">${fmt(d.sales.tax)}</p></div>
+        `<div class="grid grid-cols-3 gap-3 mb-4 text-xs">
+          <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800"><p class="text-gray-500">المجموع الفرعي</p><p class="font-num font-bold text-sm mt-0.5">${fmt(d.sales.subtotal)}</p></div>
+          <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800"><p class="text-gray-500">الخصم</p><p class="font-num font-bold text-sm text-green-600 mt-0.5">-${fmt(d.sales.discount)}</p></div>
+          <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800"><p class="text-gray-500">الضريبة</p><p class="font-num font-bold text-sm mt-0.5">${fmt(d.sales.tax)}</p></div>
         </div>` +
         ['cash', 'wallet', 'credit'].map((k) => barRow(AR[k], d.payments[k] || 0, max)).join('');
     }
-  } else {
-    document.getElementById('cards').classList.add('hidden');
-    document.getElementById('breakdown').parentElement.classList.add('hidden');
   }
 
-  const from = PERIOD === 'day' ? df : `${y}-${String(m).padStart(2, '0')}-01`;
-  const to = PERIOD === 'day' ? dt : `${y}-${String(m).padStart(2, '0')}-31`;
-  const [top, profit, low, moves, shifts] = await Promise.all([
-    canSales ? guard(() => api('report_top', { date_from: from, date_to: to, limit: 6 })) : Promise.resolve(null),
-    canProfit ? guard(() => api('report_profit', { date_from: from, date_to: to })) : Promise.resolve(null),
+  const [top, profit, low, moves, shifts, comp] = await Promise.all([
+    canSales ? guard(() => api('report_top', { date_from: range.from, date_to: range.to, limit: 8 })) : Promise.resolve(null),
+    canProfit ? guard(() => api('report_profit', { date_from: range.from, date_to: range.to })) : Promise.resolve(null),
     canMoves ? guard(() => api('report_low')) : Promise.resolve(null),
-    canMoves ? guard(() => api('report_movements', { limit: 12 })) : Promise.resolve(null),
+    canMoves ? guard(() => api('report_movements', { limit: 30 })) : Promise.resolve(null),
     canShifts ? guard(() => api('shifts')) : Promise.resolve(null),
+    guard(() => api('report_comprehensive', { date_from: range.from, date_to: range.to })),
   ]);
+
+  LAST_COMP_DATA = comp;
 
   if (canSales) {
     document.getElementById('top').innerHTML = (top || []).length ? (top || []).map((t) => `
-      <div class="flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded-lg transition-colors -mx-2">
-        <div class="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0"><span class="material-icons-round">devices</span></div>
-        <div class="flex-1 min-w-0"><h4 class="text-sm font-bold text-gray-800 dark:text-white truncate">${esc(t.name)}</h4><p class="text-xs text-gray-500 truncate">${esc(t.sku)}</p></div>
-        <div class="text-left"><p class="text-sm font-bold text-gray-900 dark:text-white font-num">${n(t.qty)}</p><p class="text-xs text-gray-400">مباع</p></div>
-      </div>`).join('') : '<div class="text-center text-gray-400 py-6">لا مبيعات في الفترة</div>';
-  } else {
-    document.getElementById('top').parentElement.classList.add('hidden');
+      <div class="flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded-xl transition-colors">
+        <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0"><span class="material-icons-round text-lg">devices</span></div>
+        <div class="flex-1 min-w-0"><h4 class="text-xs font-bold text-gray-800 dark:text-white truncate">${esc(t.name)}</h4><p class="text-[11px] text-gray-500 truncate">${esc(t.sku)}</p></div>
+        <div class="text-left"><p class="text-xs font-bold text-gray-900 dark:text-white font-num">${n(t.qty)} قطعة</p><p class="text-[11px] text-emerald-600 font-num font-bold">${fmt(t.total)} ${CURRENCY}</p></div>
+      </div>`).join('') : '<div class="text-center text-gray-400 py-6 text-xs">لا مبيعات في الفترة</div>';
   }
 
   if (canProfit && profit) {
     document.getElementById('profit').innerHTML = `
-      <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">إيراد البضائع</p><p class="font-num font-bold">${fmt(profit.goods_revenue)}</p></div>
-      <div class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20"><p class="text-gray-500 text-xs">ربح البضائع</p><p class="font-num font-bold text-green-600">${fmt(profit.goods_profit)}</p></div>
-      <div class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800"><p class="text-gray-500 text-xs">إيراد الصيانة</p><p class="font-num font-bold">${fmt(profit.repair_revenue)}</p></div>
-      <div class="p-3 rounded-lg bg-green-50 dark:bg-green-900/20"><p class="text-gray-500 text-xs">ربح الصيانة</p><p class="font-num font-bold text-green-600">${fmt(profit.repair_profit)}</p></div>`;
-  } else {
-    document.getElementById('profit').parentElement.classList.add('hidden');
+      <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800"><p class="text-gray-500">إيراد البضائع</p><p class="font-num font-bold mt-0.5">${fmt(profit.goods_revenue)}</p></div>
+      <div class="p-3 rounded-xl bg-green-50 dark:bg-green-900/20"><p class="text-gray-500">ربح البضائع</p><p class="font-num font-bold text-green-600 mt-0.5">${fmt(profit.goods_profit)}</p></div>
+      <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800"><p class="text-gray-500">إيراد الصيانة</p><p class="font-num font-bold mt-0.5">${fmt(profit.repair_revenue)}</p></div>
+      <div class="p-3 rounded-xl bg-green-50 dark:bg-green-900/20"><p class="text-gray-500">ربح الصيانة</p><p class="font-num font-bold text-green-600 mt-0.5">${fmt(profit.repair_profit)}</p></div>`;
   }
 
   if (canMoves) {
-    document.getElementById('low').innerHTML = (low || []).slice(0, 8).map((p) => `
-      <div class="flex items-center justify-between px-6 py-3">
-        <span class="text-sm font-medium">${esc(p.name)}</span>
-        <span class="text-sm font-num font-bold ${p.qty <= 0 ? 'text-slate-400' : 'text-red-500'}">${n(p.qty)} / حد ${n(p.min_qty)}</span>
-      </div>`).join('') || '<div class="p-6 text-center text-gray-400">لا نواقص</div>';
+    document.getElementById('low').innerHTML = (low || []).map((p) => `
+      <div class="flex items-center justify-between px-5 py-3 text-xs">
+        <div>
+          <span class="font-bold">${esc(p.name)}</span>
+          <span class="text-gray-400 font-num mr-1">(${esc(p.sku || '')})</span>
+        </div>
+        <span class="font-num font-bold ${p.qty <= 0 ? 'text-rose-600' : 'text-amber-600'}">${n(p.qty)} / حد الطلب ${n(p.min_qty)}</span>
+      </div>`).join('') || '<div class="p-6 text-center text-gray-400 text-xs">لا توجد نواقص حالياً</div>';
 
-    const REASON = { sale: 'بيع', return: 'مرتجع', repair_part: 'قطعة صيانة', used_purchase: 'شراء مستعمل', serial_add: 'إضافة سيريال', manual: 'يدوي', 'تعديل يدوي': 'تعديل يدوي' };
+    const REASON = { sale: 'بيع', return: 'مرتجع', repair_part: 'قطعة صيانة', used_purchase: 'شراء مستعمل', serial_add: 'إضافة سيريال', manual: 'يدوي', purchase: 'توريد مشتريات', purchase_return: 'مرتجع مشتريات' };
     document.getElementById('moves').innerHTML = (moves || []).map((x) => `
-      <div class="flex items-center justify-between px-6 py-3 text-sm">
-        <div><span class="font-medium">${esc(x.product_name)}</span> <span class="text-gray-400">· ${esc(REASON[x.reason] || x.reason)}</span>
-          <div class="text-xs text-gray-400 font-num">${fmtDT(x.created_at)}${x.user_name ? ' · ' + esc(x.user_name) : ''}${x.ref ? ' · ' + esc(x.ref) : ''}</div></div>
+      <div class="flex items-center justify-between px-5 py-3 text-xs">
+        <div><span class="font-bold">${esc(x.product_name)}</span> <span class="text-gray-400">· ${esc(REASON[x.reason] || x.reason)}</span>
+          <div class="text-[11px] text-gray-400 font-num">${fmtDT(x.created_at)}${x.user_name ? ' · ' + esc(x.user_name) : ''}${x.ref ? ' · ' + esc(x.ref) : ''}</div></div>
         <span class="font-num font-bold ${x.qty_change > 0 ? 'text-green-600' : 'text-red-500'}">${x.qty_change > 0 ? '+' : ''}${n(x.qty_change)}</span>
-      </div>`).join('') || '<div class="p-6 text-center text-gray-400">لا حركات</div>';
-  } else {
-    document.getElementById('low').parentElement.parentElement.classList.add('hidden');
+      </div>`).join('') || '<div class="p-6 text-center text-gray-400 text-xs">لا توجد حركات مخزنية</div>';
   }
 
   if (canShifts) {
@@ -208,27 +504,412 @@ async function load() {
       const diffStr = !closed ? 'مفتوحة' : (sh.diff === 0 ? 'متطابقة' : (sh.diff > 0 ? `+${fmt(sh.diff)}` : fmt(sh.diff)));
       const diffCol = !closed ? 'text-blue-600' : (sh.diff === 0 ? 'text-green-600' : (sh.diff > 0 ? 'text-emerald-600' : 'text-red-500'));
       return `
-        <div class="flex items-center justify-between px-6 py-3 text-sm">
+        <div class="flex items-center justify-between px-5 py-3 text-xs">
           <div>
             <span class="font-bold">${esc(sh.user_name)}</span>
-            <span class="text-xs text-gray-400 font-num mr-2">${fmtDT(sh.opened_at)}${closed ? ' ← ' + fmtDT(sh.closed_at) : ''}</span>
-            <div class="text-xs text-gray-500 font-num mt-0.5">افتتاحي: ${fmt(sh.opening_cash)} · مبيعات الوردية: ${fmt(sh.sales_total)} ${CURRENCY}</div>
+            <span class="text-gray-400 font-num mr-2">${fmtDT(sh.opened_at)}${closed ? ' ← ' + fmtDT(sh.closed_at) : ''}</span>
+            <div class="text-gray-500 font-num mt-0.5">افتتاحي: ${fmt(sh.opening_cash)} · مبيعات الكاش بالوردية: ${fmt(sh.sales_total)} ${CURRENCY}</div>
           </div>
           <div class="text-left">
             <span class="font-num font-bold ${diffCol}">${diffStr}</span>
             ${closed ? `<div class="text-[11px] text-gray-400 font-num">فعلي: ${fmt(sh.counted_cash)} / متوقع: ${fmt(sh.expected_cash)}</div>` : ''}
           </div>
         </div>`;
-    }).join('') || '<div class="p-6 text-center text-gray-400">لا ورديات مسجلة</div>';
-  } else {
-    document.getElementById('shifts-list').parentElement.classList.add('hidden');
+    }).join('') || '<div class="p-6 text-center text-gray-400 text-xs">لا توجد ورديات مسجلة</div>';
   }
+
+  if (comp) renderComprehensiveReport(comp);
+}
+
+function renderComprehensiveReport(comp) {
+  const pnl = comp.pnl || {};
+  const rec = comp.receivables || { summary: {}, customers_debt_list: [], installments_list: [], vouchers_list: [] };
+  const pay = comp.payables || { summary: {}, suppliers_debt_list: [], purchases_list: [], supplier_payments_list: [] };
+  const cf = comp.cashflow || { payments_in: {}, payments_out: {}, treasuries: [] };
+  const inv = comp.inventory || { valuation: {} };
+
+  document.getElementById('pnl-period-badge').textContent = `${comp.period.date_from} ← ${comp.period.date_to}`;
+
+  // بطاقات المؤشرات الرئيسية الـ 6
+  document.getElementById('cards').innerHTML =
+    card('صافي المبيعات (بعد المرتجع)', fmt(pnl.net_sales_with_tax), CURRENCY, { i: 'point_of_sale', c: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' }, 'bg-blue-500/5', `عدد الفواتير: ${n(pnl.sales_count)} | المرتجعات: ${fmt(pnl.returns_total)}`) +
+    card('تكلفة البضاعة المباعة (COGS)', fmt(pnl.cogs_goods), CURRENCY, { i: 'inventory_2', c: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600' }, 'bg-amber-500/5', `مجمل ربح البضائع: ${fmt(pnl.gross_profit_goods)} ${CURRENCY}`) +
+    card('صافي الربح النهائي للفترة', fmt(pnl.net_profit), CURRENCY, { i: 'trending_up', c: pnl.net_profit >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600' : 'bg-rose-50 text-rose-600' }, 'bg-emerald-500/5', `بعد خصم المصروفات (${fmt(pnl.operating_expenses_total)})`) +
+    card('إجمالي مديونيات العملاء والأقساط', fmt((rec.summary.total_customers_debt || 0) + (rec.summary.installments_remaining_total || 0)), CURRENCY, { i: 'account_balance_wallet', c: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600' }, 'bg-purple-500/5', `حسابات جارية: ${fmt(rec.summary.total_customers_debt)} | أقساط: ${fmt(rec.summary.installments_remaining_total)}`) +
+    card('إجمالي مستحقات الموردين (AP)', fmt(pay.summary.total_suppliers_debt || 0), CURRENCY, { i: 'local_shipping', c: 'bg-rose-50 dark:bg-rose-900/20 text-rose-600' }, 'bg-rose-500/5', `مشتريات الفترة: ${fmt(pay.summary.period_purchases_total)} ${CURRENCY}`) +
+    card('تقييم المخزون الحالي (بالتكلفة)', fmt(inv.valuation.cost_valuation || 0), CURRENCY, { i: 'warehouse', c: 'bg-teal-50 dark:bg-teal-900/20 text-teal-600' }, 'bg-teal-500/5', `بسعر البيع: ${fmt(inv.valuation.retail_valuation)} ${CURRENCY}`);
+
+  // 1) شلال قائمة الأرباح والخسائر التفصيلية
+  document.getElementById('pnl-waterfall').innerHTML = `
+    <div class="flex justify-between p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/60"><span>إجمالي المبيعات (قبل الخصم والضريبة) — (${n(pnl.sales_count)} فاتورة)</span><strong class="font-num">${money(pnl.gross_sales)}</strong></div>
+    <div class="flex justify-between p-2.5"><span>(-) الخصومات الممنوحة على الفواتير</span><strong class="font-num text-rose-600">-${money(pnl.discounts)}</strong></div>
+    <div class="flex justify-between p-2.5"><span>(-) مردودات ومرتجعات المبيعات (${n(pnl.returns_count)} مرتجع)</span><strong class="font-num text-rose-600">-${money(pnl.returns_total)}</strong></div>
+    <div class="flex justify-between p-2.5 rounded-xl bg-blue-50/80 dark:bg-blue-900/20 font-bold"><span>= صافي إيراد المبيعات (بدون الضريبة)</span><span class="font-num text-blue-700 dark:text-blue-300">${money(pnl.net_sales_ex_tax)}</span></div>
+    <div class="flex justify-between p-2.5"><span>(-) تكلفة البضاعة المباعة الفعلية (COGS)</span><strong class="font-num text-rose-600">-${money(pnl.cogs_goods)}</strong></div>
+    <div class="flex justify-between p-2.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-900/20 font-bold"><span>= مجمل ربح المبيعات التجارية</span><span class="font-num text-emerald-700 dark:text-emerald-300">${money(pnl.gross_profit_goods)}</span></div>
+    <div class="flex justify-between p-2.5"><span>(+) صافي ربح الصيانة المسلمة (إيراد ${money(pnl.repair_revenue)} - قطع غيار ${money(pnl.repair_parts_cost)})</span><strong class="font-num text-emerald-600">+${money(pnl.repair_profit)}</strong></div>
+    <div class="flex justify-between p-2.5"><span>(+) رسوم وفوائد عقود التقسيط المصدرة (${n(pnl.installments_created_count)} عقد)</span><strong class="font-num text-emerald-600">+${money(pnl.installment_admin_fees)}</strong></div>
+    <div class="flex justify-between p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 font-bold"><span>= إجمالي مجمل الربح التشغيلي</span><span class="font-num">${money(pnl.total_gross_profit)}</span></div>
+    <div class="flex justify-between p-2.5"><span>(-) المصروفات التشغيلية والإدارية خلال الفترة</span><strong class="font-num text-rose-600">-${money(pnl.operating_expenses_total)}</strong></div>
+    <div class="flex justify-between p-3.5 rounded-2xl ${pnl.net_profit >= 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'} font-bold text-sm">
+      <span>= صافي الربح / (الخسارة) النهائي للفترة</span>
+      <span class="font-num">${money(pnl.net_profit)}</span>
+    </div>
+  `;
+
+  // المصروفات حسب التصنيف
+  const expCats = pnl.expenses_by_category || [];
+  document.getElementById('expenses-by-cat-box').innerHTML = expCats.length
+    ? expCats.map((c) => `
+      <div class="flex justify-between items-center p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/60">
+        <span class="font-bold">${esc(c.category_name || 'مصروف عام')} <span class="text-gray-400">(${n(c.count)})</span></span>
+        <span class="font-num font-bold text-rose-600">${money(c.total)}</span>
+      </div>`).join('')
+    : '<div class="text-center text-gray-400 py-4">لا توجد مصروفات مسجلة في هذه الفترة</div>';
+
+  // جدول ربحية الفواتير
+  const invList = pnl.invoices_profit_list || [];
+  document.getElementById('invoices-profit-tbody').innerHTML = invList.length
+    ? invList.map((iv) => `
+      <tr>
+        <td class="p-3 font-num font-bold text-primary">${esc(iv.invoice_no)}</td>
+        <td class="p-3 font-num">${esc((iv.created_at || '').slice(0, 16))}</td>
+        <td class="p-3 font-bold">${esc(iv.customer_name || 'عميل نقدي')}</td>
+        <td class="p-3 font-num font-bold">${money(iv.total)}</td>
+        <td class="p-3 font-num text-orange-600">${iv.returned_total > 0 ? money(iv.returned_total) : '—'}</td>
+        <td class="p-3 font-num">${money(iv.net_revenue_ex_tax)}</td>
+        <td class="p-3 font-num text-amber-600">${money(iv.cogs_total)}</td>
+        <td class="p-3 font-num font-bold ${iv.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${money(iv.profit)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="8" class="p-6 text-center text-gray-400">لا توجد فواتير مبيعات في هذه الفترة</td></tr>';
+
+  // جدول ربحية الأصناف
+  const itemList = pnl.items_profit_list || [];
+  document.getElementById('items-profit-tbody').innerHTML = itemList.length
+    ? itemList.map((it) => `
+      <tr>
+        <td class="p-3 font-num">${esc(it.sku || '—')}</td>
+        <td class="p-3 font-bold">${esc(it.name)}</td>
+        <td class="p-3 font-num font-bold">${n(it.net_qty)}</td>
+        <td class="p-3 font-num">${money(it.net_revenue)}</td>
+        <td class="p-3 font-num text-amber-600">${money(it.cost_total)}</td>
+        <td class="p-3 font-num font-bold ${it.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${money(it.profit)}</td>
+        <td class="p-3 font-num font-bold">${it.margin_pct}%</td>
+      </tr>`).join('')
+    : '<tr><td colspan="7" class="p-6 text-center text-gray-400">لا توجد أصناف مباعة في هذه الفترة</td></tr>';
+
+  // 2) تبويب مديونيات العملاء والأقساط
+  document.getElementById('receivables-kpis').innerHTML =
+    card('مديونيات الحسابات الآجلة', fmt(rec.summary.total_customers_debt), CURRENCY, { i: 'people', c: 'bg-rose-50 text-rose-600' }, 'bg-rose-500/5', `عدد العملاء المدينين: ${n(rec.summary.indebted_customers_count)}`) +
+    card('المتبقي في عقود التقسيط', fmt(rec.summary.installments_remaining_total), CURRENCY, { i: 'calendar_month', c: 'bg-indigo-50 text-indigo-600' }, 'bg-indigo-500/5', `عدد العقود النشطة: ${n(rec.installments_list.length)}`) +
+    card('الأقساط المتأخرة المستحقة', fmt(rec.summary.overdue_installments_total), CURRENCY, { i: 'warning', c: 'bg-amber-50 text-amber-600' }, 'bg-amber-500/5', `عقود بها تأخير: ${n(rec.summary.overdue_installments_count)}`) +
+    card('تحصيلات الفترة (سندات + أقساط)', fmt((rec.summary.period_vouchers_total || 0) + (rec.summary.period_installments_collected || 0)), CURRENCY, { i: 'payments', c: 'bg-emerald-50 text-emerald-600' }, 'bg-emerald-500/5', `سندات: ${fmt(rec.summary.period_vouchers_total)} | أقساط: ${fmt(rec.summary.period_installments_collected)}`);
+
+  document.getElementById('cust-debt-tbody').innerHTML = rec.customers_debt_list.length
+    ? rec.customers_debt_list.map((c) => `
+      <tr>
+        <td class="p-3 font-bold">${esc(c.name)}</td>
+        <td class="p-3 font-num">${esc(c.phone || '—')}</td>
+        <td class="p-3">${esc(c.address || '—')}</td>
+        <td class="p-3 font-num">${n(c.invoices_count)}</td>
+        <td class="p-3 font-num">${money(c.total_purchases)}</td>
+        <td class="p-3 font-num text-emerald-600">${money(c.total_paid)}</td>
+        <td class="p-3 font-num font-bold text-rose-600">${money(c.balance)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="7" class="p-6 text-center text-gray-400">لا توجد مديونيات آجلة على العملاء حالياً</td></tr>';
+
+  document.getElementById('inst-debt-tbody').innerHTML = rec.installments_list.length
+    ? rec.installments_list.map((ins) => `
+      <tr>
+        <td class="p-3 font-num font-bold text-primary">${esc(ins.contract_no)}</td>
+        <td class="p-3 font-bold">${esc(ins.customer_name)}</td>
+        <td class="p-3 font-num">${esc(ins.customer_phone || '—')}</td>
+        <td class="p-3 font-num">${money(ins.total_amount)}</td>
+        <td class="p-3 font-num">${n(ins.paid_count)} / ${n(ins.total_count)}</td>
+        <td class="p-3 font-num font-bold ${ins.overdue_count > 0 ? 'text-rose-600' : 'text-emerald-600'}">
+          ${ins.overdue_count > 0 ? `${n(ins.overdue_count)} قسط (${money(ins.overdue_amount)})` : 'منتظم'}
+        </td>
+        <td class="p-3 font-num">${esc(ins.next_due_date || '—')}</td>
+        <td class="p-3 font-num font-bold text-indigo-600">${money(ins.remaining_amount)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="8" class="p-6 text-center text-gray-400">لا توجد عقود تقسيط نشطة حالياً</td></tr>';
+
+  document.getElementById('vouchers-rep-tbody').innerHTML = rec.vouchers_list.length
+    ? rec.vouchers_list.map((v) => `
+      <tr>
+        <td class="p-3 font-num font-bold">#${v.id}</td>
+        <td class="p-3 font-num">${esc((v.created_at || '').slice(0, 16))}</td>
+        <td class="p-3 font-bold">${esc(v.customer_name || '—')}</td>
+        <td class="p-3">${esc(AR[v.method] || v.method)}</td>
+        <td class="p-3 font-num font-bold text-emerald-600">${money(v.amount)}</td>
+        <td class="p-3">${esc(v.note || '—')}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="6" class="p-6 text-center text-gray-400">لا توجد سندات قبض في هذه الفترة</td></tr>';
+
+  // 3) تبويب الموردين والمشتريات
+  document.getElementById('payables-kpis').innerHTML =
+    card('إجمالي مستحقات الموردين', fmt(pay.summary.total_suppliers_debt), CURRENCY, { i: 'store', c: 'bg-rose-50 text-rose-600' }, 'bg-rose-500/5', `عدد الموردين الدائنين: ${n(pay.summary.indebted_suppliers_count)}`) +
+    card('إجمالي فواتير المشتريات بالفترة', fmt(pay.summary.period_purchases_total), CURRENCY, { i: 'shopping_cart', c: 'bg-blue-50 text-blue-600' }, 'bg-blue-500/5', `عدد الفواتير: ${n(pay.summary.period_purchases_count)}`) +
+    card('مرتجعات المشتريات بالفترة', fmt(pay.summary.period_purchases_returns), CURRENCY, { i: 'keyboard_return', c: 'bg-amber-50 text-amber-600' }, 'bg-amber-500/5', '') +
+    card('المسدد للموردين خلال الفترة', fmt(pay.summary.period_supplier_payments_total), CURRENCY, { i: 'outbound', c: 'bg-emerald-50 text-emerald-600' }, 'bg-emerald-500/5', `عدد سندات الصرف: ${n(pay.supplier_payments_list.length)}`);
+
+  document.getElementById('sup-debt-tbody').innerHTML = pay.suppliers_debt_list.length
+    ? pay.suppliers_debt_list.map((s) => `
+      <tr>
+        <td class="p-3 font-num">${esc(s.code || '')}</td>
+        <td class="p-3 font-bold">${esc(s.name)}</td>
+        <td class="p-3">${esc(s.company || '—')}</td>
+        <td class="p-3 font-num">${esc(s.phone || '—')}</td>
+        <td class="p-3 font-num">${n(s.bills_count || 0)}</td>
+        <td class="p-3 font-num font-bold text-rose-600">${money(s.balance)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="6" class="p-6 text-center text-gray-400">لا توجد أرصدة مستحقة للموردين</td></tr>';
+
+  document.getElementById('purchases-rep-tbody').innerHTML = pay.purchases_list.length
+    ? pay.purchases_list.map((p) => `
+      <tr>
+        <td class="p-2.5 font-num font-bold">${esc(p.bill_no)}</td>
+        <td class="p-2.5 font-num">${esc(p.bill_date)}</td>
+        <td class="p-2.5 font-bold">${esc(p.supplier_name || '—')}</td>
+        <td class="p-2.5 font-num">${money(p.total)}</td>
+        <td class="p-2.5 font-num font-bold text-rose-600">${money(p.remaining_amount)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="p-5 text-center text-gray-400">لا توجد فواتير مشتريات في الفترة</td></tr>';
+
+  document.getElementById('sup-payments-rep-tbody').innerHTML = pay.supplier_payments_list.length
+    ? pay.supplier_payments_list.map((sp) => `
+      <tr>
+        <td class="p-2.5 font-num font-bold">${esc(sp.voucher_no)}</td>
+        <td class="p-2.5 font-num">${esc(sp.payment_date)}</td>
+        <td class="p-2.5 font-bold">${esc(sp.supplier_name || '—')}</td>
+        <td class="p-2.5 font-num font-bold text-emerald-600">${money(sp.net_paid || sp.amount)}</td>
+        <td class="p-2.5 font-num text-amber-600">${money(sp.wht_amount || 0)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="p-5 text-center text-gray-400">لا توجد سندات صرف للموردين في الفترة</td></tr>';
+
+  // 4) تبويب السيولة والخزائن والورديات
+  const pIn = cf.payments_in || {};
+  const pOut = cf.payments_out || {};
+  document.getElementById('cashflow-summary-box').innerHTML = `
+    <div class="bg-card-light dark:bg-card-dark rounded-2xl p-5 border border-gray-100 dark:border-gray-800 space-y-2 text-xs">
+      <h4 class="font-bold text-sm text-emerald-600 mb-2">التدفقات النقدية الداخلة (المقبوضات): ${money(cf.inflow_total)}</h4>
+      <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800"><span>مبيعات نقدية (كاش):</span><strong class="font-num">${money(pIn.cash_sales)}</strong></div>
+      <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800"><span>مبيعات محافظ إلكترونية:</span><strong class="font-num">${money(pIn.wallet_sales)}</strong></div>
+      <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800"><span>سندات قبض عملاء (نقدي + محفظة):</span><strong class="font-num">${money((pIn.customer_vouchers_cash || 0) + (pIn.customer_vouchers_wallet || 0))}</strong></div>
+      <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800"><span>تحصيل أقساط (نقدي + محفظة):</span><strong class="font-num">${money((pIn.installments_cash || 0) + (pIn.installments_wallet || 0))}</strong></div>
+      <div class="flex justify-between py-1"><span>إيرادات صيانة مسلمة:</span><strong class="font-num">${money(pIn.repairs_revenue)}</strong></div>
+    </div>
+    <div class="bg-card-light dark:bg-card-dark rounded-2xl p-5 border border-gray-100 dark:border-gray-800 space-y-2 text-xs">
+      <h4 class="font-bold text-sm text-rose-600 mb-2">التدفقات النقدية الخارجة (المدفوعات): ${money(cf.outflow_total)}</h4>
+      <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800"><span>مردودات المبيعات:</span><strong class="font-num">${money(pOut.returns_total)}</strong></div>
+      <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800"><span>سندات صرف للموردين:</span><strong class="font-num">${money(pOut.supplier_payments)}</strong></div>
+      <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800"><span>المصروفات التشغيلية والإدارية:</span><strong class="font-num">${money(pOut.operating_expenses)}</strong></div>
+      <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800"><span>شراء أجهزة مستعملة:</span><strong class="font-num">${money(pOut.used_device_purchases)}</strong></div>
+      <div class="flex justify-between pt-2 font-bold text-sm ${cf.net_period_cashflow >= 0 ? 'text-emerald-600' : 'text-rose-600'}">
+        <span>= صافي التدفق النقدي للفترة:</span><span class="font-num">${money(cf.net_period_cashflow)}</span>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('treasuries-rep-box').innerHTML = (cf.treasuries || []).map((t) => `
+    <div class="bg-card-light dark:bg-card-dark p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+      <div class="text-xs text-gray-500 font-bold">${esc(t.name)} (${esc(t.account_code)})</div>
+      <div class="text-lg font-bold font-num text-emerald-600 mt-1">${money(t.balance)}</div>
+    </div>
+  `).join('');
+
+  // 5) تبويب تقييم المخزون
+  const v = inv.valuation || {};
+  document.getElementById('inventory-val-kpis').innerHTML =
+    card('قيمة المخزون بسعر التكلفة', fmt(v.cost_valuation), CURRENCY, { i: 'inventory', c: 'bg-blue-50 text-blue-600' }, 'bg-blue-500/5', `إجمالي القطع المتاحة: ${n(v.total_units)}`) +
+    card('قيمة المخزون بسعر البيع', fmt(v.retail_valuation), CURRENCY, { i: 'sell', c: 'bg-emerald-50 text-emerald-600' }, 'bg-emerald-500/5', `عدد الأصناف النشطة: ${n(v.active_products_count)}`) +
+    card('الربح الكامن المتوقع بالمخزون', fmt(v.expected_gross_profit), CURRENCY, { i: 'Paid', c: 'bg-teal-50 text-teal-600' }, 'bg-teal-500/5', '') +
+    card('أصناف منخفضة / نافدة', `${n(v.low_stock_count)} / ${n(v.out_of_stock_count)}`, 'صنف', { i: 'notification_important', c: 'bg-rose-50 text-rose-600' }, 'bg-rose-500/5', 'تحتاج لإعادة طلب');
+}
+
+/* ==================== دوال الاستخراج والتصدير (Excel / CSV / PDF / Print / WhatsApp) ==================== */
+function _triggerBase64Download(b64, mime, fileName) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+}
+
+async function exportReportExcel() {
+  const range = getEffectiveRange();
+  toast('جاري استخراج ملف الإكسل متعدد الأوراق (.xlsx)...');
+  const res = await guard(() => api('report_export_excel', {
+    date_from: range.from,
+    date_to: range.to,
+  }));
+  if (res && res.ok) {
+    if (res.xlsx_base64) {
+      _triggerBase64Download(res.xlsx_base64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', res.file_name);
+    }
+    toast(`تم تصدير وحفظ ملف الإكسل (${res.file_name})`);
+  }
+}
+
+async function exportReportCsv() {
+  const range = getEffectiveRange();
+  const res = await guard(() => api('report_export_excel', {
+    date_from: range.from,
+    date_to: range.to,
+  }));
+  if (res && res.csv_content) {
+    const blob = new Blob([res.csv_content], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = res.file_name.replace(/\.xlsx$/i, '.csv');
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+    toast('تم تحميل ملف CSV بنجاح');
+  }
+}
+
+async function _renderReportSummaryToJpeg() {
+  const comp = LAST_COMP_DATA || await guard(() => api('report_comprehensive', {
+    date_from: getEffectiveRange().from,
+    date_to: getEffectiveRange().to,
+  }));
+  const pnl = (comp && comp.pnl) || {};
+  const rec = (comp && comp.receivables && comp.receivables.summary) || {};
+  const pay = (comp && comp.payables && comp.payables.summary) || {};
+  const inv = (comp && comp.inventory && comp.inventory.valuation) || {};
+  const storeName = (typeof SETTINGS !== 'undefined' && SETTINGS && SETTINGS.store_name) || 'تك زون للإلكترونيات';
+
+  const W = 1240, H = 1754;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#0e6ba8';
+  ctx.fillRect(0, 0, W, 130);
+  ctx.direction = 'rtl';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = "bold 34px 'IBM Plex Sans Arabic', 'Cairo', sans-serif";
+  ctx.fillText(`${storeName} — التقرير المالي والتشغيلي الشامل`, W - 60, 62);
+  ctx.font = "22px 'IBM Plex Sans Arabic', 'Cairo', sans-serif";
+  ctx.fillText(`الفترة من: ${comp.period.date_from} إلى: ${comp.period.date_to}`, W - 60, 105);
+
+  let y = 185;
+  const drawSectionHeader = (title, bg = '#0f172a') => {
+    ctx.fillStyle = bg;
+    ctx.fillRect(60, y, W - 120, 48);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = "bold 22px 'IBM Plex Sans Arabic', 'Cairo', sans-serif";
+    ctx.textAlign = 'right';
+    ctx.fillText(title, W - 80, y + 32);
+    y += 56;
+  };
+  const drawRow = (label, val, highlight = false) => {
+    ctx.fillStyle = highlight ? '#f0fdf4' : '#f8fafc';
+    ctx.fillRect(60, y, W - 120, 44);
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.strokeRect(60, y, W - 120, 44);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = (highlight ? 'bold ' : '') + "20px 'IBM Plex Sans Arabic', 'Cairo', sans-serif";
+    ctx.textAlign = 'right';
+    ctx.fillText(label, W - 80, y + 29);
+    ctx.textAlign = 'left';
+    ctx.font = "bold 20px monospace";
+    ctx.fillText(`${fmt(val)} ${CURRENCY}`, 80, y + 29);
+    y += 46;
+  };
+
+  drawSectionHeader('1. ملخص قائمة الأرباح والخسائر (Profit & Loss)', '#0e6ba8');
+  drawRow(`إجمالي المبيعات (${pnl.sales_count || 0} فاتورة)`, pnl.gross_sales || 0);
+  drawRow('الخصومات الممنوحة ومرتجعات المبيعات', (pnl.discounts || 0) + (pnl.returns_total || 0));
+  drawRow('صافي إيراد المبيعات (بدون الضريبة)', pnl.net_sales_ex_tax || 0, true);
+  drawRow('تكلفة البضاعة المباعة الفعلية (COGS)', pnl.cogs_goods || 0);
+  drawRow('مجمل ربح البضائع', pnl.gross_profit_goods || 0, true);
+  drawRow('صافي ربح الصيانة + رسوم عقود التقسيط', (pnl.repair_profit || 0) + (pnl.installment_admin_fees || 0));
+  drawRow('المصروفات التشغيلية والإدارية', pnl.operating_expenses_total || 0);
+  drawRow('صافي الربح النهائي للفترة', pnl.net_profit || 0, true);
+
+  y += 20;
+  drawSectionHeader('2. موقف المديونيات والمستحقات (Receivables & Payables)', '#1e293b');
+  drawRow(`إجمالي مديونيات العملاء الآجلة (${rec.indebted_customers_count || 0} عميل)`, rec.total_customers_debt || 0);
+  drawRow('إجمالي المتبقي في عقود التقسيط النشطة', rec.installments_remaining_total || 0);
+  drawRow('إجمالي الأقساط المتأخرة المستحقة فوراً', rec.overdue_installments_total || 0);
+  drawRow('إجمالي التحصيلات وسندات القبض خلال الفترة', (rec.period_vouchers_total || 0) + (rec.period_installments_collected || 0), true);
+  drawRow(`إجمالي مستحقات الموردين الحالية (${pay.indebted_suppliers_count || 0} مورد)`, pay.total_suppliers_debt || 0);
+  drawRow('إجمالي فواتير المشتريات خلال الفترة', pay.period_purchases_total || 0);
+
+  y += 20;
+  drawSectionHeader('3. تقييم المخزون السلعي الحالي (Inventory Valuation)', '#0f766e');
+  drawRow(`قيمة المخزون الحالي بسعر التكلفة (${inv.total_units || 0} قطعة)`, inv.cost_valuation || 0);
+  drawRow('قيمة المخزون الحالي بسعر البيع', inv.retail_valuation || 0);
+  drawRow('الربح المتوقع من المخزون المتاح', inv.expected_gross_profit || 0, true);
+
+  return { dataUrl: canvas.toDataURL('image/jpeg', 0.92), width: W, height: H };
+}
+
+async function exportReportPdf() {
+  const range = getEffectiveRange();
+  toast('جاري تجهيز وتصدير ملف التقرير المالي بصيغة PDF (A4)...');
+  const rendered = await _renderReportSummaryToJpeg();
+  const res = await guard(() => api('report_export_pdf', {
+    title: 'التقرير المالي والتشغيلي الشامل',
+    date_from: range.from,
+    date_to: range.to,
+    pdf_image: rendered.dataUrl,
+    img_w: rendered.width,
+    img_h: rendered.height,
+  }));
+  if (res && res.ok) {
+    if (res.pdf_base64) {
+      _triggerBase64Download(res.pdf_base64, 'application/pdf', res.file_name);
+    }
+    toast(`تم تصدير وحفظ ملف الـ PDF (${res.file_name})`);
+  }
+}
+
+async function sendReportWhatsApp() {
+  if (!whatsappEnabled()) {
+    toast('إرسال WhatsApp معطّل من قبل المدير في الإعدادات', 'warn');
+    return;
+  }
+  const phone = prompt('أدخل رقم موبايل المستلم لإرسال التقرير المالي الكامل (PDF) عبر واتساب (مثال: 01012345678):', '');
+  if (!phone || !phone.trim()) return;
+  const range = getEffectiveRange();
+  toast('جاري توليد ملف التقرير المالي (PDF) وإرفاقه في محادثة واتساب...');
+  const rendered = await _renderReportSummaryToJpeg();
+  const res = await guard(() => api('whatsapp_send_report', {
+    phone: phone.trim(),
+    title: 'التقرير المالي والتشغيلي الشامل',
+    date_from: range.from,
+    date_to: range.to,
+    pdf_image: rendered.dataUrl,
+    img_w: rendered.width,
+    img_h: rendered.height,
+  }));
+  if (res && res.ok) {
+    toast(`تم تجهيز التقرير (${res.pdf_name}) وفتح واتساب للإرسال`);
+  }
+}
+
+function printReportA4() {
+  window.print();
 }
 
 document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => {
   PERIOD = b.dataset.p;
-  document.querySelectorAll('#tabs button').forEach((x) => x.className = 'px-4 py-2 rounded-lg bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700 font-medium');
-  b.className = 'px-4 py-2 rounded-lg bg-primary text-white font-medium';
+  document.querySelectorAll('#tabs button').forEach((x) => x.className = 'px-3.5 py-2 rounded-xl bg-gray-100 dark:bg-slate-800 font-bold');
+  b.className = 'px-3.5 py-2 rounded-xl bg-primary text-white font-bold';
   load();
 }));
 document.getElementById('f-date-from').addEventListener('change', () => { PERIOD = 'day'; load(); });
@@ -240,7 +921,7 @@ document.getElementById('btn-rep-today').addEventListener('click', () => {
   PERIOD = 'day';
   load();
 });
-document.getElementById('f-month').addEventListener('change', load);
+document.getElementById('f-month').addEventListener('change', () => { PERIOD = 'month'; load(); });
 
 (async () => {
   if (!(await pageInit('reports', { perm: ['reports_sales_view', 'reports_profit_view', 'reports_shifts_view', 'reports_movements_view'] }))) return;
@@ -249,9 +930,9 @@ document.getElementById('f-month').addEventListener('change', load);
   document.getElementById('f-date-from').value = t;
   document.getElementById('f-date-to').value = t;
   let opts = '';
-  for (let i = 0; i < 6; i++) {
-    const t = new Date(d.getFullYear(), d.getMonth() - i, 1);
-    const v = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
+  for (let i = 0; i < 12; i++) {
+    const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    const v = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
     opts += `<option value="${v}" ${i === 0 ? 'selected' : ''}>${v}</option>`;
   }
   document.getElementById('f-month').innerHTML = opts;

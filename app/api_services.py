@@ -10,6 +10,7 @@ import time
 from decimal import Decimal, ROUND_HALF_UP
 
 import db
+import erp_hooks
 from api_common import (
     ApiError,
     REPAIR_FLOW,
@@ -99,6 +100,7 @@ class ServicesMixin:
                  model, serial, condition, notes, buy, storage, _money(resale_price) if resale_price not in (None, "") else None,
                  product_id),
             )
+            erp_hooks.on_used_purchased(self, conn, cur_used.lastrowid, buy, ref, user=u)
             return {"id": cur_used.lastrowid, "ref": ref, "product_id": product_id, "customer_id": customer_id}
 
     def used_update(self, id, seller_name, model, serial=None, seller_phone=None, seller_id_no=None,
@@ -254,6 +256,8 @@ class ServicesMixin:
             if status not in REPAIR_FLOW.get(r["status"], []):
                 raise ApiError(f"انتقال غير مسموح: {r['status']} ← {status}")
             conn.execute("UPDATE repairs SET status=?, updated_at=? WHERE id=?", (status, db.now(), r["id"]))
+            if status == "delivered":
+                erp_hooks.on_repair_delivered(self, conn, r["id"], user=self._user())
             return {"status": status}
 
     def repair_add_part(self, repair_id, product_id, qty=1):
@@ -281,9 +285,9 @@ class ServicesMixin:
                 (db.now(), self._user()["id"], pid, -q, after, "repair_part", r["ref"]),
             )
             conn.execute(
-                """INSERT INTO repair_parts(repair_id, product_id, name, qty, unit_price, line_total)
-                   VALUES(?,?,?,?,?,?)""",
-                (rid, pid, p["name"], q, unit, unit * q),
+                """INSERT INTO repair_parts(repair_id, product_id, name, qty, unit_price, cost_unit, line_total)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (rid, pid, p["name"], q, unit, int(p["cost"] or unit or 0), unit * q),
             )
             conn.execute("UPDATE repairs SET cost=cost+?, updated_at=? WHERE id=?", (unit * q, db.now(), rid))
             return {"cost": conn.execute("SELECT cost FROM repairs WHERE id=?", (rid,)).fetchone()["cost"]}

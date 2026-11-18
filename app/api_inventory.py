@@ -10,6 +10,7 @@ import time
 from decimal import Decimal, ROUND_HALF_UP
 
 import db
+import erp_hooks
 from api_common import (
     ApiError,
     _FALLBACK_JPEG,
@@ -216,7 +217,7 @@ class InventoryMixin:
             return True
 
     def products_search(self, q=None, limit=60, category_id=None):
-        self._perm_any("pos_sell", "inventory_view", "quotes_view", "quotes_create_edit", "repair_edit")
+        self._perm_any("pos_sell", "inventory_view", "quotes_view", "quotes_create_edit", "repair_edit", "purchases_view", "purchases_create_post")
         q = (q or "").strip()
         limit = _int(limit, 60)
         cat = _int(category_id) if category_id not in (None, "") else None
@@ -246,7 +247,7 @@ class InventoryMixin:
         if delta == 0:
             raise ApiError("تغيير الكمية صفري")
         with db.connect() as conn:
-            p = conn.execute("SELECT qty FROM products WHERE id=? AND active=1", (pid,)).fetchone()
+            p = conn.execute("SELECT qty, cost FROM products WHERE id=? AND active=1", (pid,)).fetchone()
             if not p:
                 raise ApiError("المنتج غير موجود")
             newq = p["qty"] + delta
@@ -257,6 +258,7 @@ class InventoryMixin:
                 "INSERT INTO stock_movements(created_at, user_id, product_id, qty_change, qty_after, reason, ref) VALUES(?,?,?,?,?,?,?)",
                 (db.now(), u["id"], pid, delta, newq, reason or "تعديل يدوي", None),
             )
+            erp_hooks.on_stock_adjusted(self, conn, pid, delta, int(p["cost"] or 0), reason or "تعديل يدوي", user=u)
             return {"qty": newq}
 
     def serials(self, product_id):

@@ -10,6 +10,7 @@ import time
 from decimal import Decimal, ROUND_HALF_UP
 
 import db
+import erp_hooks
 from api_common import (
     ApiError,
     _FALLBACK_JPEG,
@@ -325,6 +326,7 @@ class CustomersMixin:
                 user_name=u["name"],
                 created_at=now_ts,
             )
+            erp_hooks.on_customer_payment(self, conn, cur.lastrowid, cid, amt, method, ref, shift_id=shift_id, user=u)
             return {"id": cur.lastrowid, "ref": ref, "remaining_debt": summary["debt"] - amt}
 
     def customer_payment_delete(self, id):
@@ -348,5 +350,6 @@ class CustomersMixin:
                 user_id=u["id"],
                 user_name=u["name"],
             )
+            erp_hooks.on_customer_payment_deleted(self, conn, v, user=u)
             return True
 

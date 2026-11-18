@@ -86,6 +86,9 @@ DEFAULT_POS_TEMPLATE = {
     "voucher_prefix": "RCV-",
     "used_prefix": "TRX-",
     "installment_prefix": "INS-",
+    "purchase_prefix": "PUR-",
+    "po_prefix": "PO-",
+    "supplier_voucher_prefix": "SPV-",
 }
 
 DEFAULT_MODULES = (
@@ -94,6 +97,8 @@ DEFAULT_MODULES = (
     ("customers", "العملاء والمديونيات", "groups", "linear-gradient(135deg,#7c3aed,#a855f7)", "customers.html", ["customers_view", "customers_debt_view", "customers_edit", "customers_payment"], 30, 0),
     ("installments", "نظام الأقساط", "event_repeat", "linear-gradient(135deg,#0ea5e9,#0369a1)", "installments.html", ["installments_view", "installments_collect", "installments_create"], 40, 0),
     ("inventory", "المخزون والمنتجات", "inventory_2", "linear-gradient(135deg,#059669,#10b981)", "inventory.html", ["inventory_view", "inventory_edit", "inventory_adjust"], 50, 0),
+    ("purchases", "المشتريات والموردون", "local_shipping", "linear-gradient(135deg,#0891b2,#06b6d4)", "purchases.html", ["suppliers_view", "suppliers_manage", "purchases_view", "purchases_create_post", "purchases_return", "purchases_payment"], 55, 0),
+    ("accounting", "المحاسبة والمالية", "account_balance", "linear-gradient(135deg,#be185d,#e11d48)", "accounting.html", ["expenses_view", "expenses_manage", "treasury_view", "treasury_transfer", "accounting_coa_view", "accounting_journal_manual", "accounting_statements_view"], 58, 0),
     ("history", "سجل المبيعات والمرتجعات", "receipt_long", "linear-gradient(135deg,#ea580c,#f97316)", "history.html", ["history_view_own", "history_view_all", "sales_return_own", "sales_return", "sales_post_discount"], 60, 0),
     ("repair", "مركز الصيانة", "build", "linear-gradient(135deg,#d97706,#f59e0b)", "repair.html", ["repair_view", "repair_create", "repair_edit"], 70, 0),
     ("buy_used", "شراء أجهزة مستعملة", "phonelink_setup", "linear-gradient(135deg,#0d9488,#14b8a6)", "buy_used.html", ["used_view", "used_manage"], 80, 0),
@@ -221,6 +226,7 @@ CREATE TABLE IF NOT EXISTS sale_items (
   name TEXT NOT NULL,
   qty INTEGER NOT NULL DEFAULT 1,
   unit_price INTEGER NOT NULL,
+  cost_unit INTEGER NOT NULL DEFAULT 0,
   line_total INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS payments (
@@ -304,6 +310,7 @@ CREATE TABLE IF NOT EXISTS repair_parts (
   name TEXT NOT NULL,
   qty INTEGER NOT NULL DEFAULT 1,
   unit_price INTEGER NOT NULL DEFAULT 0,
+  cost_unit INTEGER NOT NULL DEFAULT 0,
   line_total INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS stock_movements (
@@ -514,7 +521,330 @@ CREATE TABLE IF NOT EXISTS perm_audit_log (
   action TEXT NOT NULL,
   diff_json TEXT NOT NULL DEFAULT '{}'
 );
+
+CREATE TABLE IF NOT EXISTS product_cost_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id INTEGER,
+  ref TEXT,
+  old_qty INTEGER NOT NULL DEFAULT 0,
+  old_cost INTEGER NOT NULL DEFAULT 0,
+  added_qty INTEGER NOT NULL DEFAULT 0,
+  unit_cost INTEGER NOT NULL DEFAULT 0,
+  landed_unit_cost INTEGER NOT NULL DEFAULT 0,
+  new_qty INTEGER NOT NULL DEFAULT 0,
+  new_wac INTEGER NOT NULL DEFAULT 0,
+  user_id INTEGER REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS suppliers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  company_name TEXT,
+  phone TEXT,
+  email TEXT,
+  address TEXT,
+  tax_reg_no TEXT,
+  tax_card_no TEXT,
+  payment_terms_days INTEGER NOT NULL DEFAULT 0,
+  credit_limit INTEGER NOT NULL DEFAULT 0,
+  opening_balance INTEGER NOT NULL DEFAULT 0,
+  total_purchases INTEGER NOT NULL DEFAULT 0,
+  paid_total INTEGER NOT NULL DEFAULT 0,
+  balance INTEGER NOT NULL DEFAULT 0,
+  notes TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  po_no TEXT NOT NULL UNIQUE,
+  supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+  order_date TEXT NOT NULL,
+  expected_date TEXT,
+  subtotal INTEGER NOT NULL DEFAULT 0,
+  discount INTEGER NOT NULL DEFAULT 0,
+  tax INTEGER NOT NULL DEFAULT 0,
+  shipping_cost INTEGER NOT NULL DEFAULT 0,
+  total INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','ordered','partial_received','received','cancelled')),
+  converted_purchase_id INTEGER,
+  notes TEXT,
+  user_id INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  po_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  sku TEXT,
+  name TEXT NOT NULL,
+  qty_ordered INTEGER NOT NULL DEFAULT 1,
+  qty_received INTEGER NOT NULL DEFAULT 0,
+  unit_cost INTEGER NOT NULL DEFAULT 0,
+  tax_rate INTEGER NOT NULL DEFAULT 0,
+  line_total INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS purchases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  purchase_no TEXT NOT NULL UNIQUE,
+  supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+  supplier_invoice_no TEXT,
+  po_id INTEGER REFERENCES purchase_orders(id) ON DELETE SET NULL,
+  invoice_date TEXT NOT NULL,
+  due_date TEXT,
+  subtotal INTEGER NOT NULL DEFAULT 0,
+  discount INTEGER NOT NULL DEFAULT 0,
+  shipping_cost INTEGER NOT NULL DEFAULT 0,
+  tax_rate INTEGER NOT NULL DEFAULT 0,
+  tax INTEGER NOT NULL DEFAULT 0,
+  wht_rate INTEGER NOT NULL DEFAULT 0,
+  wht_amount INTEGER NOT NULL DEFAULT 0,
+  total INTEGER NOT NULL DEFAULT 0,
+  paid_amount INTEGER NOT NULL DEFAULT 0,
+  payment_method TEXT NOT NULL DEFAULT 'cash',
+  treasury_id INTEGER,
+  shift_id INTEGER REFERENCES shifts(id),
+  ref_no TEXT,
+  status TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('draft','posted','partial_return','returned','cancelled')),
+  notes TEXT,
+  user_id INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  posted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS purchase_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  purchase_id INTEGER NOT NULL REFERENCES purchases(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  sku TEXT,
+  name TEXT NOT NULL,
+  qty INTEGER NOT NULL DEFAULT 1,
+  returned_qty INTEGER NOT NULL DEFAULT 0,
+  unit_cost INTEGER NOT NULL DEFAULT 0,
+  landed_unit_cost INTEGER NOT NULL DEFAULT 0,
+  new_sell_price INTEGER,
+  tax_rate INTEGER NOT NULL DEFAULT 0,
+  line_total INTEGER NOT NULL DEFAULT 0,
+  expiry_date TEXT,
+  serials_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS purchase_returns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  return_no TEXT NOT NULL UNIQUE,
+  purchase_id INTEGER NOT NULL REFERENCES purchases(id),
+  supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+  created_at TEXT NOT NULL,
+  subtotal INTEGER NOT NULL DEFAULT 0,
+  tax_amount INTEGER NOT NULL DEFAULT 0,
+  wht_amount INTEGER NOT NULL DEFAULT 0,
+  total INTEGER NOT NULL DEFAULT 0,
+  refund_method TEXT NOT NULL DEFAULT 'credit' CHECK (refund_method IN ('credit','cash','wallet','bank')),
+  treasury_id INTEGER,
+  shift_id INTEGER REFERENCES shifts(id),
+  reason TEXT,
+  user_id INTEGER REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS purchase_return_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  return_id INTEGER NOT NULL REFERENCES purchase_returns(id) ON DELETE CASCADE,
+  purchase_item_id INTEGER NOT NULL REFERENCES purchase_items(id),
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  qty INTEGER NOT NULL DEFAULT 1,
+  unit_cost INTEGER NOT NULL DEFAULT 0,
+  amount INTEGER NOT NULL DEFAULT 0,
+  serials_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS supplier_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ref TEXT NOT NULL UNIQUE,
+  supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+  purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  shift_id INTEGER REFERENCES shifts(id),
+  treasury_id INTEGER,
+  created_at TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  method TEXT NOT NULL DEFAULT 'cash' CHECK (method IN ('cash','wallet','instapay','bank')),
+  from_drawer INTEGER NOT NULL DEFAULT 0,
+  ref_no TEXT,
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS supplier_ledger (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('opening','purchase_bill','payment','purchase_return','adjustment')),
+  ref TEXT,
+  purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL,
+  payment_id INTEGER REFERENCES supplier_payments(id) ON DELETE SET NULL,
+  debit INTEGER NOT NULL DEFAULT 0,
+  credit INTEGER NOT NULL DEFAULT 0,
+  balance_after INTEGER NOT NULL DEFAULT 0,
+  method TEXT,
+  ref_no TEXT,
+  notes TEXT,
+  user_id INTEGER REFERENCES users(id),
+  user_name TEXT
+);
+
+CREATE TABLE IF NOT EXISTS accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  parent_id INTEGER REFERENCES accounts(id) ON DELETE RESTRICT,
+  level INTEGER NOT NULL DEFAULT 1,
+  type TEXT NOT NULL CHECK (type IN ('asset','liability','equity','revenue','expense')),
+  normal_balance TEXT NOT NULL CHECK (normal_balance IN ('debit','credit')),
+  is_group INTEGER NOT NULL DEFAULT 0 CHECK (is_group IN (0,1)),
+  is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0,1)),
+  system_role TEXT UNIQUE,
+  debit_total INTEGER NOT NULL DEFAULT 0,
+  credit_total INTEGER NOT NULL DEFAULT 0,
+  balance INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fiscal_years (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+  closed_at TEXT,
+  closing_entry_id INTEGER,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fiscal_periods (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  fiscal_year_id INTEGER NOT NULL REFERENCES fiscal_years(id) ON DELETE CASCADE,
+  period_key TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+  closed_at TEXT,
+  closed_by INTEGER REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS treasury_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'cash' CHECK (kind IN ('cash','pos_drawer','wallet','bank')),
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  is_default INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  notes TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS treasury_transfers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  transfer_no TEXT NOT NULL UNIQUE,
+  from_treasury_id INTEGER NOT NULL REFERENCES treasury_accounts(id),
+  to_treasury_id INTEGER NOT NULL REFERENCES treasury_accounts(id),
+  amount INTEGER NOT NULL,
+  transfer_date TEXT NOT NULL,
+  ref_no TEXT,
+  notes TEXT,
+  journal_entry_id INTEGER,
+  user_id INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS expense_categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS cost_centers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  expense_no TEXT NOT NULL UNIQUE,
+  category_id INTEGER NOT NULL REFERENCES expense_categories(id),
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  treasury_id INTEGER NOT NULL REFERENCES treasury_accounts(id),
+  cost_center_id INTEGER REFERENCES cost_centers(id),
+  shift_id INTEGER REFERENCES shifts(id),
+  from_drawer INTEGER NOT NULL DEFAULT 0,
+  amount INTEGER NOT NULL,
+  expense_date TEXT NOT NULL,
+  method TEXT NOT NULL DEFAULT 'cash',
+  ref_no TEXT,
+  payee TEXT,
+  notes TEXT,
+  journal_entry_id INTEGER,
+  user_id INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS journal_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entry_no TEXT NOT NULL UNIQUE,
+  entry_date TEXT NOT NULL,
+  period_id INTEGER REFERENCES fiscal_periods(id),
+  kind TEXT NOT NULL DEFAULT 'auto' CHECK (kind IN ('auto','manual','opening','closing','reversal')),
+  source_module TEXT,
+  source_table TEXT,
+  source_id INTEGER,
+  ref TEXT,
+  memo TEXT NOT NULL,
+  total_debit INTEGER NOT NULL DEFAULT 0,
+  total_credit INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('draft','posted','reversed')),
+  reversed_by_entry_id INTEGER REFERENCES journal_entries(id),
+  reversal_of_entry_id INTEGER REFERENCES journal_entries(id),
+  user_id INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  posted_at TEXT,
+  CHECK (status != 'posted' OR (total_debit = total_credit AND total_debit > 0))
+);
+
+CREATE TABLE IF NOT EXISTS journal_lines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+  line_no INTEGER NOT NULL DEFAULT 1,
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  debit INTEGER NOT NULL DEFAULT 0 CHECK (debit >= 0),
+  credit INTEGER NOT NULL DEFAULT 0 CHECK (credit >= 0),
+  cost_center_id INTEGER REFERENCES cost_centers(id),
+  party_type TEXT CHECK (party_type IN ('customer','supplier','user') OR party_type IS NULL),
+  party_id INTEGER,
+  memo TEXT,
+  CHECK ((debit > 0 AND credit = 0) OR (credit > 0 AND debit = 0))
+);
+
+CREATE TABLE IF NOT EXISTS accounting_posting_rules (
+  rule_key TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  updated_at TEXT NOT NULL
+);
 """
+
 
 
 def _app_root() -> pathlib.Path:
@@ -641,6 +971,21 @@ _PERFORMANCE_INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_inst_pay_shift ON installment_payments(shift_id)",
     "CREATE INDEX IF NOT EXISTS idx_user_perms_user ON user_permissions(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_perm_audit_ts ON perm_audit_log(id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name)",
+    "CREATE INDEX IF NOT EXISTS idx_suppliers_balance ON suppliers(balance)",
+    "CREATE INDEX IF NOT EXISTS idx_sup_ledger_sup ON supplier_ledger(supplier_id, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_purchases_sup ON purchases(supplier_id, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_purchases_date ON purchases(invoice_date, status)",
+    "CREATE INDEX IF NOT EXISTS idx_purchase_items_pur ON purchase_items(purchase_id)",
+    "CREATE INDEX IF NOT EXISTS idx_purchase_items_prod ON purchase_items(product_id)",
+    "CREATE INDEX IF NOT EXISTS idx_cost_hist_prod ON product_cost_history(product_id, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_accounts_parent ON accounts(parent_id, code)",
+    "CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(type, is_group)",
+    "CREATE INDEX IF NOT EXISTS idx_je_date_status ON journal_entries(entry_date, status)",
+    "CREATE INDEX IF NOT EXISTS idx_je_source ON journal_entries(source_table, source_id)",
+    "CREATE INDEX IF NOT EXISTS idx_jl_account_entry ON journal_lines(account_id, entry_id)",
+    "CREATE INDEX IF NOT EXISTS idx_jl_entry ON journal_lines(entry_id, line_no)",
+    "CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date, category_id)",
 )
 
 
@@ -816,6 +1161,22 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE sale_items ADD COLUMN tax_label TEXT")
         if "tax_rate" not in si_cols:
             conn.execute("ALTER TABLE sale_items ADD COLUMN tax_rate INTEGER DEFAULT 0")
+        if "cost_unit" not in si_cols:
+            conn.execute("ALTER TABLE sale_items ADD COLUMN cost_unit INTEGER NOT NULL DEFAULT 0")
+            conn.execute(
+                "UPDATE sale_items SET cost_unit = COALESCE((SELECT p.cost FROM products p WHERE p.id = sale_items.product_id), 0) WHERE cost_unit = 0"
+            )
+
+        rp_cols = {c["name"] for c in conn.execute("PRAGMA table_info(repair_parts)").fetchall()}
+        if "cost_unit" not in rp_cols:
+            conn.execute("ALTER TABLE repair_parts ADD COLUMN cost_unit INTEGER NOT NULL DEFAULT 0")
+            conn.execute(
+                "UPDATE repair_parts SET cost_unit = COALESCE((SELECT p.cost FROM products p WHERE p.id = repair_parts.product_id), unit_price, 0) WHERE cost_unit = 0"
+            )
+
+        ser_cols = {c["name"] for c in conn.execute("PRAGMA table_info(serials)").fetchall()}
+        if "purchase_item_id" not in ser_cols:
+            conn.execute("ALTER TABLE serials ADD COLUMN purchase_item_id INTEGER")
         if "payment_method_label" not in sales_cols:
             conn.execute("ALTER TABLE sales ADD COLUMN payment_method_label TEXT")
         if "payment_plan_note" not in sales_cols:
@@ -866,6 +1227,8 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
             conn.execute("ALTER TABLE products ADD COLUMN image TEXT")
         if "demo_profile" not in prod_cols:
             conn.execute("ALTER TABLE products ADD COLUMN demo_profile TEXT")
+        if "expiry_date" not in prod_cols:
+            conn.execute("ALTER TABLE products ADD COLUMN expiry_date TEXT")
 
         cat_cols = {c["name"] for c in conn.execute("PRAGMA table_info(categories)").fetchall()}
         if "demo_profile" not in cat_cols:
@@ -1060,7 +1423,9 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
         seed_modules_if_empty(conn)
         seed_profiles_if_empty(conn)
         seed_permission_roles_if_empty(conn)
+        seed_chart_of_accounts_if_empty(conn)
         _migrate_strict_permissions_v2(conn)
+        _migrate_erp_cost_snapshot(conn)
 
         te = conn.execute("SELECT value FROM settings WHERE key='tax_enabled'").fetchone()
         if not te:
@@ -1392,21 +1757,235 @@ def _migrate_strict_permissions_v2(conn: sqlite3.Connection) -> None:
     )
 
 
-def seed_modules_if_empty(conn: sqlite3.Connection) -> None:
-    """زرع الأقسام الافتراضية الـ 13 عند خلو جدول modules فقط (قابل لإعادة التشغيل بأمان)."""
-    if conn.execute("SELECT COUNT(*) c FROM modules").fetchone()["c"] > 0:
-        return
+DEFAULT_COA = (
+    # code, name, parent_code, level, type, normal_balance, is_group, is_system, system_role
+    ("1000", "الأصول (Assets)", None, 1, "asset", "debit", 1, 1, None),
+    ("1100", "الأصول المتداولة", "1000", 2, "asset", "debit", 1, 1, None),
+    ("1101", "النقدية بالصندوق والخزائن", "1100", 3, "asset", "debit", 1, 1, None),
+    ("110101", "الخزنة الرئيسية (Cash Safe)", "1101", 4, "asset", "debit", 0, 1, "cash_main"),
+    ("110102", "صناديق / أدراج نقاط البيع (POS)", "1101", 4, "asset", "debit", 0, 1, "cash_pos"),
+    ("1102", "البنوك والمحافظ الإلكترونية", "1100", 3, "asset", "debit", 1, 1, None),
+    ("110201", "المحافظ الإلكترونية (Vodafone Cash..)", "1102", 4, "asset", "debit", 0, 1, "wallet_main"),
+    ("110202", "إنستا باي والحسابات البنكية", "1102", 4, "asset", "debit", 0, 1, "bank_main"),
+    ("1103", "ذمم العملاء (المدينون)", "1100", 3, "asset", "debit", 0, 1, "ar_customers"),
+    ("1104", "ذمم عملاء الأقساط", "1100", 3, "asset", "debit", 0, 1, "ar_installments"),
+    ("1105", "المخزون السلعي (البضاعة)", "1100", 3, "asset", "debit", 0, 1, "inventory"),
+    ("1106", "مخزون الأجهزة المستعملة", "1100", 3, "asset", "debit", 0, 1, "used_inventory"),
+    ("1107", "ضريبة القيمة المضافة - مدخلات", "1100", 3, "asset", "debit", 0, 1, "vat_input"),
+    ("1200", "الأصول الثابتة", "1000", 2, "asset", "debit", 1, 1, None),
+    ("1201", "التجهيزات والأثاث والأجهزة", "1200", 3, "asset", "debit", 0, 1, "fixed_assets"),
+    ("2000", "الالتزامات / الخصوم (Liabilities)", None, 1, "liability", "credit", 1, 1, None),
+    ("2100", "الالتزامات المتداولة", "2000", 2, "liability", "credit", 1, 1, None),
+    ("2101", "ذمم الموردين (الدائنون)", "2100", 3, "liability", "credit", 0, 1, "ap_suppliers"),
+    ("2102", "ضريبة القيمة المضافة - مخرجات", "2100", 3, "liability", "credit", 0, 1, "vat_output"),
+    ("2103", "ضرائب خصم وإضافة مستحقة (1% / 3%)", "2100", 3, "liability", "credit", 0, 1, "wht_payable"),
+    ("2104", "رواتب ومصروفات مستحقة", "2100", 3, "liability", "credit", 0, 1, "accrued_expenses"),
+    ("3000", "حقوق الملكية (Equity)", None, 1, "equity", "credit", 1, 1, None),
+    ("3101", "رأس المال", "3000", 2, "equity", "credit", 0, 1, "capital"),
+    ("3102", "حساب جاري الشركاء / المسحوبات الشخصية", "3000", 2, "equity", "credit", 0, 1, "partner_drawings"),
+    ("3103", "رصيد افتتاحي مقابل (مؤقت للترحيل)", "3000", 2, "equity", "credit", 0, 1, "opening_equity"),
+    ("3104", "الأرباح المحتجزة / أرباح العام", "3000", 2, "equity", "credit", 0, 1, "retained_earnings"),
+    ("4000", "الإيرادات (Revenues)", None, 1, "revenue", "credit", 1, 1, None),
+    ("4101", "إيرادات المبيعات", "4000", 2, "revenue", "credit", 0, 1, "sales_revenue"),
+    ("4102", "مردودات المبيعات", "4000", 2, "revenue", "debit", 0, 1, "sales_returns"),
+    ("4103", "خصم مسموح به", "4000", 2, "revenue", "debit", 0, 1, "discount_allowed"),
+    ("4201", "إيرادات مركز الصيانة", "4000", 2, "revenue", "credit", 0, 1, "repair_revenue"),
+    ("4202", "إيرادات ورسوم تمويل الأقساط", "4000", 2, "revenue", "credit", 0, 1, "installment_fee_rev"),
+    ("4301", "خصم مكتسب من الموردين", "4000", 2, "revenue", "credit", 0, 1, "discount_earned"),
+    ("5000", "التكاليف والمصروفات (Costs & Expenses)", None, 1, "expense", "debit", 1, 1, None),
+    ("5100", "تكلفة المبيعات والتشغيل", "5000", 2, "expense", "debit", 1, 1, None),
+    ("5101", "تكلفة البضاعة المباعة (COGS)", "5100", 3, "expense", "debit", 0, 1, "cogs"),
+    ("5102", "تكلفة قطع غيار الصيانة", "5100", 3, "expense", "debit", 0, 1, "repair_parts_cogs"),
+    ("5103", "فروق جرد وعجز/زيادة المخزون", "5100", 3, "expense", "debit", 0, 1, "stock_adj_diff"),
+    ("5200", "المصروفات التشغيلية والإدارية", "5000", 2, "expense", "debit", 1, 1, None),
+    ("5201", "الرواتب والأجور", "5200", 3, "expense", "debit", 0, 1, "exp_salaries"),
+    ("5202", "الإيجار والمرافق (كهرباء / مياه / إنترنت)", "5200", 3, "expense", "debit", 0, 1, "exp_rent_utilities"),
+    ("5203", "مصروفات تسويق وإعلان ونقل ومبيعات", "5200", 3, "expense", "debit", 0, 1, "exp_marketing"),
+    ("5204", "فروق وعجز/زيادة صندوق الكاشير", "5200", 3, "expense", "debit", 0, 1, "cash_diff"),
+    ("5205", "مصروفات إدارية وعمومية أخرى", "5200", 3, "expense", "debit", 0, 1, "exp_general"),
+)
+
+
+def seed_chart_of_accounts_if_empty(conn: sqlite3.Connection) -> None:
+    """زرع شجرة الحسابات القياسية والخزائن وتصنيفات المصروفات ومراكز التكلفة والفترات المالية الافتراضية."""
     t = now()
-    rows = [
-        (key, title, icon, color, url, "", json.dumps(perms, ensure_ascii=False), order, 1, is_core, 1, None, t, t)
-        for key, title, icon, color, url, perms, order, is_core in DEFAULT_MODULES
-    ]
-    conn.executemany(
-        """INSERT INTO modules
-           (key, title, icon, color, url, params, perm_keys, sort_order, enabled, is_core, is_builtin, clone_of, created_at, updated_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        rows,
+    code_to_id = {r["code"]: r["id"] for r in conn.execute("SELECT id, code FROM accounts").fetchall()}
+    for code, name, parent_code, level, acc_type, norm_bal, is_grp, is_sys, sys_role in DEFAULT_COA:
+        if code in code_to_id:
+            continue
+        parent_id = code_to_id.get(parent_code) if parent_code else None
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO accounts
+               (code, name, parent_id, level, type, normal_balance, is_group, is_system, system_role, debit_total, credit_total, balance, active, created_at)
+               VALUES(?,?,?,?,?,?,?,?,?,0,0,0,1,?)""",
+            (code, name, parent_id, level, acc_type, norm_bal, is_grp, is_sys, sys_role, t),
+        )
+        if cur.lastrowid:
+            code_to_id[code] = cur.lastrowid
+        else:
+            r = conn.execute("SELECT id FROM accounts WHERE code=?", (code,)).fetchone()
+            if r:
+                code_to_id[code] = r["id"]
+
+    # زرع الخزائن والبنوك الافتراضية
+    default_treasuries = (
+        ("TR-MAIN", "الخزنة الرئيسية", "cash", "110101", 1),
+        ("TR-POS", "درج الكاشير (نقاط البيع)", "pos_drawer", "110102", 0),
+        ("TR-WALLET", "المحفظة الإلكترونية (فودافون كاش..)", "wallet", "110201", 0),
+        ("TR-BANK", "إنستا باي / الحساب البنكي", "bank", "110202", 0),
     )
+    for t_code, t_name, t_kind, acc_code, is_def in default_treasuries:
+        acc_id = code_to_id.get(acc_code)
+        if acc_id:
+            conn.execute(
+                """INSERT OR IGNORE INTO treasury_accounts(code, name, kind, account_id, is_default, active, created_at)
+                   VALUES(?,?,?,?,?,1,?)""",
+                (t_code, t_name, t_kind, acc_id, is_def, t),
+            )
+
+    # زرع تصنيفات المصروفات الافتراضية
+    default_exp_cats = (
+        ("الرواتب والأجور", "5201"),
+        ("الإيجار والمرافق (كهرباء / مياه / إنترنت)", "5202"),
+        ("مصروفات تسويق ونقل ومبيعات", "5203"),
+        ("مصروفات إدارية ونثريات", "5205"),
+    )
+    for cat_name, acc_code in default_exp_cats:
+        acc_id = code_to_id.get(acc_code)
+        if acc_id:
+            conn.execute(
+                "INSERT OR IGNORE INTO expense_categories(name, account_id, active) VALUES(?,?,1)",
+                (cat_name, acc_id),
+            )
+
+    # زرع مراكز التكلفة الافتراضية
+    default_ccs = (
+        ("CC-SALES", "قسم المبيعات والمعرض"),
+        ("CC-REPAIR", "مركز الصيانة والدعم"),
+        ("CC-INST", "قسم التقسيط والتحصيل"),
+        ("CC-ADMIN", "الإدارة العامة"),
+    )
+    for cc_code, cc_name in default_ccs:
+        conn.execute(
+            "INSERT OR IGNORE INTO cost_centers(code, name, active, created_at) VALUES(?,?,1,?)",
+            (cc_code, cc_name, t),
+        )
+
+    # زرع قواعد الترحيل الافتراضية
+    default_rules = (
+        ("cash_main", "حساب الخزنة الرئيسية", "110101"),
+        ("cash_pos", "حساب درج الكاشير (POS)", "110102"),
+        ("wallet_main", "حساب المحفظة الإلكترونية", "110201"),
+        ("bank_main", "حساب البنك / إنستا باي", "110202"),
+        ("ar_customers", "ذمم العملاء (المدينون)", "1103"),
+        ("ar_installments", "ذمم عملاء الأقساط", "1104"),
+        ("inventory", "المخزون السلعي", "1105"),
+        ("used_inventory", "مخزون الأجهزة المستعملة", "1106"),
+        ("vat_input", "ضريبة القيمة المضافة - مدخلات", "1107"),
+        ("ap_suppliers", "ذمم الموردين (الدائنون)", "2101"),
+        ("vat_output", "ضريبة القيمة المضافة - مخرجات", "2102"),
+        ("wht_payable", "ضرائب خصم وإضافة مستحقة", "2103"),
+        ("capital", "رأس المال", "3101"),
+        ("opening_equity", "رصيد افتتاحي مقابل", "3103"),
+        ("retained_earnings", "الأرباح المحتجزة", "3104"),
+        ("sales_revenue", "إيرادات المبيعات", "4101"),
+        ("sales_returns", "مردودات المبيعات", "4102"),
+        ("discount_allowed", "خصم مسموح به", "4103"),
+        ("repair_revenue", "إيرادات مركز الصيانة", "4201"),
+        ("installment_fee_rev", "إيرادات تمويل الأقساط", "4202"),
+        ("discount_earned", "خصم مكتسب من الموردين", "4301"),
+        ("cogs", "تكلفة البضاعة المباعة (COGS)", "5101"),
+        ("repair_parts_cogs", "تكلفة قطع غيار الصيانة", "5102"),
+        ("stock_adj_diff", "فروق جرد المخزون", "5103"),
+        ("cash_diff", "فروق عجز/زيادة الصندوق", "5204"),
+    )
+    for r_key, r_lbl, acc_code in default_rules:
+        acc_id = code_to_id.get(acc_code)
+        if acc_id:
+            conn.execute(
+                "INSERT OR IGNORE INTO accounting_posting_rules(rule_key, label, account_id, updated_at) VALUES(?,?,?,?)",
+                (r_key, r_lbl, acc_id, t),
+            )
+
+    # زرع السنة والفترة المالية الحالية
+    cur_yr = datetime.datetime.now().strftime("%Y")
+    cur_mo = datetime.datetime.now().strftime("%Y-%m")
+    conn.execute(
+        "INSERT OR IGNORE INTO fiscal_years(name, start_date, end_date, status, created_at) VALUES(?,?,?,'open',?)",
+        (cur_yr, f"{cur_yr}-01-01", f"{cur_yr}-12-31", t),
+    )
+    fy_row = conn.execute("SELECT id FROM fiscal_years WHERE name=?", (cur_yr,)).fetchone()
+    if fy_row:
+        import calendar
+        y_i = int(cur_yr)
+        m_i = int(cur_mo.split("-")[1])
+        last_d = calendar.monthrange(y_i, m_i)[1]
+        conn.execute(
+            "INSERT OR IGNORE INTO fiscal_periods(fiscal_year_id, period_key, name, start_date, end_date, status) VALUES(?,?,?,?,?,'open')",
+            (fy_row["id"], cur_mo, f"شهر {m_i:02d}/{y_i}", f"{cur_mo}-01", f"{cur_mo}-{last_d:02d}"),
+        )
+
+
+def _migrate_erp_cost_snapshot(conn: sqlite3.Connection) -> None:
+    """تحديث لمرة واحدة: ضمان تثبيت cost_unit في الفواتير وقطع الغيار التاريخية وترقية قوالب الصلاحيات."""
+    flag = conn.execute("SELECT value FROM settings WHERE key='erp_cost_snapshot_migrated'").fetchone()
+    if flag and flag["value"] == "1":
+        return
+    conn.execute(
+        "UPDATE sale_items SET cost_unit = COALESCE((SELECT p.cost FROM products p WHERE p.id = sale_items.product_id), 0) WHERE cost_unit = 0"
+    )
+    conn.execute(
+        "UPDATE repair_parts SET cost_unit = COALESCE((SELECT p.cost FROM products p WHERE p.id = repair_parts.product_id), unit_price, 0) WHERE cost_unit = 0"
+    )
+    # تحديث قوالب الوظائف المدمجة لتشمل الصلاحيات الـ 63
+    t = now()
+    for p in DEFAULT_ROLE_PRESETS:
+        conn.execute(
+            """INSERT INTO permission_roles(key, name, description, badge_color, perms_json, is_builtin, created_at)
+               VALUES(?,?,?,?,?,1,?)
+               ON CONFLICT(key) DO UPDATE SET
+                 description=excluded.description,
+                 perms_json=excluded.perms_json""",
+            (
+                p["key"],
+                p["name"],
+                p.get("description", ""),
+                p.get("badge_color", "slate"),
+                json.dumps(p["perms"], ensure_ascii=False),
+                t,
+            ),
+        )
+    conn.execute(
+        "INSERT INTO settings(key, value) VALUES('erp_cost_snapshot_migrated', '1') "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+    )
+
+
+def seed_modules_if_empty(conn: sqlite3.Connection) -> None:
+    """زرع الأقسام الافتراضية الـ 15 عند خلو جدول modules أو إضافة الأقسام الجديدة بأمان."""
+    t = now()
+    cnt = conn.execute("SELECT COUNT(*) c FROM modules").fetchone()["c"]
+    if cnt == 0:
+        rows = [
+            (key, title, icon, color, url, "", json.dumps(perms, ensure_ascii=False), order, 1, is_core, 1, None, t, t)
+            for key, title, icon, color, url, perms, order, is_core in DEFAULT_MODULES
+        ]
+        conn.executemany(
+            """INSERT INTO modules
+               (key, title, icon, color, url, params, perm_keys, sort_order, enabled, is_core, is_builtin, clone_of, created_at, updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            rows,
+        )
+        return
+    existing = {r["key"] for r in conn.execute("SELECT key FROM modules").fetchall()}
+    for key, title, icon, color, url, perms, order, is_core in DEFAULT_MODULES:
+        if key not in existing:
+            conn.execute(
+                """INSERT OR IGNORE INTO modules
+                   (key, title, icon, color, url, params, perm_keys, sort_order, enabled, is_core, is_builtin, clone_of, created_at, updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,1,?,1,NULL,?,?)""",
+                (key, title, icon, color, url, "", json.dumps(perms, ensure_ascii=False), order, is_core, t, t),
+            )
 
 
 def seed_profiles_if_empty(conn: sqlite3.Connection) -> None:
@@ -1425,7 +2004,8 @@ def seed_profiles_if_empty(conn: sqlite3.Connection) -> None:
             f"UPDATE categories SET demo_profile='retail_electronics' WHERE demo_profile IS NULL AND name IN ({ph_c})",
             DEFAULT_RETAIL_CATS,
         )
-    if conn.execute("SELECT COUNT(*) c FROM business_profiles").fetchone()["c"] > 0:
+    existing_profs = {r["key"] for r in conn.execute("SELECT key FROM business_profiles").fetchall()}
+    if len(existing_profs) >= len(DEFAULT_BUSINESS_PROFILES):
         return
     t = now()
     rows = [
@@ -1446,7 +2026,7 @@ def seed_profiles_if_empty(conn: sqlite3.Connection) -> None:
         for k, v in DEFAULT_BUSINESS_PROFILES.items()
     ]
     conn.executemany(
-        """INSERT INTO business_profiles
+        """INSERT OR IGNORE INTO business_profiles
            (key, label, description, modules_enabled, module_titles, labels, demo_catalog, default_start_page, sort_order, is_builtin, created_at, updated_at)
            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
         rows,

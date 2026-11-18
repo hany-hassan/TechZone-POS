@@ -10,6 +10,7 @@ import time
 from decimal import Decimal, ROUND_HALF_UP
 
 import db
+import erp_hooks
 from api_common import (
     ApiError,
     _FALLBACK_JPEG,
@@ -119,15 +120,18 @@ class QuotesMixin:
 
         for it in q_items:
             pid = it["product_id"] if it["product_id"] else custom_pid
+            p_cost_row = conn.execute("SELECT cost FROM products WHERE id=?", (pid,)).fetchone() if pid != custom_pid else None
+            c_unit = int(p_cost_row["cost"] or 0) if p_cost_row else 0
             conn.execute(
-                """INSERT INTO sale_items(sale_id, product_id, name, qty, unit_price, line_total, sku, tax_label, tax_rate)
-                   VALUES(?,?,?,?,?,?,?,?,?)""",
+                """INSERT INTO sale_items(sale_id, product_id, name, qty, unit_price, cost_unit, line_total, sku, tax_label, tax_rate)
+                   VALUES(?,?,?,?,?,?,?,?,?,?)""",
                 (
                     sale_id,
                     pid,
                     it["name"],
                     it["qty"],
                     it["unit_price"],
+                    c_unit,
                     it["line_total"],
                     it["sku"] or "",
                     it["tax_label"] or "",
@@ -186,6 +190,7 @@ class QuotesMixin:
                WHERE id=?""",
             (sale_id, paid, method, pay_dt, invoice_no, pm_lbl, pm_note, pm_json, q_row["id"]),
         )
+        erp_hooks.on_sale_created(self, conn, sale_id, user=u)
         return sale_id, invoice_no
 
     def quotation_save(

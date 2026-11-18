@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>المشتريات والموردون — تك زون</title>
+<link href="app.css" rel="stylesheet"/>
+<script>if(localStorage.getItem('tz-theme')==='dark')document.documentElement.classList.add('dark');</script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 font-arabic antialiased min-h-screen">
+<div id="shell" class="flex min-h-screen">
+  <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <!-- الشريط العلوي -->
+    <header class="h-16 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0 z-10">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-cyan-600/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+          <span class="material-icons-round text-2xl">local_shipping</span>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900 dark:text-white" data-label="module_purchases">المشتريات والموردون</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">فواتير التوريد، أوامر الشراء، المتوسط المرجح للتكلفة (WAC)، وحسابات الموردين</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-new-purchase" onclick="openPurchaseModal()" class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-dark text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
+          <span class="material-icons-round text-base">add_shopping_cart</span>
+          <span>+ فاتورة شراء سريعة</span>
+        </button>
+        <button id="btn-new-supplier" onclick="openSupplierModal()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold flex items-center gap-1.5">
+          <span class="material-icons-round text-base text-cyan-600">person_add</span>
+          <span>+ مورد جديد</span>
+        </button>
+        <button id="btn-new-sup-pay" onclick="openSupplierPayModal()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5">
+          <span class="material-icons-round text-base">payments</span>
+          <span>سند صرف لمورد</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-6 space-y-5">
+      <!-- بطاقات الملخص السريع -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div class="text-xs text-slate-500">مشتريات الشهر الحالي</div>
+          <div id="kpi-month-pur" class="text-xl font-bold font-num text-cyan-600 dark:text-cyan-400 mt-1">0.00</div>
+          <div id="kpi-month-pur-cnt" class="text-[11px] text-slate-400 mt-0.5">0 فاتورة</div>
+        </div>
+        <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div class="text-xs text-slate-500">إجمالي مستحقات الموردين (AP)</div>
+          <div id="kpi-ap-bal" class="text-xl font-bold font-num text-rose-600 dark:text-rose-400 mt-1">0.00</div>
+          <div id="kpi-sup-cnt" class="text-[11px] text-slate-400 mt-0.5">0 مورد مسجل</div>
+        </div>
+        <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div class="text-xs text-slate-500">أوامر شراء قيد الانتظار</div>
+          <div id="kpi-open-po" class="text-xl font-bold font-num text-amber-600 dark:text-amber-400 mt-1">0</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">جاهزة للاستلام والتحويل</div>
+        </div>
+        <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div class="text-xs text-slate-500">مرتجعات المشتريات (الشهر)</div>
+          <div id="kpi-month-ret" class="text-xl font-bold font-num text-purple-600 dark:text-purple-400 mt-1">0.00</div>
+          <div id="kpi-month-ret-cnt" class="text-[11px] text-slate-400 mt-0.5">0 مرتجع</div>
+        </div>
+      </div>
+
+      <!-- التبويبات الـ 4 الرئيسية -->
+      <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <button data-tab="bills" onclick="switchTab('bills')" class="pur-tab px-4 py-2 rounded-xl text-xs font-bold bg-primary text-white">
+          <span class="material-icons-round text-sm align-middle ml-1">receipt_long</span>فواتير المشتريات
+        </button>
+        <button data-tab="po" onclick="switchTab('po')" class="pur-tab px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          <span class="material-icons-round text-sm align-middle ml-1">assignment</span>أوامر الشراء (PO)
+        </button>
+        <button data-tab="returns" onclick="switchTab('returns')" class="pur-tab px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          <span class="material-icons-round text-sm align-middle ml-1">assignment_return</span>المرتجعات وتغيرات الأسعار
+        </button>
+        <button data-tab="suppliers" onclick="switchTab('suppliers')" class="pur-tab px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          <span class="material-icons-round text-sm align-middle ml-1">domain</span>الموردون وأعمار الديون
+        </button>
+      </div>
+
+      <!-- 1) تبويب فواتير المشتريات -->
+      <section id="pane-bills" class="space-y-4">
+        <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2 flex-1">
+            <input id="bills-q" type="text" placeholder="بحث برقم الفاتورة أو فاتورة المورد أو اسم المورد..." class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs w-72"/>
+            <select id="bills-status" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs">
+              <option value="">كل الحالات</option>
+              <option value="posted">معتمدة (Posted)</option>
+              <option value="draft">مسودة (Draft)</option>
+              <option value="partial_return">مرتجع جزئي</option>
+              <option value="returned">مرتجع كامل</option>
+              <option value="cancelled">ملغاة</option>
+            </select>
+            <button onclick="loadPurchases()" class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold hover:bg-slate-200">تحديث</button>
+          </div>
+        </div>
+        <div class="bg-surface-light dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+              <tr>
+                <th class="p-3">رقم الفاتورة</th>
+                <th class="p-3">المورد</th>
+                <th class="p-3">فاتورة المورد</th>
+                <th class="p-3">التاريخ</th>
+                <th class="p-3">الإجمالي</th>
+                <th class="p-3">المدفوع</th>
+                <th class="p-3">المتبقي</th>
+                <th class="p-3">الحالة</th>
+                <th class="p-3">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="bills-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 2) تبويب أوامر الشراء (PO) -->
+      <section id="pane-po" class="hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold">طلبات وأوامر الشراء للموردين</h3>
+          <button onclick="openPoModal()" class="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold">+ أمر شراء جديد (PO)</button>
+        </div>
+        <div class="bg-surface-light dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+              <tr>
+                <th class="p-3">رقم الأمر</th>
+                <th class="p-3">المورد</th>
+                <th class="p-3">تاريخ الطلب</th>
+                <th class="p-3">الإجمالي التقديري</th>
+                <th class="p-3">الحالة</th>
+                <th class="p-3">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="po-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 3) تبويب المرتجعات وتغيرات أسعار الشراء -->
+      <section id="pane-returns" class="hidden space-y-5">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <h3 class="text-sm font-bold mb-3">سجل مرتجعات المشتريات للموردين</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+                  <tr>
+                    <th class="p-2.5">رقم المرتجع</th>
+                    <th class="p-2.5">الفاتورة</th>
+                    <th class="p-2.5">المورد</th>
+                    <th class="p-2.5">القيمة</th>
+                    <th class="p-2.5">التسوية</th>
+                  </tr>
+                </thead>
+                <tbody id="returns-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <h3 class="text-sm font-bold mb-3">سجل تحديثات المتوسط المرجح للتكلفة (WAC) وتنبيهات الأسعار</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+                  <tr>
+                    <th class="p-2.5">الصنف</th>
+                    <th class="p-2.5">التكلفة السابقة</th>
+                    <th class="p-2.5">تكلفة الشراء المحملة</th>
+                    <th class="p-2.5">المتوسط الجديد (WAC)</th>
+                    <th class="p-2.5">المرجع</th>
+                  </tr>
+                </thead>
+                <tbody id="wac-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4) تبويب الموردين وأعمار الديون -->
+      <section id="pane-suppliers" class="hidden space-y-5">
+        <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h3 class="text-sm font-bold">دليل الموردين والأرصدة الدائنة</h3>
+            <div class="flex items-center gap-2">
+              <input id="sup-q" type="text" placeholder="بحث باسم المورد أو الكود أو الهاتف..." class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs w-64"/>
+              <button onclick="loadSuppliers()" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">بحث</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+                <tr>
+                  <th class="p-3">الكود</th>
+                  <th class="p-3">المورد / الشركة</th>
+                  <th class="p-3">الهاتف</th>
+                  <th class="p-3">الرقم الضريبي</th>
+                  <th class="p-3">إجمالي التوريد</th>
+                  <th class="p-3">المسدد</th>
+                  <th class="p-3">الرصيد المستحق</th>
+                  <th class="p-3">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="suppliers-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+          <h3 class="text-sm font-bold mb-3">تقرير أعمار الديون الدائنة للموردين (AP Aging)</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+                <tr>
+                  <th class="p-2.5">المورد</th>
+                  <th class="p-2.5">0 - 30 يوماً</th>
+                  <th class="p-2.5">31 - 60 يوماً</th>
+                  <th class="p-2.5">61 - 90 يوماً</th>
+                  <th class="p-2.5">+90 يوماً</th>
+                  <th class="p-2.5">إجمالي المستحق</th>
+                </tr>
+              </thead>
+              <tbody id="aging-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- نافذة فاتورة مشتريات جديدة -->
+<div id="modal-purchase" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+      <h3 class="text-base font-bold">إنشاء فاتورة مشتريات وتوريد مخزني</h3>
+      <button onclick="closeModal('modal-purchase')" class="text-slate-400 hover:text-slate-600"><span class="material-icons-round">close</span></button>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+      <div>
+        <label class="block font-bold mb-1">المورد *</label>
+        <select id="pur-supplier" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"></select>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">رقم فاتورة المورد الورقية</label>
+        <input id="pur-sup-inv" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" placeholder="مثال: INV-9921"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">تاريخ الفاتورة</label>
+        <input id="pur-date" type="date" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">إضافة صنف بالباركود أو الاسم</label>
+        <input id="pur-prod-search" type="text" placeholder="ابحث عن صنف لإضافته..." class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+        <div id="pur-prod-results" class="hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl mt-1 max-h-40 overflow-y-auto shadow-lg"></div>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-slate-50 dark:bg-slate-800 text-slate-500">
+          <tr>
+            <th class="p-2.5">الصنف</th>
+            <th class="p-2.5 w-20">الكمية</th>
+            <th class="p-2.5 w-28">سعر الشراء</th>
+            <th class="p-2.5 w-28">سعر بيع جديد (اختياري)</th>
+            <th class="p-2.5 w-32">الصلاحية / السيريالات</th>
+            <th class="p-2.5 w-28">الإجمالي</th>
+            <th class="p-2.5 w-12"></th>
+          </tr>
+        </thead>
+        <tbody id="pur-lines-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+      </table>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl">
+      <div>
+        <label class="block font-bold mb-1">خصم مكتسب (ج.م)</label>
+        <input id="pur-discount" type="number" step="0.01" value="0" oninput="recalcPurchaseModal()" class="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">شحن ونقل موزّع (ج.م)</label>
+        <input id="pur-shipping" type="number" step="0.01" value="0" oninput="recalcPurchaseModal()" class="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">ضريبة مدخلات (%)</label>
+        <input id="pur-tax-rate" type="number" value="0" oninput="recalcPurchaseModal()" class="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">خصم منبع (0 / 1% / 3%)</label>
+        <select id="pur-wht-rate" onchange="recalcPurchaseModal()" class="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="0">بدون خصم منبع (0%)</option>
+          <option value="1">خصم منبع توريدات (1%)</option>
+          <option value="3">خصم منبع خدمات (3%)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">المدفوع الآن (ج.م)</label>
+        <input id="pur-paid" type="number" step="0.01" value="0" class="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">طريقة الصرف</label>
+        <select id="pur-method" class="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <option value="cash">نقدي (الخزنة الرئيسية)</option>
+          <option value="wallet">محفظة إلكترونية</option>
+          <option value="instapay">إنستا باي / بنك</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between pt-2">
+      <div class="text-sm font-bold">
+        صافي الفاتورة المستحق: <span id="pur-net-total" class="text-primary font-num text-lg">0.00</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="savePurchase('draft')" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold">حفظ كمسودة</button>
+        <button onclick="savePurchase('posted')" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold">اعتماد وترحيل للمخزون</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة إضافة/تعديل مورد -->
+<div id="modal-supplier" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+      <h3 class="text-base font-bold">بيانات المورد</h3>
+      <button onclick="closeModal('modal-supplier')" class="text-slate-400 hover:text-slate-600"><span class="material-icons-round">close</span></button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      <input id="sup-id" type="hidden"/>
+      <div class="sm:col-span-2">
+        <label class="block font-bold mb-1">اسم المورد *</label>
+        <input id="sup-name" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">اسم الشركة</label>
+        <input id="sup-company" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">الهاتف</label>
+        <input id="sup-phone" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">الرقم الضريبي</label>
+        <input id="sup-tax-reg" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">فترة الائتمان (أيام)</label>
+        <input id="sup-terms" type="number" value="30" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">رصيد أول المدة للمورد (ج.م)</label>
+        <input id="sup-opening" type="number" step="0.01" value="0" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">العنوان</label>
+        <input id="sup-address" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="closeModal('modal-supplier')" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">إلغاء</button>
+      <button onclick="submitSupplier()" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold">حفظ المورد</button>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة سند صرف لمورد -->
+<div id="modal-sup-pay" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+      <h3 class="text-base font-bold">إصدار سند صرف لمورد</h3>
+      <button onclick="closeModal('modal-sup-pay')" class="text-slate-400 hover:text-slate-600"><span class="material-icons-round">close</span></button>
+    </div>
+    <div class="space-y-3 text-xs">
+      <div>
+        <label class="block font-bold mb-1">المورد *</label>
+        <select id="spay-supplier" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"></select>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">المبلغ المسدد (ج.م) *</label>
+        <input id="spay-amount" type="number" step="0.01" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">طريقة الصرف</label>
+        <select id="spay-method" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <option value="cash">نقدي (الخزنة الرئيسية)</option>
+          <option value="wallet">محفظة إلكترونية</option>
+          <option value="instapay">إنستا باي / تحويل بنكي</option>
+        </select>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">رقم المرجع (للمحفظة/البنك)</label>
+        <input id="spay-ref" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input id="spay-drawer" type="checkbox" class="rounded"/>
+        <span>صرف من درج الكاشير الحالي (يتطلب وردية مفتوحة)</span>
+      </label>
+      <div>
+        <label class="block font-bold mb-1">ملاحظات</label>
+        <input id="spay-notes" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="closeModal('modal-sup-pay')" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">إلغاء</button>
+      <button onclick="submitSupplierPayment()" class="px-5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold">تأكيد الصرف</button>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة كشف حساب المورد -->
+<div id="modal-statement" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+      <h3 id="stmt-title" class="text-base font-bold">كشف حساب مورد</h3>
+      <button onclick="closeModal('modal-statement')" class="text-slate-400 hover:text-slate-600"><span class="material-icons-round">close</span></button>
+    </div>
+    <div id="stmt-body" class="space-y-3 text-xs"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+let PUR_LINES = [];
+let SUPPLIERS_CACHE = [];
+
+function switchTab(tab) {
+  ['bills', 'po', 'returns', 'suppliers'].forEach((t) => {
+    const pane = document.getElementById('pane-' + t);
+    if (pane) pane.classList.toggle('hidden', t !== tab);
+  });
+  document.querySelectorAll('.pur-tab').forEach((btn) => {
+    const active = btn.dataset.tab === tab;
+    btn.className = 'pur-tab px-4 py-2 rounded-xl text-xs font-bold ' + (active ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300');
+  });
+  if (tab === 'bills') loadPurchases();
+  if (tab === 'po') loadPurchaseOrders();
+  if (tab === 'returns') loadReturnsAndWac();
+  if (tab === 'suppliers') loadSuppliers();
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.replace('flex', 'hidden');
+}
+
+async function loadDashboard() {
+  const d = await guard(() => api('purchases_dashboard'));
+  if (!d) return;
+  document.getElementById('kpi-month-pur').textContent = money(d.month_purchases_total || 0);
+  document.getElementById('kpi-month-pur-cnt').textContent = n(d.month_purchases_count || 0) + ' فاتورة';
+  document.getElementById('kpi-ap-bal').textContent = money(d.total_ap_balance || 0);
+  document.getElementById('kpi-sup-cnt').textContent = n(d.suppliers_count || 0) + ' مورد';
+  document.getElementById('kpi-open-po').textContent = n(d.open_po_count || 0);
+  document.getElementById('kpi-month-ret').textContent = money(d.month_returns_total || 0);
+  document.getElementById('kpi-month-ret-cnt').textContent = n(d.month_returns_count || 0) + ' مرتجع';
+}
+
+async function loadPurchases() {
+  const q = document.getElementById('bills-q').value.trim();
+  const status = document.getElementById('bills-status').value;
+  const res = await guard(() => api('purchases_list', { q, status }));
+  if (!res) return;
+  const tbody = document.getElementById('bills-tbody');
+  if (!res.rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="p-6 text-center text-slate-400">لا توجد فواتير مشتريات مسجلة</td></tr>';
+    return;
+  }
+  const stBadge = {
+    posted: '<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold">معتمدة</span>',
+    draft: '<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">مسودة</span>',
+    partial_return: '<span class="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[11px] font-bold">مرتجع جزئي</span>',
+    returned: '<span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold">مرتجع كامل</span>',
+    cancelled: '<span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[11px] font-bold">ملغاة</span>',
+  };
+  tbody.innerHTML = res.rows.map((r) => `
+    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+      <td class="p-3 font-bold font-num">${esc(r.purchase_no)}</td>
+      <td class="p-3 font-bold">${esc(r.supplier_name)}</td>
+      <td class="p-3 text-slate-500">${esc(r.supplier_invoice_no || '—')}</td>
+      <td class="p-3 font-num">${esc(r.invoice_date)}</td>
+      <td class="p-3 font-bold font-num">${money(r.total)}</td>
+      <td class="p-3 font-num text-emerald-600">${money(r.paid_amount)}</td>
+      <td class="p-3 font-num text-rose-600 font-bold">${money(r.due_amount)}</td>
+      <td class="p-3">${stBadge[r.status] || esc(r.status)}</td>
+      <td class="p-3 flex items-center gap-1.5">
+        ${r.status === 'draft' ? `<button onclick="postDraftPurchase(${r.id})" class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold">ترحيل</button>` : ''}
+        ${r.status === 'posted' ? `<button onclick="quickReturnPurchase(${r.id})" class="px-2.5 py-1 rounded-lg bg-purple-600/10 text-purple-600 text-[11px] font-bold">مرتجع</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function postDraftPurchase(id) {
+  const res = await guard(() => api('purchase_post', { id }));
+  if (res) {
+    toast('تم اعتماد وترحيل فاتورة المشتريات للمخزون');
+    loadDashboard();
+    loadPurchases();
+  }
+}
+
+async function quickReturnPurchase(id) {
+  const pur = await guard(() => api('purchase_get', { id }));
+  if (!pur || !pur.items.length) return;
+  const remItems = pur.items.filter((x) => x.remaining_qty > 0);
+  if (!remItems.length) {
+    toast('لا توجد كميات متبقية قابلة للإرجاع في هذه الفاتورة', 'warn');
+    return;
+  }
+  const first = remItems[0];
+  const qStr = prompt(`إرجاع الصنف «${first.name}» (المتاح: ${first.remaining_qty}) — أدخل الكمية المرتجعة:`, '1');
+  if (!qStr) return;
+  const qty = parseInt(qStr, 10);
+  if (!qty || qty <= 0) return;
+  const res = await guard(() => api('purchase_return_create', {
+    purchase_id: id,
+    items: [{ purchase_item_id: first.id, qty }],
+    refund_method: 'credit',
+    reason: 'مرتجع للمورد',
+  }));
+  if (res) {
+    toast(`تم تسجيل مرتجع مشتريات رقم ${res.return_no}`);
+    loadDashboard();
+    loadPurchases();
+  }
+}
+
+async function loadPurchaseOrders() {
+  const res = await guard(() => api('purchase_orders_list', {}));
+  if (!res) return;
+  const tbody = document.getElementById('po-tbody');
+  if (!res.rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">لا توجد أوامر شراء حالياً</td></tr>';
+    return;
+  }
+  tbody.innerHTML = res.rows.map((po) => `
+    <tr>
+      <td class="p-3 font-bold font-num">${esc(po.po_no)}</td>
+      <td class="p-3 font-bold">${esc(po.supplier_name)}</td>
+      <td class="p-3 font-num">${esc(po.order_date)}</td>
+      <td class="p-3 font-bold font-num">${money(po.total)}</td>
+      <td class="p-3">${esc(po.status)}</td>
+      <td class="p-3">
+        ${po.status !== 'received' && po.status !== 'cancelled'
+          ? `<button onclick="convertPo(${po.id})" class="px-3 py-1 rounded-lg bg-primary text-white text-[11px] font-bold">استلام وتحويل لفاتورة</button>`
+          : '—'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function convertPo(id) {
+  const res = await guard(() => api('purchase_order_convert', { id }));
+  if (res) {
+    toast(`تم تحويل أمر الشراء إلى فاتورة مشتريات ${res.purchase_no}`);
+    loadDashboard();
+    loadPurchaseOrders();
+  }
+}
+
+async function loadReturnsAndWac() {
+  const [rets, wacs] = await Promise.all([
+    guard(() => api('purchase_returns_list', {})),
+    guard(() => api('product_cost_history_list', { limit: 30 })),
+  ]);
+  const rBody = document.getElementById('returns-tbody');
+  if (rets && rets.length) {
+    rBody.innerHTML = rets.map((r) => `
+      <tr>
+        <td class="p-2.5 font-bold font-num">${esc(r.return_no)}</td>
+        <td class="p-2.5 font-num">${esc(r.purchase_no)}</td>
+        <td class="p-2.5">${esc(r.supplier_name)}</td>
+        <td class="p-2.5 font-bold font-num text-rose-600">${money(r.total)}</td>
+        <td class="p-2.5">${r.refund_method === 'credit' ? 'خصم من حساب المورد' : 'استرداد نقدي'}</td>
+      </tr>
+    `).join('');
+  } else {
+    rBody.innerHTML = '<tr><td colspan="5" class="p-5 text-center text-slate-400">لا توجد مرتجعات</td></tr>';
+  }
+
+  const wBody = document.getElementById('wac-tbody');
+  if (wacs && wacs.length) {
+    wBody.innerHTML = wacs.map((w) => `
+      <tr>
+        <td class="p-2.5 font-bold">${esc(w.product_name)}</td>
+        <td class="p-2.5 font-num">${money(w.old_cost)}</td>
+        <td class="p-2.5 font-num text-amber-600">${money(w.landed_unit_cost)}</td>
+        <td class="p-2.5 font-bold font-num text-emerald-600">${money(w.new_wac)}</td>
+        <td class="p-2.5 font-num text-slate-400">${esc(w.ref || '')}</td>
+      </tr>
+    `).join('');
+  } else {
+    wBody.innerHTML = '<tr><td colspan="5" class="p-5 text-center text-slate-400">لا توجد حركات تكلفة بعد</td></tr>';
+  }
+}
+
+async function loadSuppliers() {
+  const q = document.getElementById('sup-q').value.trim();
+  const [res, aging] = await Promise.all([
+    guard(() => api('suppliers_list', { q })),
+    guard(() => api('report_ap_aging')),
+  ]);
+  if (res) {
+    SUPPLIERS_CACHE = res.rows || [];
+    const tbody = document.getElementById('suppliers-tbody');
+    if (!SUPPLIERS_CACHE.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="p-6 text-center text-slate-400">لا يوجد موردون مسجلون</td></tr>';
+    } else {
+      tbody.innerHTML = SUPPLIERS_CACHE.map((s) => `
+        <tr>
+          <td class="p-3 font-num font-bold">${esc(s.code)}</td>
+          <td class="p-3 font-bold">${esc(s.name)} ${s.company_name ? `<span class="text-slate-400 text-[11px]">(${esc(s.company_name)})</span>` : ''}</td>
+          <td class="p-3 font-num">${esc(s.phone || '—')}</td>
+          <td class="p-3 font-num">${esc(s.tax_reg_no || '—')}</td>
+          <td class="p-3 font-num">${money(s.total_purchases)}</td>
+          <td class="p-3 font-num text-emerald-600">${money(s.paid_total)}</td>
+          <td class="p-3 font-num font-bold text-rose-600">${money(s.balance)}</td>
+          <td class="p-3 flex items-center gap-1.5">
+            <button onclick="openSupplierStatement(${s.id})" class="px-2.5 py-1 rounded-lg bg-cyan-600/10 text-cyan-600 text-[11px] font-bold">كشف حساب</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+  }
+  if (aging) {
+    const agBody = document.getElementById('aging-tbody');
+    if (!aging.rows.length) {
+      agBody.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-slate-400">لا توجد مديونيات مستحقة للموردين</td></tr>';
+    } else {
+      agBody.innerHTML = aging.rows.map((r) => `
+        <tr>
+          <td class="p-2.5 font-bold">${esc(r.name)}</td>
+          <td class="p-2.5 font-num">${money(r.b_0_30)}</td>
+          <td class="p-2.5 font-num">${money(r.b_31_60)}</td>
+          <td class="p-2.5 font-num text-amber-600">${money(r.b_61_90)}</td>
+          <td class="p-2.5 font-num text-rose-600 font-bold">${money(r.b_90_plus)}</td>
+          <td class="p-2.5 font-num font-bold">${money(r.total)}</td>
+        </tr>
+      `).join('');
+    }
+  }
+}
+
+async function ensureSupplierOptions(selectId) {
+  const res = await guard(() => api('suppliers_list', { limit: 200 }));
+  const sel = document.getElementById(selectId);
+  if (!sel || !res) return;
+  SUPPLIERS_CACHE = res.rows || [];
+  sel.innerHTML = SUPPLIERS_CACHE.map((s) => `<option value="${s.id}">${esc(s.name)} (${money(s.balance)})</option>`).join('');
+}
+
+async function openPurchaseModal() {
+  await ensureSupplierOptions('pur-supplier');
+  if (!SUPPLIERS_CACHE.length) {
+    toast('أضف مورداً أولاً قبل إنشاء فاتورة المشتريات', 'warn');
+    openSupplierModal();
+    return;
+  }
+  PUR_LINES = [];
+  document.getElementById('pur-sup-inv').value = '';
+  document.getElementById('pur-date').value = todayISO();
+  document.getElementById('pur-discount').value = '0';
+  document.getElementById('pur-shipping').value = '0';
+  document.getElementById('pur-tax-rate').value = '0';
+  document.getElementById('pur-wht-rate').value = '0';
+  document.getElementById('pur-paid').value = '0';
+  renderPurchaseLines();
+  document.getElementById('modal-purchase').classList.replace('hidden', 'flex');
+}
+
+function openPoModal() {
+  openPurchaseModal();
+}
+
+function renderPurchaseLines() {
+  const tbody = document.getElementById('pur-lines-tbody');
+  if (!PUR_LINES.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-slate-400">ابحث عن صنف أعلاه لإضافته للفاتورة</td></tr>';
+    recalcPurchaseModal();
+    return;
+  }
+  tbody.innerHTML = PUR_LINES.map((ln, idx) => `
+    <tr>
+      <td class="p-2 font-bold">${esc(ln.name)} <span class="text-[10px] text-slate-400">(${esc(ln.sku)})</span></td>
+      <td class="p-2"><input type="number" min="1" value="${ln.qty}" oninput="PUR_LINES[${idx}].qty=parseInt(this.value||1,10);renderPurchaseLines()" class="w-16 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/></td>
+      <td class="p-2"><input type="number" step="0.01" value="${ln.unit_cost}" oninput="PUR_LINES[${idx}].unit_cost=parseFloat(this.value||0);recalcPurchaseModal()" class="w-24 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/></td>
+      <td class="p-2"><input type="number" step="0.01" value="${ln.new_sell_price || ''}" placeholder="${(ln.price/100).toFixed(2)}" oninput="PUR_LINES[${idx}].new_sell_price=this.value" class="w-24 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/></td>
+      <td class="p-2"><input type="text" value="${esc(ln.serials || '')}" placeholder="${ln.tracked ? 'سيريالات مفصولة بفاصلة' : 'YYYY-MM-DD'}" oninput="PUR_LINES[${idx}].serials=this.value" class="w-32 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/></td>
+      <td class="p-2 font-bold font-num">${(ln.qty * ln.unit_cost).toFixed(2)}</td>
+      <td class="p-2"><button onclick="PUR_LINES.splice(${idx},1);renderPurchaseLines()" class="text-rose-500"><span class="material-icons-round text-sm">delete</span></button></td>
+    </tr>
+  `).join('');
+  recalcPurchaseModal();
+}
+
+function recalcPurchaseModal() {
+  const sub = PUR_LINES.reduce((acc, x) => acc + (x.qty * (parseFloat(x.unit_cost) || 0)), 0);
+  const disc = parseFloat(document.getElementById('pur-discount').value || 0);
+  const ship = parseFloat(document.getElementById('pur-shipping').value || 0);
+  const tRate = parseFloat(document.getElementById('pur-tax-rate').value || 0);
+  const wRate = parseFloat(document.getElementById('pur-wht-rate').value || 0);
+  const base = Math.max(0, sub - disc);
+  const tax = base * (tRate / 100);
+  const wht = base * (wRate / 100);
+  const net = Math.max(0, base + ship + tax - wht);
+  document.getElementById('pur-net-total').textContent = net.toFixed(2) + ' ' + CURRENCY;
+}
+
+document.getElementById('pur-prod-search').addEventListener('input', async (e) => {
+  const q = e.target.value.trim();
+  const box = document.getElementById('pur-prod-results');
+  if (!q) {
+    box.classList.add('hidden');
+    return;
+  }
+  const rows = await guard(() => api('products_search', { q, limit: 15 }));
+  if (!rows || !rows.length) {
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+  box.innerHTML = rows.map((p) => `
+    <div onclick='addProductToPur(${JSON.stringify({ id: p.id, name: p.name, sku: p.sku, price: p.price, tracked: p.tracked })})' class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer flex justify-between">
+      <span class="font-bold">${esc(p.name)}</span>
+      <span class="text-slate-400 font-num">${esc(p.sku)}</span>
+    </div>
+  `).join('');
+});
+
+function addProductToPur(p) {
+  document.getElementById('pur-prod-results').classList.add('hidden');
+  document.getElementById('pur-prod-search').value = '';
+  PUR_LINES.push({
+    product_id: p.id,
+    name: p.name,
+    sku: p.sku,
+    price: p.price || 0,
+    tracked: p.tracked,
+    qty: 1,
+    unit_cost: ((p.price || 0) * 0.75 / 100).toFixed(2),
+    new_sell_price: '',
+    serials: '',
+  });
+  renderPurchaseLines();
+}
+
+async function savePurchase(status) {
+  if (!PUR_LINES.length) {
+    toast('أضف صنفاً واحداً على الأقل للفاتورة', 'warn');
+    return;
+  }
+  const payload = {
+    supplier_id: document.getElementById('pur-supplier').value,
+    supplier_invoice_no: document.getElementById('pur-sup-inv').value,
+    invoice_date: document.getElementById('pur-date').value,
+    discount: document.getElementById('pur-discount').value,
+    shipping_cost: document.getElementById('pur-shipping').value,
+    tax_rate: document.getElementById('pur-tax-rate').value,
+    wht_rate: document.getElementById('pur-wht-rate').value,
+    paid_amount: document.getElementById('pur-paid').value,
+    payment_method: document.getElementById('pur-method').value,
+    status,
+    items: PUR_LINES.map((x) => ({
+      product_id: x.product_id,
+      qty: x.qty,
+      unit_cost: x.unit_cost,
+      new_sell_price: x.new_sell_price || null,
+      serials: x.tracked ? x.serials : [],
+      expiry_date: !x.tracked && x.serials ? x.serials : null,
+    })),
+  };
+  const res = await guard(() => api('purchase_save', payload));
+  if (res) {
+    closeModal('modal-purchase');
+    toast(`تم حفظ فاتورة المشتريات (${res.purchase_no}) بنجاح`);
+    loadDashboard();
+    loadPurchases();
+  }
+}
+
+function openSupplierModal() {
+  document.getElementById('sup-id').value = '';
+  document.getElementById('sup-name').value = '';
+  document.getElementById('sup-company').value = '';
+  document.getElementById('sup-phone').value = '';
+  document.getElementById('sup-tax-reg').value = '';
+  document.getElementById('sup-terms').value = '30';
+  document.getElementById('sup-opening').value = '0';
+  document.getElementById('sup-address').value = '';
+  document.getElementById('modal-supplier').classList.replace('hidden', 'flex');
+}
+
+async function submitSupplier() {
+  const res = await guard(() => api('supplier_save', {
+    id: document.getElementById('sup-id').value || null,
+    name: document.getElementById('sup-name').value,
+    company_name: document.getElementById('sup-company').value,
+    phone: document.getElementById('sup-phone').value,
+    tax_reg_no: document.getElementById('sup-tax-reg').value,
+    payment_terms_days: document.getElementById('sup-terms').value,
+    opening_balance: document.getElementById('sup-opening').value,
+    address: document.getElementById('sup-address').value,
+  }));
+  if (res) {
+    closeModal('modal-supplier');
+    toast('تم حفظ بيانات المورد بنجاح');
+    loadDashboard();
+    loadSuppliers();
+  }
+}
+
+async function openSupplierPayModal() {
+  await ensureSupplierOptions('spay-supplier');
+  document.getElementById('spay-amount').value = '';
+  document.getElementById('spay-ref').value = '';
+  document.getElementById('spay-notes').value = '';
+  document.getElementById('spay-drawer').checked = false;
+  document.getElementById('modal-sup-pay').classList.replace('hidden', 'flex');
+}
+
+async function submitSupplierPayment() {
+  const res = await guard(() => api('supplier_payment_create', {
+    supplier_id: document.getElementById('spay-supplier').value,
+    amount: document.getElementById('spay-amount').value,
+    method: document.getElementById('spay-method').value,
+    ref_no: document.getElementById('spay-ref').value,
+    from_drawer: document.getElementById('spay-drawer').checked,
+    notes: document.getElementById('spay-notes').value,
+  }));
+  if (res) {
+    closeModal('modal-sup-pay');
+    toast(`تم إصدار سند الصرف (${res.ref}) بنجاح`);
+    loadDashboard();
+    loadSuppliers();
+  }
+}
+
+async function openSupplierStatement(id) {
+  const st = await guard(() => api('supplier_statement', { id }));
+  if (!st) return;
+  document.getElementById('stmt-title').textContent = `كشف حساب المورد: ${st.supplier.name} (${st.supplier.code})`;
+  const body = document.getElementById('stmt-body');
+  body.innerHTML = `
+    <div class="grid grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
+      <div>إجمالي التوريد: <strong class="font-num">${money(st.supplier.total_purchases)}</strong></div>
+      <div>إجمالي المسدد: <strong class="font-num text-emerald-600">${money(st.supplier.paid_total)}</strong></div>
+      <div>الرصيد المستحق للمورد: <strong class="font-num text-rose-600">${money(st.supplier.balance)}</strong></div>
+    </div>
+    <table class="w-full text-right text-xs border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+      <thead class="bg-slate-100 dark:bg-slate-800">
+        <tr>
+          <th class="p-2">التاريخ</th>
+          <th class="p-2">المرجع</th>
+          <th class="p-2">البيان</th>
+          <th class="p-2">مدين (مسدد/مرتجع)</th>
+          <th class="p-2">دائن (توريد)</th>
+          <th class="p-2">الرصيد بعد الحركة</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+        ${st.ledger.map((l) => `
+          <tr>
+            <td class="p-2 font-num">${esc(fmtDT(l.created_at))}</td>
+            <td class="p-2 font-num font-bold">${esc(l.ref || '')}</td>
+            <td class="p-2">${esc(l.notes || l.kind)}</td>
+            <td class="p-2 font-num text-emerald-600">${l.debit ? money(l.debit) : '—'}</td>
+            <td class="p-2 font-num text-rose-600">${l.credit ? money(l.credit) : '—'}</td>
+            <td class="p-2 font-num font-bold">${money(l.balance_after)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  document.getElementById('modal-statement').classList.replace('hidden', 'flex');
+}
+
+(async () => {
+  const user = await pageInit('purchases');
+  if (!user) return;
+  await loadDashboard();
+  await loadPurchases();
+})();
+</script>
+</body>
+</html>

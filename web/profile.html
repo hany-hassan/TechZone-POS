@@ -8,6 +8,52 @@
 <link rel="icon" type="image/png" href="icon.png"/>
 <link href="app.css" rel="stylesheet"/>
 <script>if(localStorage.getItem('tz-theme')==='dark')document.documentElement.classList.add('dark');</script>
+<style>
+  #pf-icons-visibility-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+    width: 100%;
+  }
+  .pf-icon-row-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .pf-icon-Checks {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .pf-chk-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 9px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(255, 255, 255, 0.8);
+  }
+  html.dark .pf-chk-pill {
+    background: rgba(15, 23, 42, 0.65);
+    border-color: rgba(71, 85, 105, 0.6);
+  }
+  .pf-chk-pill input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    accent-color: #137fec;
+    cursor: pointer;
+  }
+</style>
 </head>
 <body id="shell" class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 font-display min-h-screen flex flex-col md:flex-row">
 <main class="flex-1 min-w-0 p-4 md:p-6 flex flex-col gap-5">
@@ -17,9 +63,9 @@
       <div id="hdr-avatar" class="w-14 h-14 rounded-full bg-primary text-white font-bold flex items-center justify-center text-xl overflow-hidden shadow-md shrink-0">م</div>
       <div>
         <h1 class="text-xl md:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <span id="hdr-name">ملفي الشخصي وإعداداتي</span>
+          <span id="hdr-name" data-label="module_profile">ملفي الشخصي وإعداداتي</span>
         </h1>
-        <p class="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-0.5" id="hdr-role">تحكم في اسمك، صورتك الشخصية، الرمز السري، الصفحة التي تفتح بعد تسجيل الدخول، ومظهر النظام الخاص بك</p>
+        <p class="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-0.5" id="hdr-role">تحكم في اسمك، صورتك الشخصية، الرمز السري، الصفحة التي تفتح بعد تسجيل الدخول، ومظهر وأيقونات سطح المكتب وشريط المهام الخاصة بك</p>
       </div>
     </div>
     <div class="flex items-center gap-2">
@@ -31,6 +77,7 @@
     </div>
   </div>
 
+  <!-- الصف العلوي: كارت البيانات الشخصية + كارت المظهر والخلفية -->
   <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
     <!-- الكارت الأيمن: البيانات الشخصية والصورة وتغيير كلمة السر / الرمز السري -->
     <section class="xl:col-span-6 bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 md:p-6 shadow-sm flex flex-col gap-4">
@@ -185,22 +232,53 @@
       </div>
     </section>
   </div>
+
+  <!-- الكارت السفلي بعرض الصفحة بالكامل: التحكم الشخصي في إظهار وإخفاء أيقونات سطح المكتب وشريط المهام -->
+  <section id="pf-icons-control-section" class="w-full bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 md:p-6 shadow-sm flex flex-col gap-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+      <div>
+        <h2 class="text-base md:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="material-icons-round text-primary">apps</span>
+          <span>التحكم في أيقونات سطح المكتب وشريط المهام (خاص بحسابي فقط)</span>
+        </h2>
+        <p class="text-xs text-slate-500 mt-0.5">حدد الأيقونات التي ترغب في رؤيتها على سطح المكتب أو في شريط المهام السفلي؛ تُحفظ هذه التفضيلات لحسابك الشخصي فقط دون التأثير على باقي المستخدمين، وتظل جميع الأقسام متاحة لك دائماً من قائمة «ابدأ».</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" onclick="setAllIconsVisibility(true, true)" class="px-3.5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-dark transition-colors">
+          إظهار الكل (سطح المكتب + شريط المهام)
+        </button>
+        <button type="button" onclick="setAllIconsVisibility(false, null)" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:border-primary transition-colors">
+          إخفاء الكل من سطح المكتب
+        </button>
+        <button type="button" onclick="setAllIconsVisibility(null, false)" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:border-primary transition-colors">
+          إخفاء الكل من شريط المهام
+        </button>
+      </div>
+    </div>
+
+    <div id="pf-icons-visibility-grid"></div>
+  </section>
 </main>
 <script src="app.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 
 const ALL_START_PAGES = [
-  { id: 'pos', label: 'نقاط البيع السريعة (الكاشير)', perm: 'pos_sell' },
-  { id: 'sales_quotes', label: 'قسم المبيعات وعروض الأسعار وفواتير A4', perm: ['quotes_view', 'quotes_create_edit'] },
-  { id: 'inventory', label: 'إدارة المخزون والمنتجات', perm: ['inventory_view', 'inventory_edit', 'inventory_adjust'] },
-  { id: 'customers', label: 'العملاء والمديونيات وكشف الحساب', perm: ['customers_view', 'customers_debt_view', 'customers_edit', 'customers_payment'] },
-  { id: 'repair', label: 'مركز الصيانة وتذاكر الإصلاح', perm: ['repair_view', 'repair_create', 'repair_edit'] },
-  { id: 'history', label: 'سجل المبيعات والمرتجعات', perm: ['history_view_own', 'history_view_all', 'sales_return_own', 'sales_return', 'sales_post_discount'] },
-  { id: 'buy_used', label: 'شراء الأجهزة المستعملة', perm: ['used_view', 'used_manage'] },
-  { id: 'reports', label: 'التقارير والتحليلات المالية', perm: ['reports_sales_view', 'reports_profit_view', 'reports_shifts_view', 'reports_movements_view'] },
-  { id: 'staff', label: 'إدارة الموظفين والصلاحيات', perm: ['staff_view', 'staff_manage'] },
-  { id: 'settings', label: 'إعدادات النظام', perm: ['settings_view_edit', 'templates_manage', 'backups_manage'] },
+  { id: 'pos', label: 'نقاط البيع السريعة (الكاشير)', icon: 'point_of_sale', color: 'linear-gradient(135deg,#2563eb,#0ea5e9)', perm: 'pos_sell' },
+  { id: 'sales_quotes', label: 'قسم المبيعات وعروض الأسعار وفواتير A4', icon: 'description', color: 'linear-gradient(135deg,#0284c7,#6366f1)', perm: ['quotes_view', 'quotes_create_edit'] },
+  { id: 'customers', label: 'العملاء والمديونيات وكشف الحساب', icon: 'groups', color: 'linear-gradient(135deg,#7c3aed,#a855f7)', perm: ['customers_view', 'customers_debt_view', 'customers_edit', 'customers_payment'] },
+  { id: 'installments', label: 'نظام الأقساط', icon: 'event_repeat', color: 'linear-gradient(135deg,#0ea5e9,#0369a1)', perm: ['installments_view', 'installments_collect', 'installments_create'] },
+  { id: 'inventory', label: 'إدارة المخزون والمنتجات', icon: 'inventory_2', color: 'linear-gradient(135deg,#059669,#10b981)', perm: ['inventory_view', 'inventory_edit', 'inventory_adjust'] },
+  { id: 'purchases', label: 'المشتريات والموردون', icon: 'local_shipping', color: 'linear-gradient(135deg,#0891b2,#06b6d4)', perm: ['suppliers_view', 'suppliers_manage', 'purchases_view', 'purchases_create_edit', 'purchases_return', 'purchases_payment'] },
+  { id: 'accounting', label: 'المحاسبة والمالية', icon: 'account_balance', color: 'linear-gradient(135deg,#be185d,#e11d48)', perm: ['expenses_view', 'expenses_manage', 'treasury_view', 'treasury_transfer', 'accounting_coa_view', 'accounting_journal_manual', 'accounting_statements_view'] },
+  { id: 'history', label: 'سجل المبيعات والمرتجعات', icon: 'receipt_long', color: 'linear-gradient(135deg,#ea580c,#f97316)', perm: ['history_view_own', 'history_view_all', 'sales_return_own', 'sales_return', 'sales_post_discount'] },
+  { id: 'repair', label: 'مركز الصيانة وتذاكر الإصلاح', icon: 'build', color: 'linear-gradient(135deg,#d97706,#f59e0b)', perm: ['repair_view', 'repair_create', 'repair_edit'] },
+  { id: 'buy_used', label: 'شراء الأجهزة المستعملة', icon: 'phonelink_setup', color: 'linear-gradient(135deg,#0d9488,#14b8a6)', perm: ['used_view', 'used_manage'] },
+  { id: 'reports', label: 'التقارير والتحليلات المالية', icon: 'bar_chart', color: 'linear-gradient(135deg,#4f46e5,#6366f1)', perm: ['reports_sales_view', 'reports_profit_view', 'reports_shifts_view', 'reports_movements_view'] },
+  { id: 'staff', label: 'إدارة الموظفين والصلاحيات', icon: 'manage_accounts', color: 'linear-gradient(135deg,#0284c7,#2563eb)', perm: ['staff_view', 'staff_manage'] },
+  { id: 'settings', label: 'إعدادات النظام', icon: 'settings', color: 'linear-gradient(135deg,#0f172a,#3b82f6)', perm: ['settings_view_edit', 'templates_manage', 'backups_manage'] },
+  { id: 'profile', label: 'ملفي الشخصي وإعداداتي', icon: 'account_circle', color: 'linear-gradient(135deg,#8b5cf6,#ec4899)' },
+  { id: 'receipt', label: 'معاينة وطباعة الإيصال', icon: 'print', color: 'linear-gradient(135deg,#475569,#64748b)', perm: 'receipt_view' },
   { id: 'desktop', label: 'سطح المكتب فقط (بدون فتح نافذة تلقائياً)' },
 ];
 
@@ -227,6 +305,129 @@ const ACCENT_OPTIONS = [
 ];
 
 let PENDING_AVATAR = undefined;
+let USER_LAYOUT_OBJ = {};
+let USER_PERMITTED_ICON_APPS = [];
+
+function _parseUserLayout(user) {
+  let raw = (user && user.desktop_layout) || null;
+  if (!raw && window.top && window.top.CURRENT_USER && window.top.CURRENT_USER.desktop_layout) {
+    raw = window.top.CURRENT_USER.desktop_layout;
+  }
+  if (!raw) return {};
+  if (typeof raw === 'object') return { ...raw };
+  try {
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function _getPermittedIconApps(user) {
+  const mods = (window.UI_CONFIG && Array.isArray(window.UI_CONFIG.modules) && window.UI_CONFIG.modules.length)
+    ? window.UI_CONFIG.modules.map((m) => ({
+        id: m.key || m.id,
+        title: m.title,
+        icon: m.icon || 'apps',
+        color: m.color || 'linear-gradient(135deg,#2563eb,#0ea5e9)',
+        perm: m.perm,
+        hasTaskbar: true,
+      }))
+    : ALL_START_PAGES.filter((p) => p.id !== 'desktop').map((p) => ({
+        id: p.id,
+        title: p.label,
+        icon: p.icon || 'apps',
+        color: p.color || 'linear-gradient(135deg,#2563eb,#0ea5e9)',
+        perm: p.perm,
+        hasTaskbar: true,
+      }));
+  const permitted = mods.filter((a) => !a.perm || hasPerm(a.perm, user));
+  return [
+    ...permitted,
+    {
+      id: '_wp',
+      title: 'المظهر والخلفية',
+      icon: 'palette',
+      color: 'linear-gradient(135deg,#db2777,#ec4899)',
+      hasTaskbar: false,
+    },
+  ];
+}
+
+function renderIconsVisibilityControl(user) {
+  USER_PERMITTED_ICON_APPS = _getPermittedIconApps(user);
+  const hiddenDesk = new Set(Array.isArray(USER_LAYOUT_OBJ._hidden_desktop) ? USER_LAYOUT_OBJ._hidden_desktop : []);
+  const hiddenTask = new Set(Array.isArray(USER_LAYOUT_OBJ._hidden_taskbar) ? USER_LAYOUT_OBJ._hidden_taskbar : []);
+  const grid = $('pf-icons-visibility-grid');
+  if (!grid) return;
+
+  grid.innerHTML = USER_PERMITTED_ICON_APPS.map((a) => {
+    const deskChecked = !hiddenDesk.has(a.id);
+    const taskChecked = !hiddenTask.has(a.id);
+    return `
+      <div class="pf-icon-row-card bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm" style="background:${esc(a.color)}">
+            <span class="material-icons-round text-xl">${esc(a.icon)}</span>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-bold text-slate-800 dark:text-white truncate">${esc(a.title)}</div>
+            <div class="text-[11px] text-slate-500 truncate">${a.hasTaskbar ? 'سطح المكتب وشريط المهام' : 'أيقونة سطح المكتب'}</div>
+          </div>
+        </div>
+        <div class="pf-icon-Checks">
+          <label class="pf-chk-pill" title="إظهار أو إخفاء الأيقونة من سطح المكتب">
+            <input type="checkbox" data-vis-desk="${esc(a.id)}" ${deskChecked ? 'checked' : ''} onchange="onToggleUserIconVis('${esc(a.id)}', 'desktop', this.checked)"/>
+            <span>سطح المكتب</span>
+          </label>
+          ${a.hasTaskbar ? `
+          <label class="pf-chk-pill" title="إظهار أو إخفاء الأيقونة من شريط المهام السفلي">
+            <input type="checkbox" data-vis-dock="${esc(a.id)}" ${taskChecked ? 'checked' : ''} onchange="onToggleUserIconVis('${esc(a.id)}', 'taskbar', this.checked)"/>
+            <span>شريط المهام</span>
+          </label>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function _persistAndBroadcastIconPrefs(msg = 'تم حفظ وتحديث أيقونات سطح المكتب وشريط المهام لحسابك') {
+  const saved = await guard(() => api('user_pref_save', { desktop_layout: USER_LAYOUT_OBJ }));
+  if (saved && CURRENT_USER) {
+    CURRENT_USER.desktop_layout = saved.desktop_layout;
+  }
+  try {
+    if (window.top && window.top.TZOS && typeof window.top.TZOS.applyUserIconPrefs === 'function') {
+      window.top.TZOS.applyUserIconPrefs(USER_LAYOUT_OBJ);
+    }
+  } catch (e) {}
+  if (msg) toast(msg);
+}
+
+async function onToggleUserIconVis(appId, target, isVisible) {
+  const key = target === 'desktop' ? '_hidden_desktop' : '_hidden_taskbar';
+  const curSet = new Set(Array.isArray(USER_LAYOUT_OBJ[key]) ? USER_LAYOUT_OBJ[key] : []);
+  if (isVisible) curSet.delete(appId);
+  else curSet.add(appId);
+  USER_LAYOUT_OBJ[key] = Array.from(curSet);
+  await _persistAndBroadcastIconPrefs();
+}
+
+async function setAllIconsVisibility(desktopVis, taskbarVis) {
+  if (desktopVis === true) {
+    USER_LAYOUT_OBJ._hidden_desktop = [];
+  } else if (desktopVis === false) {
+    USER_LAYOUT_OBJ._hidden_desktop = USER_PERMITTED_ICON_APPS.map((a) => a.id);
+  }
+  if (taskbarVis === true) {
+    USER_LAYOUT_OBJ._hidden_taskbar = [];
+  } else if (taskbarVis === false) {
+    USER_LAYOUT_OBJ._hidden_taskbar = USER_PERMITTED_ICON_APPS.filter((a) => a.hasTaskbar).map((a) => a.id);
+  }
+  renderIconsVisibilityControl(CURRENT_USER);
+  await _persistAndBroadcastIconPrefs();
+}
 
 function compressAvatar(file, maxW = 240, maxH = 240, quality = 0.85) {
   return new Promise((resolve, reject) => {
@@ -287,6 +488,9 @@ function populateProfileUI(user) {
   $('pf-cur-pin').value = '';
   $('pf-new-pin').value = '';
   drawAvatarPreview(PENDING_AVATAR !== undefined ? PENDING_AVATAR : (user.avatar || ''), user.name);
+
+  USER_LAYOUT_OBJ = _parseUserLayout(user);
+  renderIconsVisibilityControl(user);
 
   const dynamicPages = (window.UI_CONFIG && Array.isArray(window.UI_CONFIG.modules) && window.UI_CONFIG.modules.length)
     ? [...window.UI_CONFIG.modules.map((m) => ({ id: m.key, label: m.title, perm: m.perm })), { id: 'desktop', label: 'سطح المكتب فقط (بدون فتح نافذة تلقائياً)' }]
@@ -422,6 +626,7 @@ $('btn-save-profile').addEventListener('click', async () => {
     start_page: $('pf-start-page').value,
     start_mode: $('pf-start-mode').value,
     card_size: +$('pf-card-size').value,
+    desktop_layout: USER_LAYOUT_OBJ,
   };
   if (PENDING_AVATAR !== undefined) {
     payload.avatar = PENDING_AVATAR;
@@ -432,11 +637,16 @@ $('btn-save-profile').addEventListener('click', async () => {
     PENDING_AVATAR = undefined;
     populateProfileUI(updated);
     try {
-      if (window.top && window.top.TZOS && typeof window.top.TZOS.refreshUserHeader === 'function') {
-        window.top.TZOS.refreshUserHeader(updated);
+      if (window.top && window.top.TZOS) {
+        if (typeof window.top.TZOS.refreshUserHeader === 'function') {
+          window.top.TZOS.refreshUserHeader(updated);
+        }
+        if (typeof window.top.TZOS.applyUserIconPrefs === 'function') {
+          window.top.TZOS.applyUserIconPrefs(USER_LAYOUT_OBJ);
+        }
       }
     } catch (e) {}
-    toast('تم حفظ بيانات ملفك الشخصي وإعدادات الدخول الخاصة بك بنجاح');
+    toast('تم حفظ بيانات ملفك الشخصي وإعدادات الأيقونات والدخول بنجاح');
   }
 });
 

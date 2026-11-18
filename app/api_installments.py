@@ -7,6 +7,7 @@ import webbrowser
 from decimal import Decimal, ROUND_HALF_UP
 
 import db
+import erp_hooks
 from api_common import (
     ApiError,
     _append_ledger_entry,
@@ -556,6 +557,9 @@ class InstallmentsMixin:
                     user_id=u["id"], user_name=u["name"], created_at=now_ts,
                 )
 
+            if sid and down_amt > 0:
+                erp_hooks.on_customer_payment(self, conn, v_cur.lastrowid, cid, down_amt, down_method, v_ref, shift_id=shift_id, user=u)
+            erp_hooks.on_installment_created(self, conn, plan_id, user=u)
             return {
                 "id": plan_id,
                 "plan_no": plan_no,
@@ -667,6 +671,7 @@ class InstallmentsMixin:
                 created_at=now_ts,
             )
 
+            erp_hooks.on_installment_paid(self, conn, pay_id, pid, plan["customer_id"], amt, method, receipt_no, shift_id=shift_id, user=u)
             return {
                 "payment_id": pay_id,
                 "receipt_no": receipt_no,
@@ -730,6 +735,7 @@ class InstallmentsMixin:
                 )
             else:
                 _refresh_customer_cache(conn, plan["customer_id"])
+            erp_hooks.on_installment_cancelled(self, conn, plan, user=u)
             return True
 
     def installment_whatsapp_reminder(self, plan_id, item_id=None, open_app=True):

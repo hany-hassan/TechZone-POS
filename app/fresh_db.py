@@ -63,6 +63,7 @@ def build_fresh_profile_db(
             dst.execute("PRAGMA foreign_keys=ON")
             dst.executescript(db.SCHEMA)
             db._ensure_schema_columns(dst)
+            db.seed_chart_of_accounts_if_empty(dst)
             for idx_sql in db._PERFORMANCE_INDEXES:
                 dst.execute(idx_sql)
             dst.execute("DELETE FROM settings")

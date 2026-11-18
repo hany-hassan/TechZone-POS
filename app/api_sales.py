@@ -10,6 +10,7 @@ import time
 from decimal import Decimal, ROUND_HALF_UP
 
 import db
+import erp_hooks
 from api_common import (
     ApiError,
     _FALLBACK_JPEG,
@@ -256,6 +257,7 @@ class SalesMixin:
                 "UPDATE shifts SET closed_at=?, counted_cash=?, expected_cash=?, diff=? WHERE id=?",
                 (db.now(), counted, expected, counted - expected, s["id"]),
             )
+            erp_hooks.on_shift_closed(self, conn, s["id"], counted - expected, user=u)
             res = dict(conn.execute("SELECT * FROM shifts WHERE id=?", (s["id"],)).fetchone())
         # أخذ نسخة احتياطية تلقائية لقاعدة البيانات عند إغلاق كل وردية
         try:
@@ -403,9 +405,9 @@ class SalesMixin:
             for p, qty, unit, serials in lines:
                 sid = serials[0] if serials else None
                 conn.execute(
-                    """INSERT INTO sale_items(sale_id, product_id, serial_id, name, qty, unit_price, line_total)
-                       VALUES(?,?,?,?,?,?,?)""",
-                    (sale_id, p["id"], sid, p["name"], qty, unit, unit * qty),
+                    """INSERT INTO sale_items(sale_id, product_id, serial_id, name, qty, unit_price, cost_unit, line_total)
+                       VALUES(?,?,?,?,?,?,?,?)""",
+                    (sale_id, p["id"], sid, p["name"], qty, unit, int(p["cost"] or 0), unit * qty),
                 )
                 if serials:
                     conn.execute(
@@ -441,6 +443,7 @@ class SalesMixin:
                     )
                 else:
                     _refresh_customer_cache(conn, customer_id)
+            erp_hooks.on_sale_created(self, conn, sale_id, user=u)
             return {"sale_id": sale_id, "invoice_no": invoice}
 
     def sale(self, id):
@@ -1158,5 +1161,24 @@ class SalesMixin:
                 ("returned" if not remaining else "partial_return", u["id"], u["name"], now_ts, full_log, s["id"]),
             )
             _sync_sale_ledger_delta(conn, s, prev_net_credit, user=u, reason_prefix="مرتجع فاتورة آجلة")
+            new_net_credit = _sale_net_credit(conn, s["id"])
+            ret_cost_row = conn.execute(
+                """SELECT COALESCE(SUM(sri.qty * COALESCE(NULLIF(si.cost_unit, 0), p.cost, 0)), 0) AS c
+                   FROM sale_return_items sri
+                   JOIN sale_items si ON si.id = sri.sale_item_id
+                   LEFT JOIN products p ON p.id = si.product_id
+                   WHERE sri.return_id=?""",
+                (cur.lastrowid,),
+            ).fetchone()
+            erp_hooks.on_sale_returned(
+                self,
+                conn,
+                sale_id=s["id"],
+                return_id=cur.lastrowid,
+                returned_amount=total,
+                returned_cost=int(ret_cost_row["c"] or 0) if ret_cost_row else 0,
+                credit_delta=max(0, prev_net_credit - new_net_credit),
+                user=u,
+            )
             return {"return_id": cur.lastrowid, "total": total}
 

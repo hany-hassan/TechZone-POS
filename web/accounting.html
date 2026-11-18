@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>المحاسبة العامة والمالية — تك زون</title>
+<link href="app.css" rel="stylesheet"/>
+<script>if(localStorage.getItem('tz-theme')==='dark')document.documentElement.classList.add('dark');</script>
+<style>
+  .coa-row-drag { cursor: grab; transition: background-color 0.15s ease, transform 0.1s ease; }
+  .coa-row-drag:active { cursor: grabbing; }
+  .coa-drop-target { outline: 2px dashed #0e6ba8 !important; background-color: rgba(14, 107, 168, 0.12) !important; }
+  @media print {
+    body * { visibility: hidden !important; }
+    #acc-print-area, #acc-print-area * { visibility: visible !important; }
+    #acc-print-area {
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      background: #ffffff !important;
+      color: #0f172a !important;
+      padding: 18px !important;
+      display: block !important;
+    }
+    .no-print { display: none !important; }
+  }
+</style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 font-arabic antialiased min-h-screen">
+<div id="shell" class="flex min-h-screen">
+  <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <!-- الشريط العلوي -->
+    <header class="h-16 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0 z-10">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-rose-600/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+          <span class="material-icons-round text-2xl">account_balance</span>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900 dark:text-white" data-label="module_accounting">المحاسبة العامة والمالية</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">القيد المزدوج الآلي، الخزائن والبنوك، المصروفات التشغيلية، شجرة الحسابات والقوائم المالية</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="btn-opening-wiz" onclick="openOpeningWizard()" class="px-3.5 py-2 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-1.5">
+          <span class="material-icons-round text-base" id="icon-opening-wiz">auto_fix_high</span>
+          <span id="lbl-opening-wiz">معالج الترصيد الافتتاحي</span>
+        </button>
+        <button onclick="openExpenseModal()" class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5">
+          <span class="material-icons-round text-base">receipt</span>
+          <span>+ تسجيل مصروف</span>
+        </button>
+        <button onclick="openManualJournalModal()" class="px-3.5 py-2 rounded-xl bg-primary hover:bg-primary-dark text-white text-xs font-bold flex items-center gap-1.5">
+          <span class="material-icons-round text-base">post_add</span>
+          <span>+ قيد يومية يدوي</span>
+        </button>
+        <button onclick="printActiveAccountingTab()" class="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold flex items-center gap-1.5" title="طباعة القسم المعروض حالياً A4">
+          <span class="material-icons-round text-base">print</span>
+          <span>طباعة القسم الحالي</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-6 space-y-5">
+      <!-- التبويبات الـ 6 الرئيسية -->
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <button data-tab="overview" onclick="switchAccTab('overview')" class="acc-tab px-4 py-2 rounded-xl text-xs font-bold bg-primary text-white">1. لوحة المحاسبة السريعة</button>
+          <button data-tab="expenses" onclick="switchAccTab('expenses')" class="acc-tab px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">2. المصروفات التشغيلية</button>
+          <button data-tab="treasury" onclick="switchAccTab('treasury')" class="acc-tab px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">3. الخزائن والتحويلات</button>
+          <button data-tab="coa" onclick="switchAccTab('coa')" class="acc-tab px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">4. شجرة الحسابات (COA)</button>
+          <button data-tab="journal" onclick="switchAccTab('journal')" class="acc-tab px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">5. دفتر اليومية والقيود</button>
+          <button data-tab="statements" onclick="switchAccTab('statements')" class="acc-tab px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">6. القوائم والتقارير المالية</button>
+        </div>
+      </div>
+
+      <!-- 1) تبويب لوحة المحاسبة السريعة -->
+      <section id="pane-overview" class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-slate-700 dark:text-slate-200">ملخص السيولة والأداء المحاسبي وأرصدة الخزائن</h2>
+          <button onclick="printAccountingSection('ملخص لوحة المحاسبة السريعة وأرصدة الخزائن', 'pane-overview')" class="no-print px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold flex items-center gap-1">
+            <span class="material-icons-round text-sm">print</span><span>طباعة الملخص A4</span>
+          </button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div class="text-xs text-slate-500">إجمالي السيولة بالخزائن والبنوك</div>
+            <div id="acc-kpi-liq" class="text-xl font-bold font-num text-emerald-600 mt-1">0.00</div>
+          </div>
+          <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div class="text-xs text-slate-500">مصروفات الشهر الحالي</div>
+            <div id="acc-kpi-exp" class="text-xl font-bold font-num text-rose-600 mt-1">0.00</div>
+          </div>
+          <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div class="text-xs text-slate-500">صافي الربح المحاسبي (الشهر)</div>
+            <div id="acc-kpi-net" class="text-xl font-bold font-num text-primary mt-1">0.00</div>
+          </div>
+          <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div class="text-xs text-slate-500">حالة توازن الدفتر العام</div>
+            <div id="acc-kpi-bal" class="text-sm font-bold text-emerald-600 mt-1.5">متوازن 100% (Dr = Cr)</div>
+          </div>
+        </div>
+        <div id="overview-treasuries" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+      </section>
+
+      <!-- 2) تبويب المصروفات التشغيلية -->
+      <section id="pane-expenses" class="hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="text-sm font-bold">سجل المصروفات التشغيلية والإدارية</div>
+          <div class="flex items-center gap-2 no-print">
+            <button onclick="openExpenseModal()" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold">+ تسجيل مصروف</button>
+            <button onclick="printAccountingSection('سجل المصروفات التشغيلية والإدارية', 'pane-expenses')" class="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold flex items-center gap-1">
+              <span class="material-icons-round text-sm">print</span><span>طباعة سجل المصروفات A4</span>
+            </button>
+          </div>
+        </div>
+        <div class="bg-surface-light dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+              <tr>
+                <th class="p-3">رقم السند</th>
+                <th class="p-3">التاريخ</th>
+                <th class="p-3">التصنيف</th>
+                <th class="p-3">الخزنة الدافعة</th>
+                <th class="p-3">المبلغ</th>
+                <th class="p-3">المستفيد / البيان</th>
+                <th class="p-3">القيد المحاسبي</th>
+                <th class="p-3 no-print">طباعة</th>
+              </tr>
+            </thead>
+            <tbody id="expenses-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 3) تبويب الخزائن والتحويلات -->
+      <section id="pane-treasury" class="hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-sm font-bold">إدارة الخزائن والبنوك والتحويلات الداخلية</h3>
+          <button onclick="printAccountingSection('تقرير الخزائن والتحويلات النقدية والبنكية', 'pane-treasury')" class="no-print px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold flex items-center gap-1">
+            <span class="material-icons-round text-sm">print</span><span>طباعة التحويلات A4</span>
+          </button>
+        </div>
+        <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 no-print">
+          <h3 class="text-xs font-bold text-slate-600 dark:text-slate-300">تحويل سيولة بين الخزائن والبنوك (مثال: توريد من درج الكاشير للخزنة الرئيسية أو البنك)</h3>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
+            <select id="trf-from" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"></select>
+            <select id="trf-to" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"></select>
+            <input id="trf-amount" type="number" step="0.01" placeholder="المبلغ (ج.م)" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/>
+            <input id="trf-notes" type="text" placeholder="البيان / رقم المرجع" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"/>
+            <button onclick="submitTreasuryTransfer()" class="px-4 py-2 rounded-xl bg-primary text-white font-bold">تنفيذ التحويل</button>
+          </div>
+        </div>
+        <div class="bg-surface-light dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+              <tr>
+                <th class="p-3">رقم التحويل</th>
+                <th class="p-3">التاريخ</th>
+                <th class="p-3">من خزنة</th>
+                <th class="p-3">إلى خزنة</th>
+                <th class="p-3">المبلغ</th>
+                <th class="p-3">البيان</th>
+                <th class="p-3">القيد</th>
+              </tr>
+            </thead>
+            <tbody id="transfers-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 4) تبويب شجرة الحسابات (COA) مع الإضافة والتعديل والحذف والـ Drag & Drop -->
+      <section id="pane-coa" class="hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-bold">شجرة الحسابات (Chart of Accounts)</h3>
+            <p class="text-[11px] text-slate-500">اسحب أي حساب وأفلته فوق حساب تجميعي (رئيسي) لنقله بسهولة، أو استخدم أزرار الإضافة والتعديل والحذف (للحسابات التي ليس عليها حركات).</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 no-print">
+            <input id="coa-search" type="text" oninput="renderCoaRows()" placeholder="بحث بالكود أو اسم الحساب..." class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs w-56"/>
+            <button onclick="openAccountModal(null)" class="px-3.5 py-2 rounded-xl bg-primary text-white text-xs font-bold flex items-center gap-1">
+              <span class="material-icons-round text-sm">add</span><span>+ إضافة حساب جديد</span>
+            </button>
+            <button onclick="printAccountingSection('دليل شجرة الحسابات (Chart of Accounts)', 'pane-coa')" class="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold flex items-center gap-1">
+              <span class="material-icons-round text-sm">print</span><span>طباعة شجرة الحسابات A4</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- منطقة إفلات لنقل الحساب إلى المستوى الجذري (بدون أب) -->
+        <div id="coa-root-dropzone"
+             ondragover="onCoaDragOver(event, null)"
+             ondragleave="onCoaDragLeave(event)"
+             ondrop="onCoaDrop(event, null)"
+             class="no-print border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-center text-xs text-slate-500 hover:border-primary transition-colors">
+          <span class="material-icons-round text-sm align-middle ml-1">open_with</span>
+          اسحب أي حساب وأفلته هنا إذا أردت جعله حساباً رئيسياً في المستوى الجذري الأول (بدون حساب أب)
+        </div>
+
+        <div class="bg-surface-light dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+              <tr>
+                <th class="p-3">كود الحساب</th>
+                <th class="p-3">اسم الحساب</th>
+                <th class="p-3">النوع</th>
+                <th class="p-3">الطبيعة</th>
+                <th class="p-3">الحركات</th>
+                <th class="p-3">إجمالي مدين</th>
+                <th class="p-3">إجمالي دائن</th>
+                <th class="p-3">الرصيد الحالي</th>
+                <th class="p-3 no-print">إجراءات التحكم</th>
+              </tr>
+            </thead>
+            <tbody id="coa-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 5) تبويب دفتر اليومية والقيود -->
+      <section id="pane-journal" class="hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-2 no-print">
+            <input id="je-q" type="text" placeholder="بحث برقم القيد أو الفاتورة أو البيان..." class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs w-72"/>
+            <select id="je-filter-source" onchange="loadJournalEntries()" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs">
+              <option value="">كل القيود اليومية</option>
+              <option value="invoices_only">قيود الفواتير والسندات المالية فقط (بدون قيود تكلفة المخزون COGS)</option>
+              <option value="cogs_only">قيود تكلفة البضاعة المباعة (COGS) فقط</option>
+              <option value="manual">القيود اليدوية فقط</option>
+              <option value="opening">القيود الافتتاحية فقط</option>
+            </select>
+            <button onclick="loadJournalEntries()" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">بحث وتحديث</button>
+          </div>
+          <button onclick="printAccountingSection('دفتر اليومية العام والقيود المحاسبية', 'pane-journal')" class="no-print px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold flex items-center gap-1">
+            <span class="material-icons-round text-sm">print</span><span>طباعة دفتر اليومية A4</span>
+          </button>
+        </div>
+        <div class="bg-surface-light dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500">
+              <tr>
+                <th class="p-3">رقم القيد</th>
+                <th class="p-3">التاريخ</th>
+                <th class="p-3">النوع</th>
+                <th class="p-3">المرجع</th>
+                <th class="p-3">البيان</th>
+                <th class="p-3">قيمة القيد (مدين)</th>
+                <th class="p-3">قيمة القيد (دائن)</th>
+                <th class="p-3">الحالة</th>
+                <th class="p-3 no-print">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="je-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 6) تبويب القوائم والتقارير المالية -->
+      <section id="pane-statements" class="hidden space-y-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 no-print">
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="loadTrialBalance()" class="px-3.5 py-2 rounded-xl bg-primary text-white text-xs font-bold">ميزان المراجعة</button>
+            <button onclick="loadIncomeStatement()" class="px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold">قائمة الدخل (P&L)</button>
+            <button onclick="loadBalanceSheet()" class="px-3.5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold">الميزانية العمومية</button>
+            <button onclick="loadTaxReport()" class="px-3.5 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold">إقرار الضرائب (VAT & WHT)</button>
+            <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-xl">
+              <span class="text-xs font-bold text-slate-500">دفتر أستاذ حساب:</span>
+              <select id="gl-account-select" onchange="if(this.value) loadAccountLedger(this.value)" class="bg-transparent text-xs font-bold py-1 focus:outline-none"></select>
+            </div>
+          </div>
+          <button onclick="printAccountingSection('القوائم والتقارير المالية الرسمية', 'statement-stage')" class="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold flex items-center gap-1">
+            <span class="material-icons-round text-sm">print</span><span>طباعة القائمة المعروضة A4</span>
+          </button>
+        </div>
+        <div id="statement-stage" class="bg-surface-light dark:bg-surface-dark p-6 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- نافذة إضافة / تعديل حساب في شجرة الحسابات -->
+<div id="modal-account-form" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+      <h3 id="acc-form-title" class="text-base font-bold">إضافة حساب محاسبي جديد</h3>
+      <button onclick="closeAccModal('modal-account-form')" class="text-slate-400 hover:text-slate-600"><span class="material-icons-round">close</span></button>
+    </div>
+    <input type="hidden" id="acc-f-id"/>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      <div>
+        <label class="block font-bold mb-1">كود الحساب *</label>
+        <input id="acc-f-code" type="text" placeholder="مثال: 1115 أو 5290" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-num"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">اسم الحساب *</label>
+        <input id="acc-f-name" type="text" placeholder="اسم الحساب بالعربية" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block font-bold mb-1">الحساب الأب (التجميعي)</label>
+        <select id="acc-f-parent" onchange="onParentAccountChange()" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"></select>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">نوع الحساب *</label>
+        <select id="acc-f-type" onchange="onAccountTypeChange()" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <option value="asset">أصول (Asset)</option>
+          <option value="liability">التزامات / خصوم (Liability)</option>
+          <option value="equity">حقوق ملكية (Equity)</option>
+          <option value="revenue">إيرادات (Revenue)</option>
+          <option value="expense">مصروفات وتكاليف (Expense)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">الطبيعة المحاسبية *</label>
+        <select id="acc-f-normal" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <option value="debit">مدين (Debit)</option>
+          <option value="credit">دائن (Credit)</option>
+        </select>
+      </div>
+      <div class="sm:col-span-2 pt-1">
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input id="acc-f-group" type="checkbox" class="rounded border-slate-300"/>
+          <span class="font-bold">حساب رئيسي تجميعي (تندرج تحته حسابات فرعية ولا يُقيَّد عليه مباشرة)</span>
+        </label>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+      <button onclick="closeAccModal('modal-account-form')" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold">إلغاء</button>
+      <button onclick="submitAccountForm()" class="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold">حفظ الحساب</button>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة عرض وطباعة تفاصيل قيد اليومية المفرد -->
+<div id="modal-je-view" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+      <h3 id="jev-title" class="text-base font-bold">تفاصيل قيد اليومية</h3>
+      <div class="flex items-center gap-2">
+        <button onclick="printAccountingSection(document.getElementById('jev-title').textContent, 'jev-printable-body')" class="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-bold flex items-center gap-1">
+          <span class="material-icons-round text-sm">print</span><span>طباعة القيد A4</span>
+        </button>
+        <button onclick="closeAccModal('modal-je-view')" class="text-slate-400 hover:text-slate-600"><span class="material-icons-round">close</span></button>
+      </div>
+    </div>
+    <div id="jev-printable-body" class="space-y-3 text-xs"></div>
+  </div>
+</div>
+
+<!-- نافذة تسجيل مصروف -->
+<div id="modal-expense" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+      <h3 class="text-base font-bold">تسجيل مصروف تشغيلي</h3>
+      <button onclick="closeAccModal('modal-expense')" class="text-slate-400 hover:text-slate-600"><span class="material-icons-round">close</span></button>
+    </div>
+    <div class="space-y-3 text-xs">
+      <div>
+        <label class="block font-bold mb-1">تصنيف المصروف *</label>
+        <select id="exp-cat" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"></select>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">المبلغ (ج.م) *</label>
+        <input id="exp-amount" type="number" step="0.01" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">الخزنة الدافعة</label>
+        <select id="exp-treasury" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"></select>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">البيان / المستفيد</label>
+        <input id="exp-notes" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="closeAccModal('modal-expense')" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold">إلغاء</button>
+      <button onclick="submitExpense()" class="px-5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold">حفظ وصرف</button>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة قيد يومية يدوي -->
+<div id="modal-manual-je" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+      <h3 class="text-base font-bold">إنشاء قيد يومية يدوي متوازن</h3>
+      <button onclick="closeAccModal('modal-manual-je')" class="text-slate-400 hover:text-slate-600"><span class="material-icons-round">close</span></button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      <input id="mje-memo" type="text" placeholder="بيان القيد اليومي *" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      <input id="mje-date" type="date" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+    </div>
+    <div id="mje-lines" class="space-y-2 text-xs"></div>
+    <div class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+      <div id="mje-diff-indicator" class="font-bold text-emerald-600">الفرق = 0.00 (متوازن)</div>
+      <div class="flex gap-2">
+        <button onclick="addManualJeLine()" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 font-bold">+ سطر</button>
+        <button onclick="submitManualJe()" class="px-5 py-2 rounded-xl bg-primary text-white font-bold">ترحيل القيد</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة معالج الترصيد الافتتاحي الآلي (تتحقق تلقائياً من وجود معالجة سابقة) -->
+<div id="modal-opening-wiz" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+      <h3 class="text-base font-bold">معالج الترصيد الافتتاحي الآلي</h3>
+      <button onclick="closeAccModal('modal-opening-wiz')" class="text-slate-400 hover:text-slate-600"><span class="material-icons-round">close</span></button>
+    </div>
+    <div id="wiz-already-done-banner" class="hidden p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/25 border border-emerald-300 dark:border-emerald-700 text-xs space-y-2"></div>
+    <div id="wiz-preview-box" class="space-y-2 text-xs bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl"></div>
+    <div id="wiz-inputs-box" class="grid grid-cols-2 gap-3 text-xs">
+      <div>
+        <label class="block font-bold mb-1">رصيد الخزنة الرئيسية الحالي (ج.م)</label>
+        <input id="wiz-cash-main" type="number" step="0.01" value="0" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+      <div>
+        <label class="block font-bold mb-1">رصيد البنك / المحفظة الحالي (ج.م)</label>
+        <input id="wiz-bank-main" type="number" step="0.01" value="0" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="closeAccModal('modal-opening-wiz')" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold">إغلاق</button>
+      <button id="btn-wiz-submit" onclick="submitOpeningWizard()" class="px-5 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold">توليد القيد الافتتاحي المتوازن</button>
+    </div>
+  </div>
+</div>
+
+<!-- حاوية الطباعة A4 المخصصة لقسم المحاسبة -->
+<div id="acc-print-area" class="hidden"></div>
+
+<script src="app.js"></script>
+<script>
+let ALL_ACCOUNTS = [];
+let LEAF_ACCOUNTS = [];
+let MJE_ROWS = [];
+let ACTIVE_ACC_TAB = 'overview';
+let DRAGGED_ACCOUNT_ID = null;
+
+const TYPE_AR = {
+  asset: 'أصول',
+  liability: 'التزامات',
+  equity: 'حقوق ملكية',
+  revenue: 'إيرادات',
+  expense: 'مصروفات وتكاليف',
+};
+
+const KIND_AR = {
+  auto: 'قيد فاتورة / سند آلي',
+  manual: 'قيد يومية يدوي',
+  opening: 'قيد رصيد افتتاحي',
+  reversal: 'قيد عكسي',
+};
+
+function closeAccModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.replace('flex', 'hidden');
+}
+
+function updateOpeningButtonState(hasOpening, openingEntry) {
+  const btn = document.getElementById('btn-opening-wiz');
+  const lbl = document.getElementById('lbl-opening-wiz');
+  const icon = document.getElementById('icon-opening-wiz');
+  if (!btn || !lbl || !icon) return;
+  if (hasOpening && openingEntry) {
+    btn.className = 'px-3.5 py-2 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5';
+    icon.textContent = 'verified';
+    lbl.textContent = `تم الترصيد الافتتاحي (${openingEntry.entry_no})`;
+  } else {
+    btn.className = 'px-3.5 py-2 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-1.5';
+    icon.textContent = 'auto_fix_high';
+    lbl.textContent = 'معالج الترصيد الافتتاحي';
+  }
+}
+
+function switchAccTab(tab) {
+  ACTIVE_ACC_TAB = tab;
+  ['overview', 'expenses', 'treasury', 'coa', 'journal', 'statements'].forEach((t) => {
+    const p = document.getElementById('pane-' + t);
+    if (p) p.classList.toggle('hidden', t !== tab);
+  });
+  document.querySelectorAll('.acc-tab').forEach((b) => {
+    const active = b.dataset.tab === tab;
+    b.className = 'acc-tab px-4 py-2 rounded-xl text-xs font-bold ' + (active ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300');
+  });
+  if (tab === 'overview') loadAccDashboard();
+  if (tab === 'expenses') loadExpenses();
+  if (tab === 'treasury') loadTreasuryTab();
+  if (tab === 'coa') loadCoaTab();
+  if (tab === 'journal') loadJournalEntries();
+  if (tab === 'statements') {
+    populateGlAccountSelect();
+    loadTrialBalance();
+  }
+}
+
+async function loadAccDashboard() {
+  const d = await guard(() => api('accounting_dashboard'));
+  if (!d) return;
+  document.getElementById('acc-kpi-liq').textContent = money(d.total_liquidity || 0);
+  document.getElementById('acc-kpi-exp').textContent = money(d.month_expenses_total || 0);
+  document.getElementById('acc-kpi-net').textContent = money(d.month_net_profit || 0);
+  document.getElementById('acc-kpi-bal').textContent = d.is_balanced ? 'متوازن 100% (Dr = Cr)' : 'تنبيه: غير متوازن!';
+  updateOpeningButtonState(d.has_opening_entry, d.opening_entry);
+  document.getElementById('overview-treasuries').innerHTML = (d.treasuries || []).map((t) => `
+    <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+      <div class="text-xs font-bold text-slate-500">${esc(t.name)} (${esc(t.account_code)})</div>
+      <div class="text-lg font-bold font-num mt-1">${money(t.balance)}</div>
+    </div>
+  `).join('');
+}
+
+async function loadExpenses() {
+  const res = await guard(() => api('expenses_list', {}));
+  if (!res) return;
+  const tbody = document.getElementById('expenses-tbody');
+  if (!res.rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="p-6 text-center text-slate-400">لا توجد مصروفات مسجلة</td></tr>';
+    return;
+  }
+  tbody.innerHTML = res.rows.map((e) => `
+    <tr>
+      <td class="p-3 font-bold font-num">${esc(e.expense_no)}</td>
+      <td class="p-3 font-num">${esc(e.expense_date)}</td>
+      <td class="p-3 font-bold">${esc(e.category_name)}</td>
+      <td class="p-3">${esc(e.treasury_name)}</td>
+      <td class="p-3 font-bold font-num text-rose-600">${money(e.amount)}</td>
+      <td class="p-3">${esc(e.notes || e.payee || '—')}</td>
+      <td class="p-3 font-num text-primary">
+        ${e.journal_entry_id ? `<button onclick="viewJournalEntry(${e.journal_entry_id})" class="underline font-bold">${esc(e.entry_no || '')}</button>` : esc(e.entry_no || '')}
+      </td>
+      <td class="p-3 no-print">
+        ${e.journal_entry_id ? `<button onclick="viewJournalEntry(${e.journal_entry_id})" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold">عرض وطباعة السند</button>` : '—'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function openExpenseModal() {
+  const [cats, trs] = await Promise.all([
+    guard(() => api('expense_categories_list')),
+    guard(() => api('treasury_list')),
+  ]);
+  if (cats) {
+    document.getElementById('exp-cat').innerHTML = cats.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+  if (trs) {
+    document.getElementById('exp-treasury').innerHTML = trs.map((t) => `<option value="${t.id}">${esc(t.name)} (${money(t.balance)})</option>`).join('');
+  }
+  document.getElementById('exp-amount').value = '';
+  document.getElementById('exp-notes').value = '';
+  document.getElementById('modal-expense').classList.replace('hidden', 'flex');
+}
+
+async function submitExpense() {
+  const res = await guard(() => api('expense_create', {
+    category_id: document.getElementById('exp-cat').value,
+    amount: document.getElementById('exp-amount').value,
+    treasury_id: document.getElementById('exp-treasury').value,
+    notes: document.getElementById('exp-notes').value,
+  }));
+  if (res) {
+    closeAccModal('modal-expense');
+    toast(`تم تسجيل المصروف (${res.expense_no}) وترحيل القيد (${res.entry_no})`);
+    loadAccDashboard();
+    loadExpenses();
+  }
+}
+
+async function loadTreasuryTab() {
+  const [trs, list] = await Promise.all([
+    guard(() => api('treasury_list')),
+    guard(() => api('treasury_transfers_list')),
+  ]);
+  if (trs) {
+    const opts = trs.map((t) => `<option value="${t.id}">${esc(t.name)} (${money(t.balance)})</option>`).join('');
+    document.getElementById('trf-from').innerHTML = opts;
+    document.getElementById('trf-to').innerHTML = opts;
+    if (trs.length > 1) document.getElementById('trf-to').value = trs[1].id;
+  }
+  const tbody = document.getElementById('transfers-tbody');
+  if (list && list.length) {
+    tbody.innerHTML = list.map((r) => `
+      <tr>
+        <td class="p-3 font-bold font-num">${esc(r.transfer_no)}</td>
+        <td class="p-3 font-num">${esc(r.transfer_date)}</td>
+        <td class="p-3 font-bold">${esc(r.from_name)}</td>
+        <td class="p-3 font-bold">${esc(r.to_name)}</td>
+        <td class="p-3 font-bold font-num text-emerald-600">${money(r.amount)}</td>
+        <td class="p-3">${esc(r.notes || '—')}</td>
+        <td class="p-3 font-num text-primary">
+          ${r.journal_entry_id ? `<button onclick="viewJournalEntry(${r.journal_entry_id})" class="underline font-bold">${esc(r.entry_no || '')}</button>` : esc(r.entry_no || '')}
+        </td>
+      </tr>
+    `).join('');
+  } else {
+    tbody.innerHTML = '<tr><td colspan="7" class="p-5 text-center text-slate-400">لا توجد تحويلات سابقة</td></tr>';
+  }
+}
+
+async function submitTreasuryTransfer() {
+  const res = await guard(() => api('treasury_transfer_create', {
+    from_treasury_id: document.getElementById('trf-from').value,
+    to_treasury_id: document.getElementById('trf-to').value,
+    amount: document.getElementById('trf-amount').value,
+    notes: document.getElementById('trf-notes').value,
+  }));
+  if (res) {
+    toast(`تم تنفيذ التحويل (${res.transfer_no})`);
+    document.getElementById('trf-amount').value = '';
+    document.getElementById('trf-notes').value = '';
+    loadAccDashboard();
+    loadTreasuryTab();
+  }
+}
+
+/* ==================== شجرة الحسابات (إضافة / تعديل / حذف / Drag & Drop) ==================== */
+async function loadCoaTab() {
+  const rows = await guard(() => api('accounts_tree'));
+  if (!rows) return;
+  ALL_ACCOUNTS = rows;
+  LEAF_ACCOUNTS = rows.filter((a) => !a.is_group);
+  renderCoaRows();
+}
+
+function renderCoaRows() {
+  const q = (document.getElementById('coa-search')?.value || '').trim().toLowerCase();
+  const filtered = q
+    ? ALL_ACCOUNTS.filter((a) => String(a.code).toLowerCase().includes(q) || String(a.name).toLowerCase().includes(q))
+    : ALL_ACCOUNTS;
+
+  document.getElementById('coa-tbody').innerHTML = filtered.map((a) => {
+    const isGroup = !!a.is_group;
+    const indent = Math.max(0, ((a.level || 1) - 1) * 18);
+    const delReason = a.is_system
+      ? 'حساب نظامي أساسي محمي'
+      : (a.children_count > 0 ? 'يحتوي على حسابات فرعية' : (a.lines_count > 0 ? 'عليه حركات وقيود محاسبية' : 'حذف الحساب'));
+    return `
+      <tr draggable="true"
+          ondragstart="onCoaDragStart(event, ${a.id})"
+          ${isGroup ? `ondragover="onCoaDragOver(event, ${a.id})" ondragleave="onCoaDragLeave(event)" ondrop="onCoaDrop(event, ${a.id})"` : ''}
+          class="coa-row-drag ${isGroup ? 'bg-slate-50/90 dark:bg-slate-800/70 font-bold' : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/30'}">
+        <td class="p-3 font-num whitespace-nowrap" style="padding-right:${12 + indent}px">
+          <span class="material-icons-round text-xs text-slate-400 align-middle ml-1">${isGroup ? 'folder' : 'description'}</span>
+          ${esc(a.code)}
+        </td>
+        <td class="p-3">
+          ${esc(a.name)}
+          ${a.is_system ? '<span class="mr-1 px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[10px] text-slate-600 dark:text-slate-300">نظامي</span>' : ''}
+        </td>
+        <td class="p-3">${esc(TYPE_AR[a.type] || a.type)}</td>
+        <td class="p-3">${a.normal_balance === 'debit' ? 'مدين' : 'دائن'}</td>
+        <td class="p-3 font-num">${n(a.lines_count || 0)}</td>
+        <td class="p-3 font-num">${money(a.debit_total)}</td>
+        <td class="p-3 font-num">${money(a.credit_total)}</td>
+        <td class="p-3 font-num font-bold ${a.balance < 0 ? 'text-rose-600' : 'text-emerald-600'}">${money(a.balance)}</td>
+        <td class="p-3 no-print whitespace-nowrap">
+          <div class="flex items-center gap-1">
+            ${isGroup ? `<button onclick="openAccountModal(null, ${a.id})" class="px-2 py-1 rounded-lg bg-primary/10 text-primary text-[11px] font-bold" title="إضافة حساب فرعي تحت هذا الحساب">+ فرعي</button>` : `<button onclick="openLedgerFromCoa(${a.id})" class="px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold" title="عرض كشف حركة الحساب">كشف حساب</button>`}
+            <button onclick="openAccountModal(${a.id})" class="px-2 py-1 rounded-lg bg-slate-200/70 dark:bg-slate-700 text-[11px] font-bold" title="تعديل بيانات الحساب">تعديل</button>
+            ${a.can_delete
+              ? `<button onclick="deleteAccount(${a.id})" class="px-2 py-1 rounded-lg bg-rose-600/10 text-rose-600 text-[11px] font-bold" title="حذف الحساب">حذف</button>`
+              : `<button disabled class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 text-[11px] cursor-not-allowed" title="${esc(delReason)}">حذف</button>`
+            }
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function onCoaDragStart(ev, accountId) {
+  DRAGGED_ACCOUNT_ID = accountId;
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('text/plain', String(accountId));
+}
+
+function onCoaDragOver(ev, targetParentId) {
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+  ev.currentTarget.classList.add('coa-drop-target');
+}
+
+function onCoaDragLeave(ev) {
+  ev.currentTarget.classList.remove('coa-drop-target');
+}
+
+async function onCoaDrop(ev, newParentId) {
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('coa-drop-target');
+  const accId = DRAGGED_ACCOUNT_ID || parseInt(ev.dataTransfer.getData('text/plain'), 10);
+  DRAGGED_ACCOUNT_ID = null;
+  if (!accId || accId === newParentId) return;
+  const res = await guard(() => api('account_move', {
+    account_id: accId,
+    new_parent_id: newParentId,
+  }));
+  if (res) {
+    toast('تم نقل الحساب وتحديث هيكل وأرصدة شجرة الحسابات');
+    await loadCoaTab();
+    await loadAccDashboard();
+  }
+}
+
+async function openAccountModal(editId = null, presetParentId = null) {
+  if (!ALL_ACCOUNTS.length) {
+    const rows = await guard(() => api('accounts_tree'));
+    if (rows) ALL_ACCOUNTS = rows;
+  }
+  const groups = ALL_ACCOUNTS.filter((a) => a.is_group && a.id !== editId);
+  const parentSel = document.getElementById('acc-f-parent');
+  parentSel.innerHTML = `<option value="">— حساب رئيسي في المستوى الجذري (بدون أب) —</option>` +
+    groups.map((g) => `<option value="${g.id}">${esc(g.code)} — ${esc(g.name)}</option>`).join('');
+
+  if (editId) {
+    const acc = ALL_ACCOUNTS.find((a) => a.id === editId);
+    if (!acc) return;
+    document.getElementById('acc-form-title').textContent = `تعديل الحساب (${acc.code} - ${acc.name})`;
+    document.getElementById('acc-f-id').value = acc.id;
+    document.getElementById('acc-f-code').value = acc.code;
+    document.getElementById('acc-f-name').value = acc.name;
+    parentSel.value = acc.parent_id || '';
+    document.getElementById('acc-f-type').value = acc.type;
+    document.getElementById('acc-f-normal').value = acc.normal_balance;
+    document.getElementById('acc-f-group').checked = !!acc.is_group;
+  } else {
+    document.getElementById('acc-form-title').textContent = 'إضافة حساب محاسبي جديد';
+    document.getElementById('acc-f-id').value = '';
+    document.getElementById('acc-f-name').value = '';
+    document.getElementById('acc-f-group').checked = false;
+    parentSel.value = presetParentId || '';
+    if (presetParentId) {
+      onParentAccountChange();
+    } else {
+      document.getElementById('acc-f-code').value = '';
+      document.getElementById('acc-f-type').value = 'asset';
+      document.getElementById('acc-f-normal').value = 'debit';
+    }
+  }
+  document.getElementById('modal-account-form').classList.replace('hidden', 'flex');
+}
+
+function onParentAccountChange() {
+  const pid = parseInt(document.getElementById('acc-f-parent').value, 10);
+  if (!pid) return;
+  const parent = ALL_ACCOUNTS.find((a) => a.id === pid);
+  if (!parent) return;
+  document.getElementById('acc-f-type').value = parent.type;
+  document.getElementById('acc-f-normal').value = parent.normal_balance;
+  const editId = document.getElementById('acc-f-id').value;
+  if (!editId) {
+    const children = ALL_ACCOUNTS.filter((a) => a.parent_id === pid);
+    const maxCode = children.reduce((m, c) => Math.max(m, parseInt(c.code, 10) || 0), 0);
+    const pCode = parseInt(parent.code, 10) || 100;
+    document.getElementById('acc-f-code').value = maxCode ? String(maxCode + 1) : String(pCode * 10 + 1);
+  }
+}
+
+function onAccountTypeChange() {
+  const t = document.getElementById('acc-f-type').value;
+  document.getElementById('acc-f-normal').value = (t === 'asset' || t === 'expense') ? 'debit' : 'credit';
+}
+
+async function submitAccountForm() {
+  const idVal = document.getElementById('acc-f-id').value;
+  const parentVal = document.getElementById('acc-f-parent').value;
+  const payload = {
+    id: idVal ? parseInt(idVal, 10) : null,
+    code: document.getElementById('acc-f-code').value.trim(),
+    name: document.getElementById('acc-f-name').value.trim(),
+    parent_id: parentVal ? parseInt(parentVal, 10) : null,
+    type: document.getElementById('acc-f-type').value,
+    normal_balance: document.getElementById('acc-f-normal').value,
+    is_group: document.getElementById('acc-f-group').checked ? 1 : 0,
+  };
+  const res = await guard(() => api('account_save', payload));
+  if (res) {
+    closeAccModal('modal-account-form');
+    toast(idVal ? 'تم تحديث بيانات الحساب بنجاح' : 'تمت إضافة الحساب الجديد إلى شجرة الحسابات');
+    await loadCoaTab();
+    await loadAccDashboard();
+  }
+}
+
+async function deleteAccount(id) {
+  const acc = ALL_ACCOUNTS.find((a) => a.id === id);
+  if (!acc) return;
+  if (!confirm(`هل أنت متأكد من حذف الحساب (${acc.code} - ${acc.name}) نهائياً؟`)) return;
+  const res = await guard(() => api('account_delete', { id }));
+  if (res) {
+    toast('تم حذف الحساب من شجرة الحسابات');
+    await loadCoaTab();
+  }
+}
+
+function openLedgerFromCoa(accountId) {
+  switchAccTab('statements');
+  setTimeout(() => {
+    const sel = document.getElementById('gl-account-select');
+    if (sel) sel.value = String(accountId);
+    loadAccountLedger(accountId);
+  }, 80);
+}
+
+/* ==================== دفتر اليومية والقيود ==================== */
+async function loadJournalEntries() {
+  const q = document.getElementById('je-q').value.trim();
+  const filterMode = document.getElementById('je-filter-source')?.value || '';
+  const kindParam = (filterMode === 'manual' || filterMode === 'opening') ? filterMode : null;
+  const res = await guard(() => api('journal_entries_list', { q, kind: kindParam, limit: 250 }));
+  if (!res) return;
+  let rows = res.rows || [];
+  if (filterMode === 'invoices_only') {
+    rows = rows.filter((r) => !String(r.source_table || '').endsWith('_cogs'));
+  } else if (filterMode === 'cogs_only') {
+    rows = rows.filter((r) => String(r.source_table || '').endsWith('_cogs'));
+  }
+  const tbody = document.getElementById('je-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="p-6 text-center text-slate-400">لا توجد قيود يومية مطابقة</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((j) => {
+    const isCogs = String(j.source_table || '').endsWith('_cogs');
+    const kindBadge = isCogs
+      ? '<span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 font-bold">قيد تكلفة مخزون (COGS)</span>'
+      : `<span class="px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">${esc(KIND_AR[j.kind] || j.kind)}</span>`;
+    return `
+      <tr>
+        <td class="p-3 font-bold font-num">
+          <button onclick="viewJournalEntry(${j.id})" class="text-primary hover:underline">${esc(j.entry_no)}</button>
+        </td>
+        <td class="p-3 font-num">${esc(j.entry_date)}</td>
+        <td class="p-3">${kindBadge}</td>
+        <td class="p-3 font-num font-bold">${esc(j.ref || '—')}</td>
+        <td class="p-3">${esc(j.memo)}</td>
+        <td class="p-3 font-num text-emerald-600 font-bold">${money(j.total_debit)}</td>
+        <td class="p-3 font-num text-rose-600 font-bold">${money(j.total_credit)}</td>
+        <td class="p-3">${j.status === 'posted' ? '<span class="text-emerald-600 font-bold">مرحّل</span>' : '<span class="text-slate-400">معكوس</span>'}</td>
+        <td class="p-3 no-print whitespace-nowrap">
+          <div class="flex items-center gap-1.5">
+            <button onclick="viewJournalEntry(${j.id})" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold">عرض / طباعة</button>
+            ${j.status === 'posted' && j.kind !== 'reversal'
+              ? `<button onclick="reverseEntry(${j.id})" class="px-2.5 py-1 rounded-lg bg-rose-600/10 text-rose-600 text-[11px] font-bold">عكس القيد</button>`
+              : ''}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function viewJournalEntry(id) {
+  const je = await guard(() => api('journal_entry_get', { id }));
+  if (!je) return;
+  document.getElementById('jev-title').textContent = `سند قيد يومية رقم ${je.entry_no}`;
+  document.getElementById('jev-printable-body').innerHTML = `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+      <div><span class="text-slate-400 block">رقم القيد:</span><strong class="font-num">${esc(je.entry_no)}</strong></div>
+      <div><span class="text-slate-400 block">التاريخ:</span><strong class="font-num">${esc(je.entry_date)}</strong></div>
+      <div><span class="text-slate-400 block">المرجع:</span><strong class="font-num">${esc(je.ref || '—')}</strong></div>
+      <div><span class="text-slate-400 block">الحالة:</span><strong>${je.status === 'posted' ? 'مرحّل' : 'معكوس'}</strong></div>
+      <div class="col-span-2 sm:col-span-4"><span class="text-slate-400">البيان: </span><strong>${esc(je.memo)}</strong></div>
+    </div>
+    <table class="w-full text-right text-xs border border-slate-200 dark:border-slate-700">
+      <thead class="bg-slate-100 dark:bg-slate-800">
+        <tr>
+          <th class="p-2.5">كود الحساب</th>
+          <th class="p-2.5">اسم الحساب</th>
+          <th class="p-2.5">البيان التحليلي</th>
+          <th class="p-2.5">مدين (Debit)</th>
+          <th class="p-2.5">دائن (Credit)</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+        ${(je.lines || []).map((l) => `
+          <tr>
+            <td class="p-2.5 font-num font-bold">${esc(l.account_code)}</td>
+            <td class="p-2.5 font-bold">${esc(l.account_name)}</td>
+            <td class="p-2.5">${esc(l.memo || je.memo || '')}</td>
+            <td class="p-2.5 font-num text-emerald-600 font-bold">${l.debit > 0 ? money(l.debit) : '—'}</td>
+            <td class="p-2.5 font-num text-rose-600 font-bold">${l.credit > 0 ? money(l.credit) : '—'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+      <tfoot class="bg-slate-50 dark:bg-slate-800 font-bold">
+        <tr>
+          <td colspan="3" class="p-2.5">إجمالي القيد المتوازن</td>
+          <td class="p-2.5 font-num text-emerald-600">${money(je.total_debit)}</td>
+          <td class="p-2.5 font-num text-rose-600">${money(je.total_credit)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `;
+  document.getElementById('modal-je-view').classList.replace('hidden', 'flex');
+}
+
+async function reverseEntry(id) {
+  const reason = prompt('سبب عكس القيد المحاسبي:', 'تصحيح قيد');
+  if (reason === null) return;
+  const res = await guard(() => api('journal_entry_reverse', { id, reason }));
+  if (res) {
+    toast(`تم إنشاء القيد العكسي (${res.entry_no})`);
+    loadJournalEntries();
+    loadAccDashboard();
+  }
+}
+
+async function openManualJournalModal() {
+  if (!LEAF_ACCOUNTS.length) {
+    const rows = await guard(() => api('accounts_tree'));
+    if (rows) {
+      ALL_ACCOUNTS = rows;
+      LEAF_ACCOUNTS = rows.filter((a) => !a.is_group);
+    }
+  }
+  document.getElementById('mje-memo').value = '';
+  document.getElementById('mje-date').value = todayISO();
+  MJE_ROWS = [
+    { account_id: LEAF_ACCOUNTS[0]?.id || '', debit: 0, credit: 0 },
+    { account_id: LEAF_ACCOUNTS[1]?.id || '', debit: 0, credit: 0 },
+  ];
+  renderManualJeLines();
+  document.getElementById('modal-manual-je').classList.replace('hidden', 'flex');
+}
+
+function addManualJeLine() {
+  MJE_ROWS.push({ account_id: LEAF_ACCOUNTS[0]?.id || '', debit: 0, credit: 0 });
+  renderManualJeLines();
+}
+
+function renderManualJeLines() {
+  const opts = (selId) => LEAF_ACCOUNTS.map((a) => `<option value="${a.id}" ${String(a.id) === String(selId) ? 'selected' : ''}>${esc(a.code)} — ${esc(a.name)}</option>`).join('');
+  document.getElementById('mje-lines').innerHTML = MJE_ROWS.map((r, i) => `
+    <div class="grid grid-cols-12 gap-2 items-center">
+      <select onchange="MJE_ROWS[${i}].account_id=this.value" class="col-span-6 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">${opts(r.account_id)}</select>
+      <input type="number" step="0.01" placeholder="مدين" value="${r.debit || ''}" oninput="MJE_ROWS[${i}].debit=parseFloat(this.value||0);MJE_ROWS[${i}].credit=0;updateMjeBalance()" class="col-span-3 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+      <input type="number" step="0.01" placeholder="دائن" value="${r.credit || ''}" oninput="MJE_ROWS[${i}].credit=parseFloat(this.value||0);MJE_ROWS[${i}].debit=0;updateMjeBalance()" class="col-span-3 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"/>
+    </div>
+  `).join('');
+  updateMjeBalance();
+}
+
+function updateMjeBalance() {
+  const dr = MJE_ROWS.reduce((s, x) => s + (parseFloat(x.debit) || 0), 0);
+  const cr = MJE_ROWS.reduce((s, x) => s + (parseFloat(x.credit) || 0), 0);
+  const diff = Math.abs(dr - cr);
+  const el = document.getElementById('mje-diff-indicator');
+  if (diff < 0.005 && dr > 0) {
+    el.className = 'font-bold text-emerald-600';
+    el.textContent = `متوازن (إجمالي المدين = الدائن = ${dr.toFixed(2)})`;
+  } else {
+    el.className = 'font-bold text-rose-600';
+    el.textContent = `الفرق = ${(dr - cr).toFixed(2)} (يجب تساوي المدين والدائن)`;
+  }
+}
+
+async function submitManualJe() {
+  const res = await guard(() => api('journal_entry_create', {
+    memo: document.getElementById('mje-memo').value,
+    entry_date: document.getElementById('mje-date').value,
+    lines: MJE_ROWS,
+  }));
+  if (res) {
+    closeAccModal('modal-manual-je');
+    toast(`تم ترحيل القيد اليدوي (${res.entry_no})`);
+    loadJournalEntries();
+    loadAccDashboard();
+  }
+}
+
+/* ==================== معالج الترصيد الافتتاحي (مع منع التكرار) ==================== */
+async function openOpeningWizard() {
+  const prev = await guard(() => api('accounting_opening_preview'));
+  if (!prev) return;
+  updateOpeningButtonState(prev.has_opening_entry, prev.opening_entry);
+  const banner = document.getElementById('wiz-already-done-banner');
+  const inputsBox = document.getElementById('wiz-inputs-box');
+  const submitBtn = document.getElementById('btn-wiz-submit');
+
+  document.getElementById('wiz-preview-box').innerHTML = `
+    <div>قيمة المخزون السلعي الحالي: <strong class="font-num">${money(prev.inventory_value)}</strong></div>
+    <div>مديونيات العملاء الحالية: <strong class="font-num">${money(prev.ar_customers)}</strong></div>
+    <div>مديونيات عقود الأقساط النشطة: <strong class="font-num">${money(prev.ar_installments)}</strong></div>
+    <div>مستحقات الموردين الحالية: <strong class="font-num">${money(prev.ap_suppliers)}</strong></div>
+  `;
+
+  if (prev.has_opening_entry && prev.opening_entry) {
+    const oe = prev.opening_entry;
+    banner.classList.remove('hidden');
+    banner.innerHTML = `
+      <div class="font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+        <span class="material-icons-round text-base">check_circle</span>
+        <span>تم تنفيذ معالجة الترصيد الافتتاحي مسبقاً ولا يمكن تكرارها</span>
+      </div>
+      <div>رقم القيد الافتتاحي المرحّل: <strong class="font-num">${esc(oe.entry_no)}</strong> — بتاريخ <strong class="font-num">${esc(oe.entry_date)}</strong> — بإجمالي متوازن <strong class="font-num">${money(oe.total_debit)}</strong></div>
+      <div class="text-[11px] text-slate-600 dark:text-slate-300">ملاحظة: لمنع ازدواج الأرصدة وتكرار القيود، تم إيقاف زر التوليد. إذا أردت إعادة الترصيد الافتتاحي، يجب أولاً عكس القيد الافتتاحي (${esc(oe.entry_no)}) من دفتر اليومية.</div>
+      <div class="pt-1">
+        <button onclick="closeAccModal('modal-opening-wiz');viewJournalEntry(${oe.id})" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold">عرض وطباعة القيد الافتتاحي (${esc(oe.entry_no)})</button>
+      </div>
+    `;
+    inputsBox.classList.add('hidden');
+    submitBtn.classList.add('hidden');
+    submitBtn.disabled = true;
+  } else {
+    banner.classList.add('hidden');
+    inputsBox.classList.remove('hidden');
+    submitBtn.classList.remove('hidden');
+    submitBtn.disabled = false;
+  }
+
+  document.getElementById('modal-opening-wiz').classList.replace('hidden', 'flex');
+}
+
+async function submitOpeningWizard() {
+  const submitBtn = document.getElementById('btn-wiz-submit');
+  if (submitBtn && submitBtn.disabled) return;
+  if (submitBtn) submitBtn.disabled = true;
+  const res = await guard(() => api('accounting_opening_apply', {
+    cash_main: document.getElementById('wiz-cash-main').value,
+    bank_main: document.getElementById('wiz-bank-main').value,
+  }));
+  if (res) {
+    closeAccModal('modal-opening-wiz');
+    toast(`تم إنشاء القيد الافتتاحي المتوازن (${res.entry_no})`);
+    await loadAccDashboard();
+    if (ACTIVE_ACC_TAB === 'journal') await loadJournalEntries();
+  } else if (submitBtn) {
+    submitBtn.disabled = false;
+  }
+}
+
+/* ==================== القوائم المالية + كشف حساب الأستاذ العام ==================== */
+async function populateGlAccountSelect() {
+  if (!LEAF_ACCOUNTS.length) {
+    const rows = await guard(() => api('accounts_tree'));
+    if (rows) {
+      ALL_ACCOUNTS = rows;
+      LEAF_ACCOUNTS = rows.filter((a) => !a.is_group);
+    }
+  }
+  const sel = document.getElementById('gl-account-select');
+  if (!sel) return;
+  sel.innerHTML = `<option value="">-- اختر حساباً لعرض كشف حركته --</option>` +
+    LEAF_ACCOUNTS.map((a) => `<option value="${a.id}">${esc(a.code)} — ${esc(a.name)}</option>`).join('');
+}
+
+async function loadAccountLedger(accountId) {
+  const gl = await guard(() => api('accounting_ledger', { account_id: accountId }));
+  if (!gl) return;
+  const acc = gl.account || {};
+  document.getElementById('statement-stage').innerHTML = `
+    <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
+      <div>
+        <h3 class="text-sm font-bold">كشف حساب دفتر الأستاذ العام: (${esc(acc.code)}) ${esc(acc.name)}</h3>
+        <p class="text-[11px] text-slate-500">طبيعة الحساب: ${acc.normal_balance === 'debit' ? 'مدين' : 'دائن'} — الرصيد الافتتاحي قبل الفترة: <span class="font-num font-bold">${money(gl.opening_balance)}</span></p>
+      </div>
+      <div class="px-3 py-1.5 rounded-xl bg-primary/10 text-primary font-bold font-num">
+        الرصيد الختامي: ${money(gl.closing_balance)}
+      </div>
+    </div>
+    <table class="w-full text-right text-xs">
+      <thead class="bg-slate-100 dark:bg-slate-800">
+        <tr>
+          <th class="p-2">التاريخ</th>
+          <th class="p-2">رقم القيد</th>
+          <th class="p-2">المرجع</th>
+          <th class="p-2">البيان</th>
+          <th class="p-2">مدين</th>
+          <th class="p-2">دائن</th>
+          <th class="p-2">الرصيد التراكمي</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+        ${(gl.rows || []).length ? gl.rows.map((r) => `
+          <tr>
+            <td class="p-2 font-num">${esc(r.entry_date)}</td>
+            <td class="p-2 font-num font-bold">${esc(r.entry_no)}</td>
+            <td class="p-2 font-num">${esc(r.ref || '—')}</td>
+            <td class="p-2">${esc(r.line_memo || r.entry_memo || '')}</td>
+            <td class="p-2 font-num text-emerald-600 font-bold">${r.debit > 0 ? money(r.debit) : '—'}</td>
+            <td class="p-2 font-num text-rose-600 font-bold">${r.credit > 0 ? money(r.credit) : '—'}</td>
+            <td class="p-2 font-num font-bold">${money(r.running_balance)}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="7" class="p-6 text-center text-slate-400">لا توجد حركات مرحّلة على هذا الحساب</td></tr>'}
+      </tbody>
+    </table>
+  `;
+}
+
+async function loadTrialBalance() {
+  const tb = await guard(() => api('accounting_trial_balance', {}));
+  if (!tb) return;
+  document.getElementById('statement-stage').innerHTML = `
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="text-sm font-bold">ميزان المراجعة العام بالارصدة والمجاميع (Trial Balance)</h3>
+      <span class="px-3 py-1 rounded-full text-xs font-bold ${tb.is_balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+        ${tb.is_balanced ? 'متوازن (Debit = Credit)' : 'غير متوازن'}
+      </span>
+    </div>
+    <table class="w-full text-right text-xs">
+      <thead class="bg-slate-100 dark:bg-slate-800">
+        <tr>
+          <th class="p-2">الكود</th>
+          <th class="p-2">الحساب</th>
+          <th class="p-2">حركة مدين</th>
+          <th class="p-2">حركة دائن</th>
+          <th class="p-2">رصيد ختامي مدين</th>
+          <th class="p-2">رصيد ختامي دائن</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+        ${tb.rows.map((r) => `
+          <tr>
+            <td class="p-2 font-num">${esc(r.code)}</td>
+            <td class="p-2 font-bold">${esc(r.name)}</td>
+            <td class="p-2 font-num">${money(r.period_debit)}</td>
+            <td class="p-2 font-num">${money(r.period_credit)}</td>
+            <td class="p-2 font-num text-emerald-600 font-bold">${money(r.closing_debit)}</td>
+            <td class="p-2 font-num text-rose-600 font-bold">${money(r.closing_credit)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+      <tfoot class="bg-slate-50 dark:bg-slate-800 font-bold">
+        <tr>
+          <td colspan="2" class="p-2">الإجمالي الكلي</td>
+          <td class="p-2 font-num">${money(tb.totals.period_debit)}</td>
+          <td class="p-2 font-num">${money(tb.totals.period_credit)}</td>
+          <td class="p-2 font-num text-emerald-600">${money(tb.totals.closing_debit)}</td>
+          <td class="p-2 font-num text-rose-600">${money(tb.totals.closing_credit)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `;
+}
+
+async function loadIncomeStatement() {
+  const pnl = await guard(() => api('accounting_income_statement', {}));
+  if (!pnl) return;
+  document.getElementById('statement-stage').innerHTML = `
+    <h3 class="text-sm font-bold mb-3">قائمة الدخل (Income Statement / P&L)</h3>
+    <div class="space-y-2 max-w-2xl">
+      <div class="flex justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded"><span>إجمالي المبيعات</span><strong class="font-num">${money(pnl.gross_sales)}</strong></div>
+      <div class="flex justify-between p-2"><span>(-) مردودات المبيعات والخصم المسموح به</span><strong class="font-num text-rose-600">${money(pnl.sales_returns + pnl.discount_allowed)}</strong></div>
+      <div class="flex justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded font-bold"><span>= صافي المبيعات</span><span class="font-num">${money(pnl.net_sales)}</span></div>
+      <div class="flex justify-between p-2"><span>(-) تكلفة البضاعة المباعة وقطع الغيار (COGS)</span><strong class="font-num text-rose-600">${money(pnl.total_cogs)}</strong></div>
+      <div class="flex justify-between p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded font-bold"><span>= مجمل الربح</span><span class="font-num">${money(pnl.gross_profit)}</span></div>
+      <div class="flex justify-between p-2"><span>(+) إيرادات الصيانة والأقساط والإيرادات الأخرى</span><strong class="font-num text-emerald-600">${money(pnl.total_other_revenues)}</strong></div>
+      <div class="flex justify-between p-2"><span>(-) المصروفات التشغيلية والإدارية</span><strong class="font-num text-rose-600">${money(pnl.total_operating_expenses)}</strong></div>
+      <div class="flex justify-between p-3 bg-primary/10 text-primary rounded-xl text-sm font-bold"><span>= صافي الربح المحاسبي</span><span class="font-num">${money(pnl.net_profit)}</span></div>
+    </div>
+  `;
+}
+
+async function loadBalanceSheet() {
+  const bs = await guard(() => api('accounting_balance_sheet', {}));
+  if (!bs) return;
+  document.getElementById('statement-stage').innerHTML = `
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="text-sm font-bold">الميزانية العمومية (Balance Sheet) حتى ${esc(bs.as_of_date)}</h3>
+      <span class="px-3 py-1 rounded-full text-xs font-bold ${bs.is_balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+        ${bs.is_balanced ? 'الأصول = الالتزامات + حقوق الملكية' : 'غير متوازنة'}
+      </span>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+        <h4 class="font-bold mb-2 text-emerald-600">الأصول (Assets): ${money(bs.total_assets)}</h4>
+        ${bs.assets.map((a) => `<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800"><span>${esc(a.code)} - ${esc(a.name)}</span><strong class="font-num">${money(a.balance)}</strong></div>`).join('')}
+      </div>
+      <div class="border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-3">
+        <div>
+          <h4 class="font-bold mb-2 text-rose-600">الالتزامات (Liabilities): ${money(bs.total_liabilities)}</h4>
+          ${bs.liabilities.map((l) => `<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800"><span>${esc(l.code)} - ${esc(l.name)}</span><strong class="font-num">${money(l.balance)}</strong></div>`).join('')}
+        </div>
+        <div>
+          <h4 class="font-bold mb-2 text-indigo-600">حقوق الملكية (Equity): ${money(bs.total_equity)}</h4>
+          ${bs.equity.map((e) => `<div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800"><span>${esc(e.code)} - ${esc(e.name)}</span><strong class="font-num">${money(e.balance)}</strong></div>`).join('')}
+          <div class="flex justify-between py-1 font-bold text-primary"><span>صافي ربح الفترة الحالية</span><span class="font-num">${money(bs.period_net_profit)}</span></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function loadTaxReport() {
+  const tx = await guard(() => api('accounting_tax_report', {}));
+  if (!tx) return;
+  document.getElementById('statement-stage').innerHTML = `
+    <h3 class="text-sm font-bold mb-3">ملخص وإقرار الضرائب (VAT & WHT Summary)</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
+      <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 space-y-2">
+        <h4 class="font-bold text-primary">ضريبة القيمة المضافة (VAT 14%)</h4>
+        <div class="flex justify-between"><span>ضريبة المخرجات (المبيعات):</span><strong class="font-num">${money(tx.vat_output)}</strong></div>
+        <div class="flex justify-between"><span>(-) ضريبة المدخلات (المشتريات):</span><strong class="font-num">${money(tx.vat_input)}</strong></div>
+        <div class="flex justify-between border-t pt-2 font-bold"><span>صافي الضريبة المستحقة:</span><span class="font-num">${money(tx.net_vat_payable)}</span></div>
+      </div>
+      <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 space-y-2">
+        <h4 class="font-bold text-amber-600">ضريبة الخصم والإضافة (خصم المنبع 1% / 3%)</h4>
+        <div class="flex justify-between"><span>إجمالي المستقطع من الموردين:</span><strong class="font-num">${money(tx.wht_collected)}</strong></div>
+        <div class="flex justify-between"><span>المورّد لمصلحة الضرائب:</span><strong class="font-num">${money(tx.wht_remitted)}</strong></div>
+        <div class="flex justify-between border-t pt-2 font-bold"><span>الرصيد المستحق للتوريد:</span><span class="font-num">${money(tx.wht_payable)}</span></div>
+      </div>
+    </div>
+  `;
+}
+
+/* ==================== محرك الطباعة الموحد لكافة أقسام المحاسبة ==================== */
+function printAccountingSection(title, sourceElId) {
+  const src = document.getElementById(sourceElId);
+  if (!src) { window.print(); return; }
+  const storeName = (typeof SETTINGS !== 'undefined' && SETTINGS && SETTINGS.store_name) || 'تك زون للإلكترونيات';
+  const printArea = document.getElementById('acc-print-area');
+  printArea.innerHTML = `
+    <div dir="rtl" style="font-family:'IBM Plex Sans Arabic',sans-serif;color:#0f172a;background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px">
+        <div>
+          <div style="font-size:18px;font-weight:800">${esc(storeName)} — قسم المحاسبة والمالية</div>
+          <div style="font-size:14px;font-weight:700;color:#0e6ba8;margin-top:2px">${esc(title)}</div>
+        </div>
+        <div style="text-align:left;font-size:12px;color:#475569">
+          <div>تاريخ الطباعة: ${esc(todayISO())}</div>
+        </div>
+      </div>
+      <div>${src.innerHTML}</div>
+    </div>
+  `;
+  printArea.classList.remove('hidden');
+  window.print();
+  setTimeout(() => { printArea.classList.add('hidden'); }, 400);
+}
+
+function printActiveAccountingTab() {
+  const titles = {
+    overview: 'ملخص لوحة المحاسبة السريعة وأرصدة الخزائن',
+    expenses: 'سجل المصروفات التشغيلية والإدارية',
+    treasury: 'تقرير الخزائن والتحويلات النقدية',
+    coa: 'دليل شجرة الحسابات (Chart of Accounts)',
+    journal: 'دفتر اليومية العام والقيود المحاسبية',
+    statements: 'القوائم والتقارير المالية الرسمية',
+  };
+  const targetId = ACTIVE_ACC_TAB === 'statements' ? 'statement-stage' : ('pane-' + ACTIVE_ACC_TAB);
+  printAccountingSection(titles[ACTIVE_ACC_TAB] || 'تقرير المحاسبة العامة', targetId);
+}
+
+(async () => {
+  const user = await pageInit('accounting');
+  if (!user) return;
+  await loadAccDashboard();
+})();
+</script>
+</body>
+</html>

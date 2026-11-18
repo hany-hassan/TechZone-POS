@@ -1,57 +1,73 @@
 @AGENTS.md
 
-# Claude Code — TechZone POS Session Guide
+# Claude Code & AI Agents — TechZone POS & ERP Session Guide
 
 ## Session start ritual
 
 1. Read `AGENTS.md` — the single source of truth for the whole project.
-2. Read the current phase in `docs/ROADMAP.md` — find the first phase with ⬜ or 🟡.
-3. Read the "read before starting" docs listed for that phase.
+2. Read the **Mandatory Modular Plug-and-Play Architecture Rule** below before touching any module, database table, or API endpoint.
+3. Read the current phase in `docs/ROADMAP.md` — find the first phase with ⬜ or 🟡.
 4. Skim `docs/OPEN-QUESTIONS.md` for anything blocking the current phase.
-5. Run `python app/selfcheck.py` to confirm baseline (expect 234/234 PASS + `contract ok`).
+5. Run `python app/selfcheck.py` to confirm baseline (expect 290/290 PASS + `contract ok`).
+
+---
+
+## ⚠️ MANDATORY ARCHITECTURAL RULE: Modular Plug-and-Play (هندسة الأقسام المعزولة)
+
+**This rule is a strict, non-negotiable condition for ANY AI model or developer when creating, modifying, adding, or deleting any section/module now and in the future:**
+
+1. **Complete Isolation (Zero-Overhead When Disabled):**
+   - Every feature module (`pos`, `sales_quotes`, `inventory`, `customers`, `installments`, `purchases`, `accounting`, `history`, `repair`, `buy_used`, `reports`, `staff`, or any future module) MUST operate as an independent, self-contained Plug-and-Play unit.
+   - When a module is disabled from `owner.html` (`modules.enabled = 0`), it MUST incur **zero database queries, zero background hooks, and zero performance overhead** on POS or any other active module.
+   - Cross-module hooks (such as `app/erp_hooks.py`) MUST check `is_module_active(api, conn, "<module_key>")` using the in-memory `api._module_enabled()` cache (`O(1)`) as their very first line before executing a single SQL statement.
+2. **Registration in the Module Registry & Server Guard:**
+   - **Database Registry (`app/db.py` → `DEFAULT_MODULES`):** Any new module must be registered in `DEFAULT_MODULES` with its `key`, Arabic `title`, `icon`, `color`, `url`, `perm_keys`, `sort_order`, and `enabled` state.
+   - **Server-Side Dispatcher Guard (`app/modules_map.py`):** Every public method in `Api` MUST be mapped in `API_MODULE_MAP` to its owning module key (or placed in `CORE_METHODS` if it is an always-on OS/auth method). `Api.call()` blocks any call to a disabled module on the server, even for `admin`.
+   - **Explicit Dependency Map (`MODULE_REQUIRES` in `app/modules_map.py`):** Only declare hard structural dependencies where strictly required. Optional integrations (e.g., `accounting` listening to `pos` or `purchases`, or `reports` reading `purchases` and `accounting`) MUST be loosely coupled via runtime `is_module_active` checks so either module can be enabled or disabled independently without breaking the other.
+3. **Domain Mixin & Frontend Encapsulation:**
+   - Backend logic for a module must live in its own dedicated mixin file (`app/api_<module>.py`) and be composed into `app/api.py`.
+   - Frontend UI for a module must live in its own standalone HTML page (`web/<module>.html`) calling `pageInit('<module>')` at startup, which automatically verifies both module activation (`UI_CONFIG.modules`) and user permissions.
+   - Deleting, disabling, or adding a module must never leave broken imports, orphan SQL joins, or UI crashes in `desktop.html`, `owner.html`, `reports.html`, or `pos.html`.
+
+---
 
 ## How to talk to the owner
 
-- **Language:** Egyptian Arabic (عامية مصرية). Use Arabic for explanations, keep code and commands in English.
-- **Non-technical framing:** Hany works with AI agents, not a professional developer. Explain what you changed and why in plain Arabic.
-- **Report real numbers:** After any change, run selfcheck and report the actual pass/fail count. Never claim tests passed without running them.
+- **Language:** Arabic (العربية / عامية مصرية واضحة). Use Arabic for explanations, keep code and commands in English.
+- **Non-technical framing:** Explain what you changed and why in clear Arabic.
+- **Report real numbers:** After any change, run `python app/selfcheck.py` and report the actual pass/fail count. Never claim tests passed without running them.
 
 ## Working style
 
-- **Plan first:** For multi-file changes, write a short plan and get approval before editing.
-- **Narrow checks first:** Before a large refactor, verify the specific area you are changing works.
-- **Small vertical slices:** Complete one feature or fix end-to-end (backend + frontend + selfcheck) before moving to the next.
-- **Never claim tests passed without running them.** Always `python app/selfcheck.py`.
-- **Stop after two identical failures.** If the same error appears twice, report it to Hany and ask for guidance instead of looping.
+- **Plan first:** For multi-file changes, write a short plan before editing.
+- **Small vertical slices:** Complete one feature or fix end-to-end (backend + frontend + selfcheck + docs) before moving to the next.
+- **Never claim tests passed without running them.** Always run `python app/selfcheck.py`.
+- **Stop after two identical failures.** If the same error appears twice, report it and ask for guidance instead of looping.
 
-## Visual work checks
+## Record decisions & mandatory documentation
 
-- The app runs inside a pywebview window. To preview in a browser, run `python app/main.py` and connect via the HTTP bridge.
-- All UI is Arabic RTL. Check that text alignment, icons, and layout look correct in both light and dark modes.
-
-## Record decisions
-
-- Any architectural or design decision → create an ADR in `docs/adr/NNNN-short-title.md`.
-- Any assumption about unknown requirements → add to `docs/OPEN-QUESTIONS.md`.
-- Any code change → update `AGENTS.md` changelog (newest first) in the same commit.
+- Any architectural or design decision → create/update an ADR in `docs/adr/`.
+- **Any code change, addition, modification, or deletion → MUST be documented in `AGENTS.md`, `README.md`, and the relevant `docs/*.md` files in the same turn/commit.**
 
 ## Key commands
 
 | Task | Command |
 |---|---|
 | Run the app | `python app/main.py` |
-| Run all checks | `python app/selfcheck.py` |
+| Run all checks (290 checks) | `python app/selfcheck.py` |
 | Rebuild Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build .exe | `build-exe.bat` |
+| Build Setup Installer | `build-installer.bat` |
 | Push to GitHub | `push-github.bat` |
 
 ## Non-negotiable rules
 
+- **Enforce Modular Plug-and-Play isolation** on every new or modified feature.
 - Never add external runtime dependencies (no React, no Electron, no npm packages used at runtime).
 - Never add network calls — the app is 100% offline.
 - All fonts and icons must be local files in `web/fonts/`.
 - Never put secrets, passwords, or customer data in code or commits.
 - Never disable or skip selfcheck tests.
-- Always update `AGENTS.md` in the same commit as any code change.
-- Money values are INTEGER minor units (1 LE = 100 qirsh). Never use float for money.
+- Always update `AGENTS.md` and `README.md` in the same commit as any code change.
+- Money values are INTEGER minor units (1 LE = 100 qirsh). Never use float for money in the database.
 - All SQL must be parameterized. No string interpolation in queries.

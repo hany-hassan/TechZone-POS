@@ -1,4 +1,4 @@
-"""السجل المركزي الموحد للصلاحيات التفصيلية (49 صلاحية في 10 مجموعات) وقوالب الوظائف الجاهزة."""
+"""السجل المركزي الموحد للصلاحيات التفصيلية (63 صلاحية في 12 مجموعة) وقوالب الوظائف الجاهزة."""
 import json
 
 PERMISSION_GROUPS = [
@@ -425,6 +425,120 @@ PERMISSION_GROUPS = [
             },
         ],
     },
+    {
+        "key": "purchases",
+        "title": "المشتريات والموردون والتوريد",
+        "icon": "local_shipping",
+        "color": "#0891b2",
+        "perms": [
+            {
+                "key": "suppliers_view",
+                "label": "عرض قائمة الموردين وكشف حساباتهم",
+                "desc": "يسمح: باستعراض دليل الموردين وأرصدتهم وكشف الحساب التفصيلي وأعمار الديون.",
+                "risk": "financial",
+                "requires": [],
+            },
+            {
+                "key": "suppliers_manage",
+                "label": "إضافة وتعديل وإيقاف الموردين",
+                "desc": "يسمح: بتسجيل مورد جديد أو تعديل بيانات الموردين وشروط الائتمان.",
+                "risk": "financial",
+                "requires": ["suppliers_view"],
+            },
+            {
+                "key": "purchases_view",
+                "label": "عرض فواتير وأوامر المشتريات",
+                "desc": "يسمح: باستعراض فواتير المشتريات وأوامر الشراء وسجل التوريد.",
+                "risk": "financial",
+                "requires": [],
+            },
+            {
+                "key": "purchases_create_post",
+                "label": "إنشاء وترحيل فواتير وأوامر الشراء",
+                "desc": "يسمح: بإدخال فواتير المشتريات وأوامر الشراء واعتمادها لتغذية المخزون وتحديث متوسط التكلفة (WAC).",
+                "risk": "critical",
+                "requires": ["purchases_view"],
+            },
+            {
+                "key": "purchases_return",
+                "label": "عمل مرتجع مشتريات للمورد",
+                "desc": "يسمح: بإرجاع بضاعة معيبة أو زائدة للمورد وخصمها من المخزون وحساب المورد.",
+                "risk": "critical",
+                "requires": ["purchases_view"],
+            },
+            {
+                "key": "purchases_payment",
+                "label": "تسجيل سندات صرف للموردين",
+                "desc": "يسمح: بصرف دفعات نقدية أو بنكية للموردين وإصدار سند صرف مالي.",
+                "risk": "critical",
+                "requires": ["suppliers_view"],
+            },
+            {
+                "key": "purchases_cancel_delete",
+                "label": "إلغاء المسودات أو عكس فاتورة شراء",
+                "desc": "يسمح: بإلغاء أوامر الشراء والمسودات أو عكس فاتورة مشتريات معتمدة.",
+                "risk": "critical",
+                "requires": ["purchases_view", "purchases_create_post"],
+            },
+        ],
+    },
+    {
+        "key": "accounting",
+        "title": "المحاسبة العامة والمصروفات والخزينة",
+        "icon": "account_balance",
+        "color": "#be185d",
+        "perms": [
+            {
+                "key": "expenses_view",
+                "label": "عرض سجل المصروفات التشغيلية",
+                "desc": "يسمح: باستعراض سجل المصروفات اليومية والشهرية وتصنيفاتها.",
+                "risk": "financial",
+                "requires": [],
+            },
+            {
+                "key": "expenses_manage",
+                "label": "تسجيل مصروفات تشغيلية وصرفها من الخزينة",
+                "desc": "يسمح: بإدخال مصروفات جديدة (إيجار، كهرباء، رواتب، نثريات) وصرفها.",
+                "risk": "critical",
+                "requires": ["expenses_view"],
+            },
+            {
+                "key": "treasury_view",
+                "label": "عرض أرصدة الخزائن والبنوك والمحافظ",
+                "desc": "يسمح: بالاطلاع على أرصدة الخزنة الرئيسية وأدراج الكاشير والمحافظ والحسابات البنكية.",
+                "risk": "financial",
+                "requires": [],
+            },
+            {
+                "key": "treasury_transfer",
+                "label": "تنفيذ تحويلات مالية بين الخزائن والبنوك",
+                "desc": "يسمح: بتحويل السيولة بين درج الكاشير والخزنة الرئيسية والمحفظة والبنك.",
+                "risk": "critical",
+                "requires": ["treasury_view"],
+            },
+            {
+                "key": "accounting_coa_view",
+                "label": "عرض شجرة الحسابات والقيود ودفتر الأستاذ",
+                "desc": "يسمح: باستعراض دليل الحسابات ودفتر اليومية العام وكشوف حسابات الأستاذ.",
+                "risk": "financial",
+                "requires": [],
+            },
+            {
+                "key": "accounting_journal_manual",
+                "label": "إنشاء قيود يومية يدوية وعكس القيود",
+                "desc": "يسمح: بإنشاء قيود تسوية يدوية متوازنة أو عكس القيود المرحلة وتشغيل معالج الترصيد الافتتاحي.",
+                "risk": "critical",
+                "requires": ["accounting_coa_view"],
+            },
+            {
+                "key": "accounting_statements_view",
+                "label": "عرض القوائم المالية والضرائب وإغلاق الفترات",
+                "desc": "يسمح: بعرض ميزان المراجعة وقائمة الدخل والميزانية العمومية وتقارير الضرائب وإغلاق الفترات المالية.",
+                "risk": "critical",
+                "requires": ["accounting_coa_view"],
+            },
+        ],
+    },
 ]
 
 ALL_PERM_KEYS = tuple(
@@ -480,11 +594,12 @@ DEFAULT_ROLE_PRESETS = [
     {
         "key": "inventory_clerk",
         "name": "أمين مخزون ومشتريات",
-        "description": "إدارة المنتجات والفئات والكميات والأرقام التسلسلية ومراجعة حركة المخزون والنواقص وشراء الأجهزة المستعملة.",
+        "description": "إدارة المنتجات والفئات والكميات والأرقام التسلسلية وفواتير المشتريات والموردين ومراجعة حركة المخزون وشراء الأجهزة المستعملة.",
         "badge_color": "teal",
         "perms": _preset_dict({
             "inventory_view", "inventory_edit", "inventory_adjust", "serials_view",
             "cost_view", "reports_movements_view", "used_view", "used_manage",
+            "suppliers_view", "purchases_view", "purchases_create_post",
         }),
     },
     {
@@ -500,7 +615,7 @@ DEFAULT_ROLE_PRESETS = [
     {
         "key": "accountant",
         "name": "محاسب وتحصيل وتقارير",
-        "description": "كامل التقارير والأرباح وسجل الورديات ومراجعة كل المبيعات، مع كشوف حساب العملاء وسندات القبض وتحصيل الأقساط.",
+        "description": "كامل المحاسبة العامة والخزينة والمصروفات والتقارير والأرباح وسجل الورديات، مع كشوف حساب العملاء والموردين وسندات القبض والصرف.",
         "risk": "financial",
         "badge_color": "indigo",
         "perms": _preset_dict({
@@ -510,6 +625,9 @@ DEFAULT_ROLE_PRESETS = [
             "installments_view", "installments_collect", "installments_create",
             "inventory_view", "cost_view",
             "reports_sales_view", "reports_profit_view", "reports_shifts_view", "reports_movements_view",
+            "suppliers_view", "purchases_view", "purchases_payment",
+            "expenses_view", "expenses_manage", "treasury_view", "treasury_transfer",
+            "accounting_coa_view", "accounting_journal_manual", "accounting_statements_view",
         }),
     },
     {
@@ -523,7 +641,7 @@ DEFAULT_ROLE_PRESETS = [
 
 
 def parse_user_perms(role: str, raw_perms: str | dict | None) -> dict[str, bool]:
-    """تحليل وتطبيع قاموس الصلاحيات دائماً إلى المفاتيح الـ 49 المعتمدة."""
+    """تحليل وتطبيع قاموس الصلاحيات دائماً إلى المفاتيح الـ 63 المعتمدة."""
     if role == "admin":
         return dict(ALL_ADMIN_PERMS)
     base = dict(DEFAULT_CASHIER_PERMS)
