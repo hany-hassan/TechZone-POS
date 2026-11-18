@@ -12,7 +12,7 @@
 #define MyAppExeName "TechZone.exe"
 
 [Setup]
-; Stable AppId GUID so newer releases cleanly upgrade in place without losing data\
+; Stable AppId GUID so newer releases cleanly upgrade in place without losing data
 AppId={{8F4C7B2A-6E1D-4A93-B2C5-7D8E9A1F3B20}
 AppName={#MyAppFullName}
 AppVersion={#MyAppVersion}
@@ -39,6 +39,7 @@ MinVersion=10.0
 OutputDir=..\dist
 OutputBaseFilename=TechZone-Setup-v{#MyAppVersion}
 SetupIconFile=..\icon.ico
+Uninstallable=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppFullName}
 WizardStyle=modern
@@ -48,7 +49,9 @@ LZMAUseSeparateProcess=yes
 CloseApplications=yes
 CloseApplicationsFilter={#MyAppExeName}
 RestartApplications=yes
-ShowLanguageDialog=auto
+; إجبار ظهور نافذة اختيار اللغة (عربي / إنجليزي) في كل مرة يعمل فيها السطب
+ShowLanguageDialog=yes
+LanguageDetectionMethod=none
 DisableWelcomePage=no
 
 [Languages]
@@ -58,6 +61,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 arabic.RunOnStartup=تشغيل البرنامج تلقائياً عند بدء تشغيل ويندوز
 english.RunOnStartup=Start automatically when Windows starts
+arabic.UninstallApp=إلغاء تثبيت {#MyAppName}
+english.UninstallApp=Uninstall {#MyAppName}
 arabic.WebView2Missing=لم يتم العثور على مكون Microsoft Edge WebView2 Runtime على هذا الجهاز. يعمل البرنامج بشكل مثالي على Windows 11، وقد يتطلب تثبيت WebView2 Runtime على بعض إصدارات Windows 10 القديمة.%n%nهل تريد المتابعة في التثبيت على أي حال؟
 english.WebView2Missing=Microsoft Edge WebView2 Runtime was not detected on this machine. TechZone POS requires WebView2 Runtime (built into Windows 11 and modern Windows 10).%n%nDo you want to continue installation anyway?
 
@@ -78,12 +83,17 @@ Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppFullName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\icon.ico"
-Name: "{autoprograms}\إلغاء تثبيت {#MyAppName}"; Filename: "{uninstallexe}"
+Name: "{autoprograms}\{cm:UninstallApp}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppFullName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
 Name: "{userstartup}\{#MyAppFullName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\icon.ico"; Tasks: autostart
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppFullName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; حذف كافة الملفات والمجلدات الفرعية (قواعد البيانات، النسخ الاحتياطية، الفواتير) والمجلد الرئيسي
+Type: filesandordirs; Name: "{app}\data"
+Type: filesandordirs; Name: "{app}"
 
 [Code]
 function HasWebView2Key(RootKey: Integer; const SubKey: String): Boolean;
@@ -111,5 +121,17 @@ begin
       if MsgBox(CustomMessage('WebView2Missing'), mbConfirmation, MB_YESNO) <> IDYES then
         Result := False;
     end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  AppDir: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    AppDir := ExpandConstant('{app}');
+    if DirExists(AppDir) then
+      DelTree(AppDir, True, True, True);
   end;
 end;
