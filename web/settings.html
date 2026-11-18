@@ -70,6 +70,10 @@
         <span class="material-icons-round text-base">backup</span>
         <span>النسخ الاحتياطي وقاعدة البيانات</span>
       </button>
+      <button type="button" data-stab="audit" class="settings-tab-btn px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 transition-all">
+        <span class="material-icons-round text-base">policy</span>
+        <span>سجل رقابة العمليات (Audit Log)</span>
+      </button>
     </div>
   </div>
 
@@ -183,6 +187,62 @@
             <span class="material-icons-round text-sm">refresh</span>
             <span>تحديث</span>
           </button>
+        </div>
+      </div>
+      <!-- إعداد سلوك زر إغلاق النافذة (X) وشريط النظام بجوار الساعة (System Tray) -->
+      <div class="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800/70 space-y-2.5">
+        <div class="flex items-center gap-2">
+          <span class="material-icons-round text-amber-600 dark:text-amber-400 text-lg">dock</span>
+          <div>
+            <h4 class="text-xs md:text-sm font-bold text-slate-900 dark:text-white">سلوك إغلاق النافذة من علامة (X) وشريط النظام بجوار الساعة</h4>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">اختر هل يتم إغلاق البرنامج نهائياً عند الضغط على (X) أم إخفاء النافذة ليبقى البرنامج يعمل بجوار الساعة</p>
+          </div>
+        </div>
+        <label class="flex items-start gap-2.5 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer">
+          <input id="st-close-exit-app" type="checkbox" class="mt-0.5 w-4 h-4 accent-blue-600"/>
+          <div>
+            <span class="font-bold text-xs text-slate-900 dark:text-white block">إغلاق البرنامج نهائياً عند الضغط على علامة (X) أعلى النافذة</span>
+            <span class="text-[11px] text-slate-500 dark:text-slate-400">عند التفعيل: يُغلق البرنامج نهائياً عند الضغط على (X). وعند عدم التفعيل (الافتراضي): تختفي النافذة فقط ويبقى البرنامج في شريط النظام بجوار الساعة (System Tray) بحيث يعمل في الخلفية ويمكنك إعادة فتحه بالضغط على أيقونته بجوار الساعة.</span>
+          </div>
+        </label>
+      </div>
+      <!-- إعدادات التنبيهات الصوتية والمرئية وحد الائتمان أثناء البيع -->
+      <div class="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-900/15 border border-emerald-200 dark:border-emerald-800/70 space-y-3">
+        <div class="flex items-center gap-2">
+          <span class="material-icons-round text-emerald-600 dark:text-emerald-400 text-lg">notifications_active</span>
+          <div>
+            <h4 class="text-xs md:text-sm font-bold text-slate-900 dark:text-white">التنبيهات الصوتية والمرئية وحد ائتمان العملاء في الكاشير</h4>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">تحكم في أصوات المسح والبيع، وتنبيهات وصول المخزون للحد الأدنى، وحد المديونية المسموح للعملاء</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <label class="flex items-start gap-2.5 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer">
+            <input id="st-pos-sound-enabled" type="checkbox" checked class="mt-0.5 w-4 h-4 accent-blue-600"/>
+            <div>
+              <span class="font-bold text-xs text-slate-900 dark:text-white block">تفعيل الأصوات التفاعلية في الكاشير</span>
+              <span class="text-[11px] text-slate-500">نغمة صوتية عند مسح الباركود، إتمام الفاتورة، أو ظهور تحذير</span>
+            </div>
+          </label>
+          <label class="flex items-start gap-2.5 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer">
+            <input id="st-pos-low-stock-alert" type="checkbox" checked class="mt-0.5 w-4 h-4 accent-blue-600"/>
+            <div>
+              <span class="font-bold text-xs text-slate-900 dark:text-white block">تنبيه فوري بنواقص المخزون أثناء البيع</span>
+              <span class="text-[11px] text-slate-500">إشعار مرئي وصوتي عند وصول الصنف للحد الأدنى أثناء البيع</span>
+            </div>
+          </label>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+            <label class="block text-xs font-bold text-slate-800 dark:text-white mb-1">حد الائتمان الافتراضي للعميل (ج.م) — 0 = بدون حد</label>
+            <input id="st-customer-default-credit-limit" type="number" min="0" step="50" value="0" class="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-xs font-num font-bold"/>
+          </div>
+          <label class="flex items-start gap-2.5 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer">
+            <input id="st-enforce-credit-limit" type="checkbox" class="mt-0.5 w-4 h-4 accent-blue-600"/>
+            <div>
+              <span class="font-bold text-xs text-slate-900 dark:text-white block">منع البيع الآجل عند تجاوز حد الائتمان</span>
+              <span class="text-[11px] text-slate-500">عند التفعيل: يرفض النظام الفاتورة الآجلة التي تتجاوز الحد، وعند عدم التفعيل يكتفي بتنبيه الكاشير</span>
+            </div>
+          </label>
         </div>
       </div>
       <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
@@ -335,6 +395,24 @@
           <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">مدة الإقفال (بالدقائق)</label>
           <input id="cfg-login-lockout-minutes" type="number" min="1" max="1440" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-xs font-bold" />
         </div>
+      </div>
+
+      <div class="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800/70">
+        <label class="block text-xs font-bold text-slate-800 dark:text-white mb-1.5 flex items-center gap-1.5">
+          <span class="material-icons-round text-amber-600 text-base">lock_clock</span>
+          <span>قفل الشاشة التلقائي عند الخمول (Auto-Lock on Idle)</span>
+        </label>
+        <select id="cfg-idle-lock-minutes" class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-xs font-bold">
+          <option value="0">معطل — عدم قفل الشاشة تلقائياً (0)</option>
+          <option value="1">بعد دقيقة واحدة من عدم النشاط (1 دقيقة)</option>
+          <option value="3">بعد 3 دقائق من عدم النشاط</option>
+          <option value="5">بعد 5 دقائق من عدم النشاط</option>
+          <option value="10">بعد 10 دقائق من عدم النشاط</option>
+          <option value="15">بعد 15 دقيقة من عدم النشاط</option>
+          <option value="30">بعد 30 دقيقة من عدم النشاط</option>
+          <option value="60">بعد ساعة كاملة (60 دقيقة)</option>
+        </select>
+        <p class="text-[11px] text-slate-500 mt-1">يقفل سطح المكتب بنافذة تطلب رمز الـ PIN للمستخدم الحالي مع الحفاظ على كافة النوافذ والفواتير المفتوحة كما هي.</p>
       </div>
 
       <button id="btn-save-login-settings" type="button" class="w-full py-3 px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2 mt-2">
@@ -698,6 +776,76 @@
       </div>
     </div>
   </section>
+
+  <!-- ==================== التبويب 5: سجل رقابة العمليات الشامل (General Audit Log) ==================== -->
+  <section id="spane-audit" class="hidden space-y-5">
+    <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 p-5 md:p-6 shadow-sm space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+        <div>
+          <h2 class="text-base md:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="material-icons-round text-primary">policy</span>
+            <span>سجل رقابة العمليات اليومية الشامل (General Audit Log)</span>
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">تتبع تفصيلي لكافة العمليات الحساسة: تعديل أسعار المنتجات، حذف الأصناف، تعديل المخزون، إصدار وإلغاء ومرتجعات الفواتير، سندات القبض، وفك قفل الشاشة</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btn-aud-refresh" class="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-bold flex items-center gap-1">
+            <span class="material-icons-round text-sm">refresh</span>
+            <span>تحديث السجل</span>
+          </button>
+          <button type="button" id="btn-aud-print" class="px-3.5 py-2 rounded-xl bg-primary text-white hover:bg-primary-dark text-xs font-bold flex items-center gap-1 shadow-sm">
+            <span class="material-icons-round text-sm">print</span>
+            <span>طباعة السجل A4</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div class="lg:col-span-2">
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">بحث في العملية أو المستخدم أو رقم المرجع</label>
+          <input id="aud-q" type="text" class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs" placeholder="ابحث باسم المنتج، رقم الفاتورة، اسم الموظف..."/>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">القسم / نوع السجل</label>
+          <select id="aud-entity" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold">
+            <option value="">كل الأقسام والعمليات</option>
+            <option value="sales">المبيعات والفواتير والمرتجعات</option>
+            <option value="products">المخزون والمنتجات والأسعار</option>
+            <option value="customers">العملاء والمديونيات</option>
+            <option value="customer_payments">سندات قبض العملاء</option>
+            <option value="settings">إعدادات المتجر والنظام</option>
+            <option value="session">قفل وفك قفل الشاشة</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">من تاريخ</label>
+          <input id="aud-from" type="date" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-num"/>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">إلى تاريخ</label>
+          <input id="aud-to" type="date" class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-num"/>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+            <tr>
+              <th class="p-3 font-bold">#</th>
+              <th class="p-3 font-bold">التاريخ والوقت</th>
+              <th class="p-3 font-bold">المستخدم</th>
+              <th class="p-3 font-bold">نوع العملية</th>
+              <th class="p-3 font-bold">المرجع</th>
+              <th class="p-3 font-bold">التفاصيل والبيان</th>
+            </tr>
+          </thead>
+          <tbody id="aud-tbody" class="divide-y divide-slate-100 dark:divide-slate-800">
+            <tr><td colspan="6" class="p-8 text-center text-slate-400">جاري تحميل سجل الرقابة...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 </main>
 
 <script src="app.js"></script>
@@ -713,7 +861,7 @@ let PENDING_LOGO = null;
 
 function switchSettingsTab(tabId) {
   ACTIVE_STAB = tabId;
-  ['store', 'login', 'invoices', 'backups'].forEach((id) => {
+  ['store', 'login', 'invoices', 'backups', 'audit'].forEach((id) => {
     const pane = $('spane-' + id);
     if (pane) pane.classList.toggle('hidden', id !== tabId);
   });
@@ -722,6 +870,7 @@ function switchSettingsTab(tabId) {
   });
   if (tabId === 'invoices') renderInvoiceStudioPreview();
   if (tabId === 'backups') loadBackupsList();
+  if (tabId === 'audit') loadAuditLogList();
 }
 
 document.querySelectorAll('[data-stab]').forEach((btn) => {
@@ -770,6 +919,11 @@ function fillStoreTab() {
   $('st-whatsapp-enabled').checked = show('whatsapp_send_enabled');
   $('st-pos-print-preview').checked = SETTINGS.pos_print_preview !== '0';
   $('st-print-show-dialog').checked = SETTINGS.print_show_dialog === '1';
+  if ($('st-close-exit-app')) $('st-close-exit-app').checked = SETTINGS.close_exit_app === '1';
+  if ($('st-pos-sound-enabled')) $('st-pos-sound-enabled').checked = SETTINGS.pos_sound_enabled !== '0';
+  if ($('st-pos-low-stock-alert')) $('st-pos-low-stock-alert').checked = SETTINGS.pos_low_stock_alert !== '0';
+  if ($('st-customer-default-credit-limit')) $('st-customer-default-credit-limit').value = SETTINGS.customer_default_credit_limit || '0';
+  if ($('st-enforce-credit-limit')) $('st-enforce-credit-limit').checked = SETTINGS.enforce_credit_limit === '1';
   loadPrintersOptions(SETTINGS.print_printer_name || '');
   drawLogoPreview(PENDING_LOGO !== null ? PENDING_LOGO : (SETTINGS.receipt_logo || ''));
   renderPayMethodsList();
@@ -870,6 +1024,11 @@ $('btn-save-store-settings').addEventListener('click', async () => {
     pos_print_preview: $('st-pos-print-preview').checked ? '1' : '0',
     print_show_dialog: $('st-print-show-dialog').checked ? '1' : '0',
     print_printer_name: ($('st-print-printer-name') && $('st-print-printer-name').value) || '',
+    close_exit_app: ($('st-close-exit-app') && $('st-close-exit-app').checked) ? '1' : '0',
+    pos_sound_enabled: ($('st-pos-sound-enabled') && $('st-pos-sound-enabled').checked) ? '1' : '0',
+    pos_low_stock_alert: ($('st-pos-low-stock-alert') && $('st-pos-low-stock-alert').checked) ? '1' : '0',
+    customer_default_credit_limit: ($('st-customer-default-credit-limit') && $('st-customer-default-credit-limit').value) || '0',
+    enforce_credit_limit: ($('st-enforce-credit-limit') && $('st-enforce-credit-limit').checked) ? '1' : '0',
   };
   if (PENDING_LOGO !== null) {
     payload.receipt_logo = PENDING_LOGO;
@@ -931,6 +1090,7 @@ $('btn-reset-egypt-defaults').addEventListener('click', () => {
   $('st-c-logo').checked = $('st-c-barcode').checked = $('st-c-tax').checked = $('st-c-pays').checked = $('st-whatsapp-enabled').checked = true;
   $('st-pos-print-preview').checked = true;
   $('st-print-show-dialog').checked = false;
+  if ($('st-close-exit-app')) $('st-close-exit-app').checked = false;
   if ($('st-print-printer-name')) $('st-print-printer-name').value = '';
   toast('أُعيدت الحقول لافتراضي مصر — اضغط حفظ لتثبيتها', 'warn');
 });
@@ -987,6 +1147,7 @@ function fillLoginTab() {
    $('cfg-default-theme').value = SETTINGS.os_default_theme || 'dark';
    $('cfg-login-max-attempts').value = SETTINGS.login_max_attempts || '5';
    $('cfg-login-lockout-minutes').value = SETTINGS.login_lockout_minutes || '10';
+   if ($('cfg-idle-lock-minutes')) $('cfg-idle-lock-minutes').value = SETTINGS.idle_lock_minutes || '0';
 }
 
 function syncLoginModeCardsHighlight() {
@@ -1011,6 +1172,7 @@ $('btn-save-login-settings').addEventListener('click', async () => {
      os_default_theme: $('cfg-default-theme').value || 'dark',
      login_max_attempts: $('cfg-login-max-attempts').value || '5',
      login_lockout_minutes: $('cfg-login-lockout-minutes').value || '10',
+     idle_lock_minutes: ($('cfg-idle-lock-minutes') && $('cfg-idle-lock-minutes').value) || '0',
   };
   const st = await guard(() => api('settings_save', payload));
   if (st) {
@@ -1400,6 +1562,91 @@ $('btn-refresh-backups').addEventListener('click', async () => {
   toast('تم تحديث قائمة النسخ الاحتياطية');
 });
 
+
+/* ==================== 5) تبويب سجل رقابة العمليات الشامل (Audit Log) ==================== */
+let LAST_AUDIT_ROWS = [];
+async function loadAuditLogList() {
+  const tbody = $('aud-tbody');
+  if (!tbody) return;
+  const res = await guard(() => api('activity_audit_list', {
+    q: ($('aud-q') && $('aud-q').value.trim()) || null,
+    entity_type: ($('aud-entity') && $('aud-entity').value) || null,
+    date_from: ($('aud-from') && $('aud-from').value) || null,
+    date_to: ($('aud-to') && $('aud-to').value) || null,
+    limit: 250,
+  }));
+  if (!res) return;
+  LAST_AUDIT_ROWS = res.rows || [];
+  const actionLabels = {
+    sale_create: { t: 'إصدار فاتورة بيع', c: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
+    sale_return: { t: 'مرتجع مبيعات', c: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+    sale_modify: { t: 'تعديل فاتورة من السلة', c: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+    sale_discount: { t: 'تعديل خصم فاتورة', c: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+    product_create: { t: 'إضافة منتج جديد', c: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+    product_update: { t: 'تعديل بيانات منتج', c: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300' },
+    product_price_change: { t: 'تغيير سعر منتج', c: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
+    product_delete: { t: 'حذف/إيقاف منتج', c: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+    stock_adjust: { t: 'تعديل رصيد مخزون', c: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' },
+    customer_create: { t: 'إضافة عميل', c: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300' },
+    customer_update: { t: 'تعديل بيانات عميل', c: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300' },
+    customer_delete: { t: 'حذف عميل', c: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+    customer_payment: { t: 'تحصيل سند قبض', c: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
+    customer_payment_delete: { t: 'إلغاء سند قبض', c: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+    settings_save: { t: 'تحديث الإعدادات', c: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200' },
+    screen_unlock: { t: 'فك قفل الشاشة', c: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
+    screen_unlock_failed: { t: 'فشل فك القفل', c: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+  };
+  tbody.innerHTML = LAST_AUDIT_ROWS.length ? LAST_AUDIT_ROWS.map((r) => {
+    const inf = actionLabels[r.action] || { t: r.action, c: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' };
+    return `
+      <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+        <td class="p-3 font-num text-slate-400">${r.id}</td>
+        <td class="p-3 font-num text-slate-600 dark:text-slate-300 whitespace-nowrap">${esc(r.created_at || '')}</td>
+        <td class="p-3 font-bold text-slate-800 dark:text-white">${esc(r.user_name || '—')}</td>
+        <td class="p-3"><span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${inf.c}">${esc(inf.t)}</span></td>
+        <td class="p-3 font-mono font-bold text-primary">${esc(r.entity_id || '—')}</td>
+        <td class="p-3 text-slate-700 dark:text-slate-200 font-medium">${esc(r.summary || '')}</td>
+      </tr>
+    `;
+  }).join('') : '<tr><td colspan="6" class="p-8 text-center text-slate-400">لا توجد سجلات رقابية مطابقة للفلتر الحالي</td></tr>';
+}
+
+if ($('btn-aud-refresh')) $('btn-aud-refresh').addEventListener('click', loadAuditLogList);
+if ($('aud-q')) $('aud-q').addEventListener('input', () => { clearTimeout(window._audT); window._audT = setTimeout(loadAuditLogList, 220); });
+if ($('aud-entity')) $('aud-entity').addEventListener('change', loadAuditLogList);
+if ($('aud-from')) $('aud-from').addEventListener('change', loadAuditLogList);
+if ($('aud-to')) $('aud-to').addEventListener('change', loadAuditLogList);
+if ($('btn-aud-print')) {
+  $('btn-aud-print').addEventListener('click', async () => {
+    if (!LAST_AUDIT_ROWS.length) await loadAuditLogList();
+    const trs = LAST_AUDIT_ROWS.map((r, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${esc(r.created_at || '')}</td>
+        <td>${esc(r.user_name || '')}</td>
+        <td>${esc(r.action || '')}</td>
+        <td>${esc(r.entity_id || '—')}</td>
+        <td>${esc(r.summary || '')}</td>
+      </tr>
+    `).join('');
+    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>
+      body{font-family:Cairo,Arial,sans-serif;padding:18px;color:#0f172a;font-size:12px}
+      h2{margin:0 0 6px} table{width:100%;border-collapse:collapse;margin-top:10px}
+      th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:right} th{background:#f1f5f9;font-weight:700}
+    </style></head><body>
+      <h2>تقرير سجل رقابة العمليات الشامل (Audit Log) — ${esc((SETTINGS && SETTINGS.store_name) || 'تك زون')}</h2>
+      <div>تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')} | عدد السجلات: ${LAST_AUDIT_ROWS.length}</div>
+      <table><thead><tr><th>#</th><th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>المرجع</th><th>التفاصيل والبيان</th></tr></thead>
+      <tbody>${trs}</tbody></table>
+    </body></html>`;
+    if (window.parent && window.parent !== window && window.parent.TZOS && window.parent.TZOS.printHtml) {
+      await window.parent.TZOS.printHtml(html, 'a4');
+    } else {
+      await tzPrintPage('a4');
+    }
+  });
+}
+
 (async () => {
   const user = await pageInit('settings', { perm: ['settings_view_edit', 'templates_manage', 'backups_manage'] });
   if (!user) return;
@@ -1431,6 +1678,7 @@ $('btn-refresh-backups').addEventListener('click', async () => {
     canStore ? 'login' : null,
     canTpls ? 'invoices' : null,
     canBackups ? 'backups' : null,
+    canStore ? 'audit' : null,
   ].filter(Boolean);
   const reqTab = new URLSearchParams(location.search).get('tab');
   if (reqTab && allowedTabs.includes(reqTab)) {

@@ -751,6 +751,10 @@
         <span class="material-icons-round text-sm text-primary">settings</span>
         <span class="hidden md:inline">الإعدادات</span>
       </button>
+      <button id="top-lock-btn" onclick="TZOS.lockScreen()" class="top-btn os-top-pill px-2.5 py-1 rounded-full" title="قفل الشاشة السريع (مع الحفاظ على النوافذ المفتوحة)">
+        <span class="material-icons-round text-sm text-amber-500">lock</span>
+        <span class="hidden lg:inline text-xs font-bold">قفل</span>
+      </button>
       <button id="top-theme-btn" onclick="toggleTheme()" class="top-btn os-top-pill px-2.5 py-1 rounded-full" title="تبديل الوضع الليلي / النهاري لسطح المكتب وجميع النوافذ">
         <span id="top-theme-icon" class="material-icons-round text-sm text-amber-500 dark:text-sky-300">dark_mode</span>
         <span id="top-theme-label" class="hidden md:inline text-xs font-bold">الوضع النهاري</span>
@@ -988,6 +992,33 @@
 <!-- حاوية الطباعة الحرارية المباشرة 80mm -->
 <div id="os-print-stage" dir="rtl"></div>
 
+
+  <!-- ===== شاشة القفل التلقائي عند الخمول (Auto-Lock on Idle Overlay) ===== -->
+  <div id="os-lock-overlay" class="hidden fixed inset-0 z-[160] bg-slate-950/85 backdrop-blur-2xl flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-3xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/80 shadow-2xl p-7 text-center space-y-5">
+      <div class="w-16 h-16 rounded-2xl bg-primary/15 text-primary mx-auto flex items-center justify-center shadow-inner">
+        <span class="material-icons-round text-4xl">lock</span>
+      </div>
+      <div>
+        <h3 class="text-xl font-black text-slate-900 dark:text-white">تم قفل الشاشة لحماية النظام</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">جميع النوافذ والفواتير المفتوحة محفوظة في الخلفية — أدخل رمز الـ PIN للمستخدم الحالي (<span id="lock-user-name" class="font-bold text-primary">...</span>) للمتابعة</p>
+      </div>
+      <form id="os-lock-form" class="space-y-3">
+        <input id="os-lock-pin" type="password" inputmode="numeric" autocomplete="off" class="w-full px-4 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-center text-xl font-black tracking-[0.4em] focus:outline-none focus:border-primary" placeholder="••••"/>
+        <div id="os-lock-err" class="hidden text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-xl"></div>
+        <div class="flex items-center gap-2.5 pt-1">
+          <button type="submit" class="flex-1 py-3.5 rounded-2xl bg-primary hover:bg-blue-600 text-white font-bold text-sm shadow-lg shadow-primary/25 flex items-center justify-center gap-1.5">
+            <span class="material-icons-round text-base">lock_open</span>
+            <span>فك القفل والمتابعة</span>
+          </button>
+          <button type="button" id="os-lock-logout" class="px-4 py-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-red-50 hover:text-red-600 text-xs font-bold">
+            تبديل المستخدم
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
 <script src="app.js"></script>
 <script>
 const OS_APPS = [
@@ -1169,6 +1200,7 @@ const TZOS = {
 
     winEl.addEventListener('mousedown', () => this.focusWindow(appId));
     iframe.addEventListener('load', () => {
+      if (TZOS.bindIframeIdleListeners) TZOS.bindIframeIdleListeners(iframe);
       try {
         if (iframe.contentWindow) {
           iframe.contentWindow.pywebview = window.pywebview;
@@ -1888,6 +1920,88 @@ document.getElementById('btn-wp-reset-default').addEventListener('click', async 
   TZOS.openWallpaperModal();
   toast('تم استعادة المظهر الافتراضي المحدد من قِبل المدير');
 });
+
+
+  /* ===== قفل الشاشة التلقائي عند الخمول (Auto-Lock on Idle) ===== */
+  let _IDLE_LAST_TS = Date.now();
+  let _IS_SCREEN_LOCKED = false;
+
+  TZOS.resetIdleTimer = () => {
+    if (!_IS_SCREEN_LOCKED) _IDLE_LAST_TS = Date.now();
+  };
+
+  TZOS.lockScreen = () => {
+    if (_IS_SCREEN_LOCKED) return;
+    _IS_SCREEN_LOCKED = true;
+    const ov = document.getElementById('os-lock-overlay');
+    const nm = document.getElementById('lock-user-name');
+    const pinInp = document.getElementById('os-lock-pin');
+    const errBox = document.getElementById('os-lock-err');
+    if (nm && window.CURRENT_USER) nm.textContent = window.CURRENT_USER.name || window.CURRENT_USER.username || 'المستخدم';
+    if (errBox) { errBox.textContent = ''; errBox.classList.add('hidden'); }
+    if (pinInp) pinInp.value = '';
+    if (ov) ov.classList.remove('hidden');
+    setTimeout(() => { if (pinInp) pinInp.focus(); }, 60);
+  };
+
+  TZOS.unlockScreen = async (pinVal) => {
+    const errBox = document.getElementById('os-lock-err');
+    try {
+      const res = await api('verify_lock_pin', { pin: pinVal });
+      if (res && res.unlocked) {
+        _IS_SCREEN_LOCKED = false;
+        _IDLE_LAST_TS = Date.now();
+        const ov = document.getElementById('os-lock-overlay');
+        if (ov) ov.classList.add('hidden');
+        toast('تم فك قفل الشاشة بنجاح');
+      }
+    } catch (e) {
+      if (errBox) {
+        errBox.textContent = (e && e.message) || 'الرمز السري غير صحيح';
+        errBox.classList.remove('hidden');
+      }
+      if (typeof tzPlayPosSound === 'function') tzPlayPosSound('error');
+    }
+  };
+
+  TZOS.bindIframeIdleListeners = (iframeEl) => {
+    try {
+      const cw = iframeEl && iframeEl.contentWindow;
+      if (!cw) return;
+      ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel'].forEach((ev) => {
+        cw.addEventListener(ev, () => TZOS.resetIdleTimer(), { passive: true });
+      });
+    } catch (e) {}
+  };
+
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel'].forEach((ev) => {
+    window.addEventListener(ev, () => TZOS.resetIdleTimer(), { passive: true });
+  });
+
+  setInterval(() => {
+    if (_IS_SCREEN_LOCKED) return;
+    const st = window.SETTINGS || {};
+    const mins = parseInt(st.idle_lock_minutes || '0', 10) || 0;
+    if (mins > 0 && (Date.now() - _IDLE_LAST_TS) >= mins * 60 * 1000) {
+      TZOS.lockScreen();
+    }
+  }, 4000);
+
+  const lockForm = document.getElementById('os-lock-form');
+  if (lockForm) {
+    lockForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pinInp = document.getElementById('os-lock-pin');
+      await TZOS.unlockScreen(pinInp ? pinInp.value : '');
+    });
+  }
+  const lockLogoutBtn = document.getElementById('os-lock-logout');
+  if (lockLogoutBtn) {
+    lockLogoutBtn.addEventListener('click', async () => {
+      await guard(() => api('logout'));
+      location.href = 'index.html';
+    });
+  }
 
 document.getElementById('os-start-btn').addEventListener('click', (e) => { e.stopPropagation(); TZOS.toggleStart(); });
 document.getElementById('top-logo-btn').addEventListener('click', (e) => { e.stopPropagation(); TZOS.toggleStart(); });

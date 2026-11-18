@@ -426,9 +426,44 @@ class SalesMixin:
                     "INSERT INTO payments(sale_id, method, amount, received, change, ref_no) VALUES(?,?,?,?,?,?)",
                     (sale_id, method, amount, received, change, ref_no),
                 )
+            warnings = []
+            low_stock_items = []
+            if st.get("pos_low_stock_alert", "1") != "0":
+                seen_pids = set()
+                for p_row, _q, _u, _s in lines:
+                    if p_row["id"] in seen_pids:
+                        continue
+                    seen_pids.add(p_row["id"])
+                    cur_p = conn.execute("SELECT id, name, sku, qty, min_qty FROM products WHERE id=?", (p_row["id"],)).fetchone()
+                    if cur_p and cur_p["qty"] <= cur_p["min_qty"]:
+                        low_stock_items.append({
+                            "id": cur_p["id"],
+                            "name": cur_p["name"],
+                            "sku": cur_p["sku"],
+                            "qty": cur_p["qty"],
+                            "min_qty": cur_p["min_qty"],
+                        })
+                        warnings.append(f"تنبيه مخزون: الصنف «{cur_p['name']}» وصل للحد الأدنى (المتبقي {cur_p['qty']})")
+
+            credit_limit_warning = None
             if customer_id:
                 credit_amt = sum(amount for method, amount, _rec, _chg, _ref in pays if method == "credit")
                 if credit_amt > 0:
+                    cust_row = conn.execute("SELECT * FROM customers WHERE id=?", (customer_id,)).fetchone()
+                    if cust_row:
+                        cust_clim = int(cust_row["credit_limit"] or 0) if "credit_limit" in cust_row.keys() else 0
+                        def_clim = _money(st.get("customer_default_credit_limit", "0"), 0)
+                        eff_limit = cust_clim if cust_clim > 0 else def_clim
+                        projected_debt = int(cust_row["debt"] or 0) + credit_amt
+                        if eff_limit > 0 and projected_debt > eff_limit:
+                            if st.get("enforce_credit_limit", "0") == "1":
+                                raise ApiError(
+                                    f"تجاوز حد الائتمان المسموح للعميل «{cust_row['name']}» ({_fmt_money(eff_limit)} ج.م) — المديونية بعد الفاتورة ستصبح {_fmt_money(projected_debt)} ج.م"
+                                )
+                            credit_limit_warning = (
+                                f"تنبيه حد ائتمان: مديونية العميل «{cust_row['name']}» ({_fmt_money(projected_debt)} ج.م) تجاوزت حد الائتمان ({_fmt_money(eff_limit)} ج.م)"
+                            )
+                            warnings.append(credit_limit_warning)
                     _append_ledger_entry(
                         conn,
                         customer_id,
@@ -444,7 +479,20 @@ class SalesMixin:
                 else:
                     _refresh_customer_cache(conn, customer_id)
             erp_hooks.on_sale_created(self, conn, sale_id, user=u)
-            return {"sale_id": sale_id, "invoice_no": invoice}
+            self._log_activity(
+                conn, "sale_create", "sales", invoice,
+                f"إصدار فاتورة مبيعات {invoice} بإجمالي {_fmt_money(total)} ج.م",
+                {"sale_id": sale_id, "total": total, "discount": discount, "customer_name": customer_name},
+                module_key="pos",
+            )
+            return {
+                "sale_id": sale_id,
+                "invoice_no": invoice,
+                "warnings": warnings,
+                "low_stock_items": low_stock_items,
+                "credit_limit_exceeded": bool(credit_limit_warning),
+                "credit_limit_warning": credit_limit_warning,
+            }
 
     def sale(self, id):
         u = self._perm_any("pos_sell", "receipt_view", "history_view_own", "history_view_all", "sales_return", "sales_return_own", "sales_post_discount")
@@ -537,6 +585,7 @@ class SalesMixin:
                     new_amt = max(0, first_pay["amount"] - diff)
                     conn.execute("UPDATE payments SET amount=? WHERE id=?", (new_amt, first_pay["id"]))
             _sync_sale_ledger_delta(conn, s, prev_net_credit, user=u, reason_prefix="خصم على فاتورة آجلة")
+            self._log_activity(conn, "sale_discount", "sales", s["invoice_no"], f"تعديل خصم الفاتورة {s['invoice_no']} إلى {_fmt_money(disc)} ج.م", {"sale_id": sid, "old_discount": s["discount"], "new_discount": disc}, module_key="pos")
             return {"sale_id": sid, "discount": disc, "total": new_total, "modified_by_name": u["name"], "modified_at": now_ts}
 
     def sale_modify_from_cart(self, sale_id, items=None, discount=0, notes=None, reason=None):
@@ -676,6 +725,7 @@ class SalesMixin:
                  (notes or "").strip() or s["notes"], u["id"], u["name"], now_ts, full_log, sid),
             )
             _sync_sale_ledger_delta(conn, s, prev_net_credit, user=u, reason_prefix="تعديل فاتورة آجلة")
+            self._log_activity(conn, "sale_modify", "sales", s["invoice_no"], f"تعديل/مرتجع على الفاتورة {s['invoice_no']} — {full_log}", {"sale_id": sid, "returned_total": ret_total, "new_total": new_total}, module_key="pos")
             return {
                 "sale_id": sid,
                 "invoice_no": s["invoice_no"],
@@ -1180,5 +1230,6 @@ class SalesMixin:
                 credit_delta=max(0, prev_net_credit - new_net_credit),
                 user=u,
             )
+            self._log_activity(conn, "sale_return", "sales", s["invoice_no"], f"مرتجع مبيعات على الفاتورة {s['invoice_no']} بقيمة {_fmt_money(total)} ج.م", {"sale_id": s["id"], "return_id": cur.lastrowid, "total": total, "reason": reason}, module_key="history")
             return {"return_id": cur.lastrowid, "total": total}
 

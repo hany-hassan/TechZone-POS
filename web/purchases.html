@@ -487,6 +487,7 @@ async function loadPurchases() {
       <td class="p-3 flex items-center gap-1.5">
         ${r.status === 'draft' ? `<button onclick="postDraftPurchase(${r.id})" class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold">ترحيل</button>` : ''}
         ${r.status === 'posted' ? `<button onclick="quickReturnPurchase(${r.id})" class="px-2.5 py-1 rounded-lg bg-purple-600/10 text-purple-600 text-[11px] font-bold">مرتجع</button>` : ''}
+        <button onclick="printPurchaseBarcodes(${r.id})" class="px-2.5 py-1 rounded-lg bg-indigo-600/10 text-indigo-600 text-[11px] font-bold" title="طباعة ملصقات الباركود لأصناف الفاتورة">🏷️ باركود</button>
       </td>
     </tr>
   `).join('');
@@ -498,6 +499,36 @@ async function postDraftPurchase(id) {
     toast('تم اعتماد وترحيل فاتورة المشتريات للمخزون');
     loadDashboard();
     loadPurchases();
+  }
+}
+
+
+async function printPurchaseBarcodes(id) {
+  const pur = await guard(() => api('purchase_get', { id }));
+  if (!pur || !Array.isArray(pur.items) || !pur.items.length) {
+    toast('لا توجد أصناف في هذه الفاتورة لطباعة ملصقاتها', 'warn');
+    return;
+  }
+  const items = pur.items.map((it) => ({
+    id: it.product_id,
+    name: it.name,
+    sku: it.sku || String(it.product_id),
+    price: it.sell_price || it.unit_cost || 0,
+    copies: Math.max(1, parseInt(it.qty, 10) || 1),
+  }));
+  const html = tzBuildBarcodeLabelsPrintHtml(items, {
+    size: '38x25',
+    show_store: true,
+    show_name: true,
+    show_price: true,
+    show_code: true,
+    store_name: (SETTINGS && SETTINGS.store_name) || 'تك زون للإلكترونيات',
+    currency: CURRENCY,
+  });
+  if (window.parent && window.parent !== window && window.parent.TZOS && window.parent.TZOS.printHtml) {
+    await window.parent.TZOS.printHtml(html, '58mm');
+  } else {
+    await tzPrintPage('58mm');
   }
 }
 

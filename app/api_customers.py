@@ -43,7 +43,7 @@ class CustomersMixin:
         with db.connect() as conn:
             if can_debt:
                 rows = conn.execute(
-                    """SELECT id, name, phone, total_purchases, credit_total, paid_total, debt, created_at
+                    """SELECT id, name, phone, total_purchases, credit_total, paid_total, debt, COALESCE(credit_limit, 0) AS credit_limit, created_at
                        FROM customers
                        WHERE name LIKE ? OR phone LIKE ?
                        ORDER BY name LIMIT ?""",
@@ -74,14 +74,16 @@ class CustomersMixin:
                 d["credit_total"] = summary["credit_total"]
                 d["paid_total"] = summary["paid_total"]
                 d["debt"] = summary["debt"]
+                d["credit_limit"] = int(full["credit_limit"] or 0) if "credit_limit" in full.keys() else 0
             else:
                 d["total_purchases"] = None
                 d["credit_total"] = None
                 d["paid_total"] = None
                 d["debt"] = None
+                d["credit_limit"] = None
             return d
 
-    def customers_save(self, name, phone=None, id=None):
+    def customers_save(self, name, phone=None, id=None, credit_limit=None):
         self._perm("customers_edit")
         name = (name or "").strip()
         phone = (phone or "").strip() or None
@@ -93,11 +95,16 @@ class CustomersMixin:
             raise ApiError("رقم الهاتف طويل جداً")
         with db.connect() as conn:
             try:
+                clim = _money(credit_limit, 0) if credit_limit not in (None, "") else None
                 if id:
                     cid = _int(id)
-                    cur = conn.execute("UPDATE customers SET name=?, phone=? WHERE id=?", (name, phone, cid))
+                    if clim is not None:
+                        cur = conn.execute("UPDATE customers SET name=?, phone=?, credit_limit=? WHERE id=?", (name, phone, max(0, clim), cid))
+                    else:
+                        cur = conn.execute("UPDATE customers SET name=?, phone=? WHERE id=?", (name, phone, cid))
                     if not cur.rowcount:
                         raise ApiError("العميل غير موجود")
+                    self._log_activity(conn, "customer_update", "customers", cid, f"تحديث بيانات العميل «{name}»", {"phone": phone, "credit_limit": clim}, module_key="customers")
                     return {"id": cid}
                 else:
                     dup = conn.execute(
@@ -107,9 +114,10 @@ class CustomersMixin:
                     if dup:
                         raise ApiError("العميل مسجل مسبقاً بنفس الاسم ورقم الهاتف")
                     cur = conn.execute(
-                        "INSERT INTO customers(name, phone, created_at) VALUES(?,?,?)",
-                        (name, phone, db.now()),
+                        "INSERT INTO customers(name, phone, credit_limit, created_at) VALUES(?,?,?,?)",
+                        (name, phone, max(0, clim or 0), db.now()),
                     )
+                    self._log_activity(conn, "customer_create", "customers", cur.lastrowid, f"إضافة عميل جديد «{name}»", {"phone": phone, "credit_limit": max(0, clim or 0)}, module_key="customers")
                     return {"id": cur.lastrowid}
             except sqlite3.IntegrityError:
                 raise ApiError("العميل مسجل مسبقاً بنفس الاسم ورقم الهاتف")
@@ -127,6 +135,7 @@ class CustomersMixin:
             if summary["sales"] or summary["vouchers"] or summary.get("inst_plans_count"):
                 raise ApiError("لا يمكن حذف عميل مرتبط بفواتير أو سندات قبض أو عقود أقساط للحفاظ على سلامة الحسابات وسجل الورديات")
             conn.execute("DELETE FROM customers WHERE id=?", (cid,))
+            self._log_activity(conn, "customer_delete", "customers", cid, f"حذف العميل «{cust['name']}»", {"customer_id": cid}, module_key="customers")
             return True
 
     def customers_list(self, limit=100, offset=0, debt_only=False):
@@ -153,7 +162,7 @@ class CustomersMixin:
                 total = global_summary["debt_customers_count"] if debt_only else global_summary["total_customers"]
                 where_sql = "WHERE debt > 0" if debt_only else ""
                 rows = conn.execute(
-                    f"""SELECT id, name, phone, total_purchases, credit_total, paid_total, debt, created_at
+                    f"""SELECT id, name, phone, total_purchases, credit_total, paid_total, debt, COALESCE(credit_limit, 0) AS credit_limit, created_at
                         FROM customers {where_sql} ORDER BY name LIMIT ? OFFSET ?""",
                     (limit, offset),
                 ).fetchall()
@@ -327,6 +336,7 @@ class CustomersMixin:
                 created_at=now_ts,
             )
             erp_hooks.on_customer_payment(self, conn, cur.lastrowid, cid, amt, method, ref, shift_id=shift_id, user=u)
+            self._log_activity(conn, "customer_payment", "customer_payments", ref, f"تحصيل سند قبض {ref} من العميل «{cust['name']}» بمبلغ {_fmt_money(amt)} ج.م", {"customer_id": cid, "amount": amt, "method": method}, module_key="customers")
             return {"id": cur.lastrowid, "ref": ref, "remaining_debt": summary["debt"] - amt}
 
     def customer_payment_delete(self, id):
@@ -351,5 +361,6 @@ class CustomersMixin:
                 user_name=u["name"],
             )
             erp_hooks.on_customer_payment_deleted(self, conn, v, user=u)
+            self._log_activity(conn, "customer_payment_delete", "customer_payments", v["ref"], f"حذف/إلغاء سند قبض {v['ref']} بمبلغ {_fmt_money(v['amount'])} ج.م", {"voucher_id": vid, "amount": v["amount"]}, module_key="customers")
             return True
 

@@ -17,7 +17,11 @@
 <p class="text-slate-500 dark:text-slate-400 text-sm">تتبع المنتجات، رفع الصور، تحديث الكميات، وإدارة الأسعار.</p>
 </div>
 <div class="flex flex-wrap gap-3">
-<button id="btn-stocktake" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-sm">
+<button id="btn-barcode-studio" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-sm">
+<span class="material-icons-outlined text-[20px]">qr_code_2</span>
+<span class="text-sm font-bold">استوديو طباعة ملصقات الباركود</span>
+</button>
+<button id="btn-stocktake"  class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-sm">
 <span class="material-icons-outlined text-[20px]">fact_check</span>
 <span class="text-sm font-bold">جرد المخزون (الموجود والمنتهي)</span>
 </button>
@@ -188,6 +192,79 @@
     </div>
   </div>
 </div>
+
+<!-- استوديو طباعة ملصقات الباركود والرفوف (Barcode Label Printing Studio) -->
+<div id="modal-barcode-studio" class="hidden fixed inset-0 z-50 bg-black/60 items-center justify-center p-4">
+  <div class="bg-white dark:bg-surface-dark rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+    <div class="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h3 class="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="material-icons-outlined text-indigo-600">qr_code_2</span>
+          <span>استوديو طباعة ملصقات الباركود والأسعار (Barcode & Shelf Labels Studio)</span>
+        </h3>
+        <p class="text-xs text-slate-500 mt-0.5">توليد وطباعة ملصقات باركود حرارية (38×25 مم، 50×25 مم، 50×30 مم) أو ورق A4 مقسم محلياً بصيغة Code-128B SVG بدون إنترنت</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="bc-btn-print" type="button" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
+          <span class="material-icons-outlined text-base">print</span>
+          <span>طباعة الملصقات الآن</span>
+        </button>
+        <button id="bc-close" type="button" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">إغلاق</button>
+      </div>
+    </div>
+
+    <div class="p-5 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
+      <div class="lg:col-span-7 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">مقاس الملصق الحراري / الورقة</label>
+            <select id="bc-size" class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-xs font-bold">
+              <option value="38x25">38 × 25 مم (قياسي لطابعات Xprinter / Zebra)</option>
+              <option value="50x25">50 × 25 مم (ملصق حراري عريض)</option>
+              <option value="50x30">50 × 30 مم (ملصق حراري كبير)</option>
+              <option value="a4_grid">ورقة A4 مقسمة (شبكة 3 أعمدة لاصقة)</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <label class="flex items-center gap-1.5 text-xs font-bold cursor-pointer"><input id="bc-show-store" type="checkbox" checked class="accent-blue-600"/><span>اسم المحل</span></label>
+            <label class="flex items-center gap-1.5 text-xs font-bold cursor-pointer"><input id="bc-show-name" type="checkbox" checked class="accent-blue-600"/><span>اسم الصنف</span></label>
+            <label class="flex items-center gap-1.5 text-xs font-bold cursor-pointer"><input id="bc-show-price" type="checkbox" checked class="accent-blue-600"/><span>السعر (ج.م)</span></label>
+            <label class="flex items-center gap-1.5 text-xs font-bold cursor-pointer"><input id="bc-show-code" type="checkbox" checked class="accent-blue-600"/><span>كود SKU</span></label>
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <select id="bc-add-select" class="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"></select>
+          <button id="bc-btn-add-item" type="button" class="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold">+ إضافة للقائمة</button>
+        </div>
+
+        <div class="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-xl">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+              <tr>
+                <th class="p-2.5">الصنف</th>
+                <th class="p-2.5">الباركود / SKU</th>
+                <th class="p-2.5">السعر</th>
+                <th class="p-2.5 w-24">عدد النسخ</th>
+                <th class="p-2.5 w-12"></th>
+              </tr>
+            </thead>
+            <tbody id="bc-items-tbody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="lg:col-span-5 flex flex-col gap-3">
+        <div class="p-4 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex-1 flex flex-col items-center justify-center min-h-[240px]">
+          <div class="text-[11px] font-bold text-slate-500 mb-3">معاينة حية لملصق الباركود (Code-128B SVG)</div>
+          <div id="bc-preview-box" class="bg-white text-slate-900 rounded-xl shadow-md border border-slate-300 p-3 flex flex-col items-center justify-between text-center w-[210px] min-h-[135px]"></div>
+          <div id="bc-total-labels" class="text-xs font-bold text-indigo-600 dark:text-indigo-400 mt-3">إجمالي الملصقات: 1</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 <script>
 let PAGE = 0; const PER = 12; let EDIT = null; let M2_MODE = null, M2_ID = null;
@@ -331,12 +408,14 @@ async function load() {
       <td class="px-6 py-4 whitespace-nowrap text-sm font-num font-bold ${p.stock_state !== 'in' ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300'}">${n(p.qty)}</td>
       <td class="px-6 py-4 whitespace-nowrap">${stockBadge(p)}</td>
       <td class="px-6 py-4 whitespace-nowrap text-sm"><div class="flex gap-2">
+        <button data-bc="${p.id}" class="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded text-indigo-600 dark:text-indigo-400 transition-colors" title="طباعة ملصق باركود وسعر"><span class="material-icons-outlined text-[18px]">qr_code_2</span></button>
         ${CAN_EDIT ? `<button data-edit="${p.id}" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-primary transition-colors" title="تعديل"><span class="material-icons-outlined text-[18px]">edit</span></button>` : ''}
         ${CAN_ADJUST ? `<button data-adj="${p.id}" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-primary transition-colors" title="تعديل يدوي للكمية"><span class="material-icons-outlined text-[18px]">inventory</span></button>` : ''}
         ${CAN_SERIALS ? `<button data-sn="${p.id}" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-primary transition-colors" title="الأرقام التسلسلية"><span class="material-icons-outlined text-[18px]">qr_code</span></button>` : ''}
         ${CAN_EDIT ? `<button data-del="${p.id}" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 hover:text-red-500 transition-colors" title="حذف"><span class="material-icons-outlined text-[18px]">delete</span></button>` : ''}
       </div></td>
     </tr>`).join('') : `<tr><td colspan="7" class="px-6 py-10 text-center text-sm text-slate-400">لا توجد منتجات مطابقة للتصفية الحالية</td></tr>`;
+  document.querySelectorAll('[data-bc]').forEach((b) => b.addEventListener('click', () => openBarcodeStudio(+b.dataset.bc)));
   document.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openEdit(+b.dataset.edit)));
   document.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
     if (!confirm('حذف هذا المنتج؟')) return;
@@ -505,6 +584,118 @@ async function openStocktakeModal() {
   renderStocktakeTable();
   openModal(document.getElementById('modal-stocktake'));
 }
+
+
+let BC_QUEUE = [];
+let BC_ALL_PRODUCTS = [];
+
+async function openBarcodeStudio(initialProductId = null) {
+  const res = await guard(() => api('products', { limit: 1000, offset: 0 }));
+  BC_ALL_PRODUCTS = (res && res.rows) ? res.rows : [];
+  const sel = document.getElementById('bc-add-select');
+  sel.innerHTML = BC_ALL_PRODUCTS.map((p) => `<option value="${p.id}">${esc(p.name)} (${esc(p.sku)}) — ${fmt(p.price)} ${CURRENCY}</option>`).join('');
+  if (initialProductId) {
+    const found = BC_ALL_PRODUCTS.find((p) => p.id === +initialProductId);
+    if (found) {
+      BC_QUEUE = [{ id: found.id, name: found.name, sku: found.sku, price: found.price, copies: 1 }];
+      sel.value = String(found.id);
+    }
+  } else if (!BC_QUEUE.length && BC_ALL_PRODUCTS.length) {
+    const first = BC_ALL_PRODUCTS[0];
+    BC_QUEUE = [{ id: first.id, name: first.name, sku: first.sku, price: first.price, copies: 1 }];
+  }
+  renderBarcodeStudio();
+  openModal(document.getElementById('modal-barcode-studio'));
+}
+
+function renderBarcodeStudio() {
+  const tbody = document.getElementById('bc-items-tbody');
+  tbody.innerHTML = BC_QUEUE.length ? BC_QUEUE.map((it, idx) => `
+    <tr>
+      <td class="p-2.5 font-bold">${esc(it.name)}</td>
+      <td class="p-2.5 font-mono text-slate-500">${esc(it.sku)}</td>
+      <td class="p-2.5 font-num font-bold">${fmt(it.price)} ${CURRENCY}</td>
+      <td class="p-2.5"><input type="number" min="1" max="200" data-bc-copies="${idx}" value="${it.copies}" class="w-20 px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-center font-num font-bold"/></td>
+      <td class="p-2.5 text-center"><button type="button" data-bc-rm="${idx}" class="text-red-500 hover:text-red-700 font-bold">✕</button></td>
+    </tr>
+  `).join('') : '<tr><td colspan="5" class="p-6 text-center text-slate-400">اختر صنفاً لإضافته لقائمة طباعة الملصقات</td></tr>';
+
+  tbody.querySelectorAll('[data-bc-copies]').forEach((inp) => {
+    inp.addEventListener('input', () => {
+      const i = +inp.dataset.bcCopies;
+      if (BC_QUEUE[i]) BC_QUEUE[i].copies = Math.max(1, Math.min(200, parseInt(inp.value, 10) || 1));
+      updateBarcodePreview();
+    });
+  });
+  tbody.querySelectorAll('[data-bc-rm]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      BC_QUEUE.splice(+btn.dataset.bcRm, 1);
+      renderBarcodeStudio();
+    });
+  });
+  updateBarcodePreview();
+}
+
+function updateBarcodePreview() {
+  const box = document.getElementById('bc-preview-box');
+  const totEl = document.getElementById('bc-total-labels');
+  const totalCopies = BC_QUEUE.reduce((a, b) => a + (parseInt(b.copies, 10) || 1), 0);
+  if (totEl) totEl.textContent = `إجمالي الملصقات المراد طباعتها: ${totalCopies} ملصق`;
+  if (!BC_QUEUE.length) {
+    box.innerHTML = '<div class="text-xs text-slate-400 my-auto">لا يوجد صنف محدد للمعاينة</div>';
+    return;
+  }
+  const sample = BC_QUEUE[0];
+  const showStore = document.getElementById('bc-show-store').checked;
+  const showName = document.getElementById('bc-show-name').checked;
+  const showPrice = document.getElementById('bc-show-price').checked;
+  const showCode = document.getElementById('bc-show-code').checked;
+  const stName = (SETTINGS && SETTINGS.store_name) || 'تك زون للإلكترونيات';
+  const svg = typeof tzGenerateBarcodeSvg === 'function' ? tzGenerateBarcodeSvg(sample.sku || String(sample.id), { height: 34 }) : '';
+  box.innerHTML = `
+    ${showStore ? `<div class="text-[10px] font-bold text-slate-500 truncate w-full">${esc(stName)}</div>` : ''}
+    ${showName ? `<div class="text-xs font-extrabold text-slate-900 line-clamp-2 w-full">${esc(sample.name)}</div>` : ''}
+    <div class="w-full my-1">${svg}</div>
+    <div class="w-full flex items-center justify-between gap-2 pt-0.5">
+      ${showCode ? `<span class="font-mono text-[10px] font-bold text-slate-700">${esc(sample.sku)}</span>` : '<span></span>'}
+      ${showPrice ? `<span class="text-xs font-black bg-black text-white px-2 py-0.5 rounded">${fmt(sample.price)} ${esc(CURRENCY)}</span>` : ''}
+    </div>
+  `;
+}
+
+document.getElementById('btn-barcode-studio').addEventListener('click', () => openBarcodeStudio());
+document.getElementById('bc-close').addEventListener('click', () => closeModal(document.getElementById('modal-barcode-studio')));
+['bc-size', 'bc-show-store', 'bc-show-name', 'bc-show-price', 'bc-show-code'].forEach((id) => {
+  document.getElementById(id).addEventListener('change', updateBarcodePreview);
+});
+document.getElementById('bc-btn-add-item').addEventListener('click', () => {
+  const pid = +document.getElementById('bc-add-select').value;
+  const p = BC_ALL_PRODUCTS.find((x) => x.id === pid);
+  if (!p) return;
+  const ex = BC_QUEUE.find((x) => x.id === pid);
+  if (ex) ex.copies = Math.min(200, (ex.copies || 1) + 1);
+  else BC_QUEUE.push({ id: p.id, name: p.name, sku: p.sku, price: p.price, copies: 1 });
+  renderBarcodeStudio();
+});
+document.getElementById('bc-btn-print').addEventListener('click', async () => {
+  if (!BC_QUEUE.length) { toast('أضف صنفاً واحداً على الأقل للطباعة', 'warn'); return; }
+  const size = document.getElementById('bc-size').value || '38x25';
+  const html = tzBuildBarcodeLabelsPrintHtml(BC_QUEUE, {
+    size,
+    show_store: document.getElementById('bc-show-store').checked,
+    show_name: document.getElementById('bc-show-name').checked,
+    show_price: document.getElementById('bc-show-price').checked,
+    show_code: document.getElementById('bc-show-code').checked,
+    store_name: (SETTINGS && SETTINGS.store_name) || 'تك زون للإلكترونيات',
+    currency: CURRENCY,
+  });
+  const mode = size === 'a4_grid' ? 'a4' : '58mm';
+  if (window.parent && window.parent !== window && window.parent.TZOS && window.parent.TZOS.printHtml) {
+    await window.parent.TZOS.printHtml(html, mode);
+  } else {
+    await tzPrintPage(mode);
+  }
+});
 
 document.getElementById('btn-stocktake').addEventListener('click', openStocktakeModal);
 document.getElementById('st-close').addEventListener('click', () => closeModal(document.getElementById('modal-stocktake')));

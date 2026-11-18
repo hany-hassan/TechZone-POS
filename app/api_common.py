@@ -736,6 +736,38 @@ class _BaseApiMixin:
             (db.now(), str(action), target, json.dumps(details or {}, ensure_ascii=False)),
         )
 
+    def _log_activity(
+        self,
+        conn,
+        action: str,
+        entity_type: str,
+        entity_id=None,
+        summary: str = "",
+        details: dict | None = None,
+        module_key: str = "core",
+    ) -> None:
+        """تسجيل العمليات الحساسة واليومية في سجل الرقابة الشامل (activity_audit_log) بشكل معزول وآمن."""
+        try:
+            u = _STATE.get("user") or {}
+            conn.execute(
+                """INSERT INTO activity_audit_log(created_at, user_id, user_name, role, module_key, action, entity_type, entity_id, summary, details)
+                   VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    db.now(),
+                    u.get("id"),
+                    u.get("name") or u.get("username") or "النظام",
+                    u.get("role") or "system",
+                    str(module_key or "core"),
+                    str(action),
+                    str(entity_type),
+                    str(entity_id) if entity_id is not None else None,
+                    str(summary or action),
+                    json.dumps(details or {}, ensure_ascii=False),
+                ),
+            )
+        except Exception:
+            pass
+
     def _settings(self, conn):
         cache = getattr(self, "_settings_cache", None)
         if cache is None:

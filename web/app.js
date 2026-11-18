@@ -1687,3 +1687,160 @@ async function tzPrintPage(mode = 'thermal', opts = {}) {
     return { ok: false, error: err && err.message };
   }
 }
+
+
+/* ===== محرك التنبيهات الصوتية المحلي لنقاط البيع (100% Offline WebAudio API) ===== */
+let _tzAudioCtx = null;
+function tzPlayPosSound(kind = 'scan') {
+  try {
+    const st = (typeof SETTINGS !== 'undefined' && SETTINGS) || (window.top && window.top.SETTINGS) || {};
+    if (st.pos_sound_enabled === '0') return;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!_tzAudioCtx) _tzAudioCtx = new AudioCtx();
+    if (_tzAudioCtx.state === 'suspended') _tzAudioCtx.resume();
+    const now = _tzAudioCtx.currentTime;
+    const playTone = (freq, startOffset, duration, type = 'sine', gainVal = 0.08) => {
+      const osc = _tzAudioCtx.createOscillator();
+      const gain = _tzAudioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now + startOffset);
+      gain.gain.setValueAtTime(gainVal, now + startOffset);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + startOffset + duration);
+      osc.connect(gain);
+      gain.connect(_tzAudioCtx.destination);
+      osc.start(now + startOffset);
+      osc.stop(now + startOffset + duration);
+    };
+    if (kind === 'scan' || kind === 'add') {
+      playTone(1350, 0, 0.065, 'sine', 0.07);
+    } else if (kind === 'sale') {
+      playTone(880, 0, 0.09, 'triangle', 0.09);
+      playTone(1318.5, 0.09, 0.16, 'triangle', 0.1);
+    } else if (kind === 'warn') {
+      playTone(580, 0, 0.11, 'sawtooth', 0.06);
+      playTone(440, 0.13, 0.16, 'sawtooth', 0.07);
+    } else if (kind === 'error') {
+      playTone(260, 0, 0.22, 'sawtooth', 0.08);
+    }
+  } catch (e) {}
+}
+
+/* ===== محرك توليد الباركود المحلي القياسي Code-128B بصيغة SVG بدون أي مكتبات خارجية ===== */
+const _CODE128_PATTERNS = [
+  "11011001100","11001101100","11001100110","10010011000","10010001100","10001001100","10011001000","10011000100",
+  "10001100100","11001001000","11001000100","11000100100","10110011100","10011011100","10011001110","10111001100",
+  "10011101100","10011100110","11001110010","11001011100","11001001110","11011100100","11001110100","11101101110",
+  "11101001100","11100101100","11100100110","11101100100","11100110100","11100110010","11011011000","11011000110",
+  "11000110110","10100011000","10001011000","10001000110","10110001000","10001101000","10001100010","11010001000",
+  "11000101000","11000100010","10110111000","10110001110","10001101110","10111011000","10111000110","10001110110",
+  "11101110110","11010001110","11000101110","11011101000","11011100010","11011101110","11101011000","11101000110",
+  "11100010110","11101101000","11101100010","11100011010","11101111010","11001000010","11110001010","10100110000",
+  "10100001100","10010110000","10010000110","10000101100","10000100110","10110010000","10110000100","10011010000",
+  "10011000010","10000110100","10000110010","11000010010","11001010000","11110111010","11000010100","10001111010",
+  "10100111100","10010111100","10010011110","10111100100","10011110100","10011110010","11110100100","11110010100",
+  "11110010010","11011011110","11011110110","11110110110","10101111000","10100011110","10001011110","10111101000",
+  "10111100010","11110101000","11110100010","10111011110","10111101110","11101011110","11110101110","11010000100",
+  "11010010000","11010011100","1100011101011"
+];
+
+function tzGenerateBarcodeSvg(rawCode, opts = {}) {
+  const clean = String(rawCode || 'TZ-0001').replace(/[^\x20-\x7E]/g, '').trim() || 'TZ-0001';
+  const height = opts.height || 36;
+  const barWidth = opts.barWidth || 1.35;
+  let checksum = 104; // Start Code B
+  let bits = _CODE128_PATTERNS[104];
+  for (let i = 0; i < clean.length; i++) {
+    const code = clean.charCodeAt(i) - 32;
+    const idx = (code >= 0 && code < 95) ? code : 0;
+    checksum += idx * (i + 1);
+    bits += _CODE128_PATTERNS[idx];
+  }
+  const checkIdx = checksum % 103;
+  bits += _CODE128_PATTERNS[checkIdx] + _CODE128_PATTERNS[106];
+
+  const quiet = 8;
+  const totalUnits = bits.length + quiet * 2;
+  const svgW = Math.round(totalUnits * barWidth);
+  let rects = '';
+  let i = 0;
+  while (i < bits.length) {
+    if (bits[i] === '1') {
+      let run = 1;
+      while (i + run < bits.length && bits[i + run] === '1') run++;
+      const x = ((quiet + i) * barWidth).toFixed(2);
+      const w = (run * barWidth).toFixed(2);
+      rects += `<rect x="${x}" y="0" width="${w}" height="${height}" fill="#000"/>`;
+      i += run;
+    } else {
+      i++;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${height}" width="100%" height="${height}" preserveAspectRatio="none" style="display:block;max-width:100%;margin:0 auto">${rects}</svg>`;
+}
+
+function tzBuildBarcodeLabelsPrintHtml(items, cfg = {}) {
+  const size = cfg.size || '38x25'; // 38x25, 50x25, 50x30, a4_grid
+  const showStore = cfg.show_store !== false;
+  const showName = cfg.show_name !== false;
+  const showPrice = cfg.show_price !== false;
+  const showCode = cfg.show_code !== false;
+  const storeName = cfg.store_name || (typeof SETTINGS !== 'undefined' && SETTINGS && SETTINGS.store_name) || 'تك زون للإلكترونيات';
+  const cur = cfg.currency || (typeof CURRENCY !== 'undefined' && CURRENCY) || 'ج.م';
+
+  const dims = {
+    '38x25': { w: '38mm', h: '25mm', barH: 26, fontS: '8.5px', priceS: '10px' },
+    '50x25': { w: '50mm', h: '25mm', barH: 28, fontS: '9.5px', priceS: '11px' },
+    '50x30': { w: '50mm', h: '30mm', barH: 34, fontS: '10px', priceS: '11.5px' },
+    'a4_grid': { w: '64mm', h: '33.9mm', barH: 32, fontS: '10px', priceS: '11.5px' },
+  }[size] || { w: '38mm', h: '25mm', barH: 26, fontS: '8.5px', priceS: '10px' };
+
+  const cards = [];
+  for (const it of (items || [])) {
+    const copies = Math.max(1, Math.min(200, parseInt(it.copies || 1, 10) || 1));
+    const svg = tzGenerateBarcodeSvg(it.sku || String(it.id || '0001'), { height: dims.barH });
+    const priceFormatted = typeof fmt === 'function' ? fmt(it.price || 0) : ((it.price || 0) / 100).toFixed(2);
+    for (let c = 0; c < copies; c++) {
+      cards.push(`
+        <div class="bc-label">
+          ${showStore ? `<div class="bc-store">${esc(storeName)}</div>` : ''}
+          ${showName ? `<div class="bc-name">${esc(it.name || '')}</div>` : ''}
+          <div class="bc-svg-wrap">${svg}</div>
+          <div class="bc-bottom">
+            ${showCode ? `<span class="bc-code">${esc(it.sku || '')}</span>` : ''}
+            ${showPrice ? `<span class="bc-price">${priceFormatted} ${esc(cur)}</span>` : ''}
+          </div>
+        </div>
+      `);
+    }
+  }
+
+  const isA4 = size === 'a4_grid';
+  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>
+    @page { size: ${isA4 ? 'A4 portrait' : `${dims.w} ${dims.h}`}; margin: ${isA4 ? '8mm' : '0'}; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Cairo, Tahoma, Arial, sans-serif; }
+    .bc-sheet {
+      display: ${isA4 ? 'grid' : 'block'};
+      ${isA4 ? 'grid-template-columns: repeat(3, 1fr); gap: 3mm;' : ''}
+    }
+    .bc-label {
+      width: ${isA4 ? '100%' : dims.w};
+      height: ${dims.h};
+      padding: 1.4mm 2mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      text-align: center;
+      overflow: hidden;
+      ${isA4 ? 'border: 0.5px dashed #cbd5e1; border-radius: 3px; page-break-inside: avoid;' : 'page-break-after: always; break-after: page;'}
+    }
+    .bc-store { font-size: 7.5px; font-weight: 700; color: #334155; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .bc-name { font-size: ${dims.fontS}; font-weight: 800; color: #000; line-height: 1.15; max-height: 2.3em; overflow: hidden; width: 100%; }
+    .bc-svg-wrap { width: 94%; margin: 1px auto; }
+    .bc-bottom { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 4px; line-height: 1.1; }
+    .bc-code { font-family: monospace; font-size: 8.5px; font-weight: 700; letter-spacing: 0.3px; }
+    .bc-price { font-size: ${dims.priceS}; font-weight: 900; background: #000; color: #fff; padding: 0.5px 4px; border-radius: 3px; font-family: monospace, Cairo, sans-serif; }
+  </style></head><body><div class="bc-sheet">${cards.join('')}</div></body></html>`;
+}

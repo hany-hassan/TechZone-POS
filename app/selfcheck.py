@@ -1949,6 +1949,47 @@ check("per-user desktop & taskbar icon visibility saved for cashier only without
       and "onToggleUserIconVis" in _prof_html
       and "applyUserIconPrefs" in _desk_html)
 
+# و) فحص إعداد إغلاق البرنامج من علامة (X) أو إبقائه يعمل في شريط النظام بجوار الساعة (close_exit_app)
+_st_def = call(a, "settings")["data"]
+_st_exit_on = call(a, "settings_save", {"close_exit_app": "1"})
+_st_exit_off = call(a, "settings_save", {"close_exit_app": "0"})
+_main_py_txt = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
+_set_html_txt = (ROOT / "web" / "settings.html").read_text(encoding="utf-8")
+check("close_exit_app setting defaults to 0 (hide to system tray) & toggles cleanly in settings_save & main.py",
+      _st_def.get("close_exit_app", "0") == "0"
+      and _st_exit_on["ok"] and _st_exit_on["data"].get("close_exit_app") == "1"
+      and _st_exit_off["ok"] and _st_exit_off["data"].get("close_exit_app") == "0"
+      and "is_close_exit_enabled" in _main_py_txt
+      and "NotifyIcon" in _main_py_txt
+      and "_hide_to_tray" in _main_py_txt
+      and "st-close-exit-app" in _set_html_txt)
+
+# ز) فحص إلزامي لوجود شرط هندسة الأقسام المعزولة (Modular Plug-and-Play) وتوثيق كافة الميزات الحديثة في جميع ملفات التوثيق
+_required_doc_files = [
+    ROOT / "AGENTS.md",
+    ROOT / "CLAUDE.md",
+    ROOT / "README.md",
+    ROOT / "docs" / "README.md",
+    ROOT / "docs" / "PRD.md",
+    ROOT / "docs" / "ROADMAP.md",
+    ROOT / "docs" / "ARCHITECTURE.md",
+    ROOT / "docs" / "DATA-MODEL.md",
+    ROOT / "docs" / "CODING-STANDARDS.md",
+    ROOT / "docs" / "TESTING.md",
+    ROOT / "docs" / "SECURITY.md",
+    ROOT / "docs" / "STACK.md",
+    ROOT / "docs" / "DEPLOYMENT.md",
+    ROOT / "docs" / "DESIGN-SYSTEM.md",
+    ROOT / "docs" / "IMPLEMENTATION-PLAN.md",
+    ROOT / "docs" / "OWNER-CONTROL-PLAN.md",
+    ROOT / "docs" / "OPEN-QUESTIONS.md",
+    ROOT / "docs" / "adr" / "0004-modular-plug-and-play-erp-isolation.md",
+]
+check("all documentation files enforce Modular Plug-and-Play rule & document latest features",
+      all(df.exists() and "Modular Plug-and-Play" in df.read_text(encoding="utf-8") for df in _required_doc_files)
+      and all(tok in (ROOT / "AGENTS.md").read_text(encoding="utf-8") for tok in ("close_exit_app", "_hidden_desktop", "sales_cogs", "account_move", "report_comprehensive"))
+      and all(tok in (ROOT / "README.md").read_text(encoding="utf-8") for tok in ("close_exit_app", "_hidden_desktop", "sales_cogs", "account_move", "report_comprehensive")))
+
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()
 for p in list((ROOT / "web").glob("*.html")) + [ROOT / "web" / "desktop.html", ROOT / "web" / "sales_quotes.html", ROOT / "web" / "settings.html", ROOT / "web" / "staff.html", ROOT / "web" / "profile.html", ROOT / "web" / "app.js"]:

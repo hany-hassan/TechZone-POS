@@ -9,6 +9,8 @@ CORE_METHODS = {
     "session",
     "profile_save",
     "user_pref_save",
+    "verify_lock_pin",
+    "activity_audit_list",
     "users",
     "permissions_schema",
     # الإعدادات والنسخ الاحتياطي والقوالب (settings قسم أساسي)

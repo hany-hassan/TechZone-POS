@@ -652,6 +652,74 @@ class AuthSettingsMixin:
                 _STATE["user"]["force_change_pin"] = bool(row["role"] == "admin" and hmac.compare_digest(db.hash_pin("1234", row["pin_salt"]), row["pin_hash"]))
         return {"user": _STATE["user"]}
 
+    def verify_lock_pin(self, pin=""):
+        """التحقق من رمز الـ PIN لفك قفل الشاشة التلقائي للمستخدم الحالي دون إنهاء الجلسة أو إغلاق النوافذ."""
+        u = self._user()
+        pin = str(pin or "").strip()
+        if not pin:
+            raise ApiError("يرجى إدخال الرمز السري لفك القفل")
+        with db.connect() as conn:
+            self._check_login_lockout(conn, f"lock_{u['id']}")
+            row = conn.execute("SELECT * FROM users WHERE id=?", (u["id"],)).fetchone()
+            if not row or ("is_active" in row.keys() and row["is_active"] == 0):
+                _STATE["user"] = None
+                raise ApiError("الحساب غير متاح حالياً")
+            expected = db.hash_pin(pin, row["pin_salt"])
+            if not hmac.compare_digest(expected, row["pin_hash"]):
+                self._record_login_failure(conn, f"lock_{u['id']}")
+                self._log_activity(conn, "screen_unlock_failed", "session", u["id"], f"محاولة فك قفل شاشة فاشلة للمستخدم {u['name']}", {}, module_key="core")
+                raise ApiError("الرمز السري غير صحيح")
+            self._clear_login_failures(conn, f"lock_{u['id']}")
+            self._log_activity(conn, "screen_unlock", "session", u["id"], f"فك قفل الشاشة للمستخدم {u['name']}", {}, module_key="core")
+            return {"unlocked": True, "user_id": u["id"], "name": u["name"]}
+
+    def activity_audit_list(self, action=None, entity_type=None, user_id=None, date_from=None, date_to=None, q=None, limit=200):
+        """استعراض سجل رقابة العمليات اليومية الشامل (Audit Log) مع الفلترة حسب العملية أو القسم أو الموظف أو التاريخ."""
+        self._perm_any("settings_view_edit", "staff_manage", "reports_sales_view")
+        lim = min(1000, max(1, _int(limit, 200)))
+        where, args = ["1=1"], []
+        if action and str(action).strip():
+            where.append("action=?")
+            args.append(str(action).strip())
+        if entity_type and str(entity_type).strip():
+            where.append("entity_type=?")
+            args.append(str(entity_type).strip())
+        if user_id not in (None, "", 0, "0"):
+            where.append("user_id=?")
+            args.append(_int(user_id))
+        if date_from and str(date_from).strip():
+            where.append("substr(created_at, 1, 10) >= ?")
+            args.append(str(date_from).strip()[:10])
+        if date_to and str(date_to).strip():
+            where.append("substr(created_at, 1, 10) <= ?")
+            args.append(str(date_to).strip()[:10])
+        if q and str(q).strip():
+            qs = f"%{str(q).strip()}%"
+            where.append("(summary LIKE ? OR COALESCE(entity_id,'') LIKE ? OR COALESCE(user_name,'') LIKE ? OR COALESCE(details,'') LIKE ?)")
+            args.extend([qs, qs, qs, qs])
+        where_sql = " AND ".join(where)
+        with db.connect() as conn:
+            total = conn.execute(f"SELECT COUNT(*) c FROM activity_audit_log WHERE {where_sql}", args).fetchone()["c"]
+            rows = conn.execute(
+                f"SELECT * FROM activity_audit_log WHERE {where_sql} ORDER BY id DESC LIMIT ?",
+                args + [lim],
+            ).fetchall()
+            out = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    d["details_parsed"] = json.loads(d.get("details") or "{}")
+                except Exception:
+                    d["details_parsed"] = {}
+                out.append(d)
+            by_type = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT entity_type, COUNT(*) count FROM activity_audit_log GROUP BY entity_type ORDER BY count DESC"
+                ).fetchall()
+            ]
+            return {"rows": out, "total": total, "by_type": by_type}
+
     def logout(self):
         _STATE["user"] = None
         _STATE["owner"] = None
@@ -676,10 +744,11 @@ class AuthSettingsMixin:
                     "store_email", "store_cr", "store_vat", "receipt_thanks", "receipt_footer",
                     "receipt_logo", "receipt_show_logo", "receipt_show_barcode",
                     "receipt_show_tax", "receipt_show_payments", "whatsapp_send_enabled",
-                    "pos_print_preview", "print_show_dialog", "print_printer_name",
+                    "pos_print_preview", "print_show_dialog", "print_printer_name", "close_exit_app",
+                    "idle_lock_minutes", "pos_sound_enabled", "pos_low_stock_alert", "customer_default_credit_limit", "enforce_credit_limit",
                     "login_max_attempts", "login_lockout_minutes",
                     "template_a4_config", "template_pos_config", "pos_categories_config"}
-        show = {"tax_enabled", "receipt_show_logo", "receipt_show_barcode", "receipt_show_tax", "receipt_show_payments", "whatsapp_send_enabled", "pos_print_preview", "print_show_dialog"}
+        show = {"tax_enabled", "receipt_show_logo", "receipt_show_barcode", "receipt_show_tax", "receipt_show_payments", "whatsapp_send_enabled", "pos_print_preview", "print_show_dialog", "close_exit_app", "pos_sound_enabled", "pos_low_stock_alert", "enforce_credit_limit"}
         valid_login_modes = {"pin_only", "select_user_pin", "username_password"}
         valid_start_modes = {"window", "maximized", "direct"}
         with db.connect() as conn:
@@ -715,6 +784,19 @@ class AuthSettingsMixin:
                     if n < 1 or n > 1440:
                         raise ApiError("مدة الإقفال يجب أن تكون بين 1 و 1440 دقيقة")
                     s = str(n)
+                elif k == "idle_lock_minutes":
+                    n = _int(s, 0)
+                    if n < 0 or n > 240:
+                        raise ApiError("مدة قفل الشاشة التلقائي يجب أن تكون بين 0 و 240 دقيقة")
+                    s = str(n)
+                elif k == "customer_default_credit_limit":
+                    try:
+                        d_lim = Decimal(str(s).strip() or "0")
+                    except Exception:
+                        raise ApiError("حد الائتمان الافتراضي غير صالح")
+                    if d_lim < 0:
+                        raise ApiError("حد الائتمان الافتراضي لا يمكن أن يكون سالباً")
+                    s = str(d_lim.quantize(Decimal("0.01")) if d_lim % 1 else int(d_lim))
                 elif k == "pos_card_size":
                     cs = _int(s, 200)
                     if cs < 110 or cs > 360:
@@ -727,6 +809,7 @@ class AuthSettingsMixin:
                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                     (k, s),
                 )
+            self._log_activity(conn, "settings_save", "settings", None, "تحديث إعدادات المتجر والنظام", {"keys": [k for k in kv.keys() if k in allowed]}, module_key="settings")
             self._settings_cache = None
             return self._settings(conn)
 

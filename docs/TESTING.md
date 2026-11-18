@@ -1,8 +1,15 @@
-# TechZone Testing Strategy
+# TechZone Testing Strategy & Modular Verification
 
-## Current: `selfcheck.py` (234 Assertions)
+## Mandatory Testing & Documentation Rule for AI Agents
 
-TechZone ships with a single integration-level test suite in `app/selfcheck.py`. It validates the database schema, API functions, permission boundaries, business logic, owner controls, and static frontend-to-backend contracts in one pass.
+Every modification, addition, or deletion in the project MUST:
+1. Respect the **Modular Plug-and-Play (Zero-Overhead Isolation)** architecture (`DEFAULT_MODULES`, `API_MODULE_MAP`, and `erp_hooks.is_module_active`).
+2. Be documented in `AGENTS.md`, `CLAUDE.md`, `README.md`, and `docs/*.md` in the same turn/commit.
+3. Pass all assertions in `python app/selfcheck.py` (currently **293 checks**).
+
+---
+
+## Automated Regression Suite: `app/selfcheck.py` (293 Assertions)
 
 ### Running the Tests
 
@@ -10,81 +17,29 @@ TechZone ships with a single integration-level test suite in `app/selfcheck.py`.
 python app/selfcheck.py
 ```
 
-A successful run prints each check with a ✓ and ends with:
+A successful run ends with:
 
 ```
-ALL 234 CHECKS PASSED
+ALL 293 CHECKS PASSED
 ```
-
-Any failure raises `AssertionError` with a descriptive message identifying the broken invariant.
 
 ### What `selfcheck.py` Covers
 
-| Area | Example checks |
+| Area | Verified Invariants |
 |---|---|
-| **DB schema** | All 31 tables exist; required columns & indices present; foreign keys valid |
-| **Settings** | Default seed values populated (store name, currency, VAT rate, login mode, print/preview flags, invoice templates, `business_profile`); cashiers read runtime settings (`tax_enabled`, currency, print prefs) with security keys stripped |
-| **Users & auth** | Admin account exists; PIN hashing and salt are non-empty; role values are `admin` or `cashier`; `is_active` account activation toggle enforced |
-| **Default PIN Security** | Admin login with default `1234` flags `force_change_pin=True`; `profile_save` with `pin` alias updates PIN and clears flag |
-| **Owner Control & Structure** | Independent `owner_auth` passphrase setup, 5-attempt lockout, 10-min session expiry, recovery key rotation, admin PIN reset, audit logging, module registry CRUD/cloning, and `Api.call()` server-side disabled-module guard (`modules_map.py`) |
-| **Business Profiles & Fresh DB** | Built-in & custom profile CRUD (`business_profiles`), editable `demo_catalog` switching, custom `ui_labels` overrides, `exclusive_demo` category visibility, and atomic `build_fresh_profile_db` selective carry-over / clean rebuild |
-| **Permissions & Zero-Leak RBAC** | All 49 permission keys / 10 groups / 7 presets (`app/permissions.py`); strict cashier baseline & v2 auto-migration; zero-leak tests (`customers_search` name/phone only, `shift` without store-wide sales, own-only `sale()`, Blind Close, 14+ blocked endpoints); `perm_audit_log` & account suspension checks |
-| **Database Backups & Restore** | `db_backup` creates valid zero-lock snapshot; `backups_list` enumerates snapshots; `db_restore` performs safe rollback with pre-restore safety snapshot |
-| **Hardware & POS** | `pos.html` global barcode keydown listener (<85ms burst) registered in DOM |
-| **Products & inventory** | SKU uniqueness; price/cost stored as integer minor units; `tracked` flag controls serial enforcement |
-| **Sales flow** | Sale creation decrements stock; payment totals match sale total; returns restore quantities |
-| **Quotations** | Quote creation, item linkage, status transitions |
-| **Customers & installments** | Customer creation; unified `customer_ledger` debt tracking; `customer_payments` vouchers; installment plan scheduling, partial/full collection, cancellation, and alerts |
-| **Repairs & used devices** | Ticket creation; part linkage; valid statuses; used device purchases |
-| **Shifts** | Shift open/close (incl. Blind Close); cash/wallet/installment counters; association with user; automatic shift-close backup trigger |
-| **PDF generation** | Invoice and receipt PDF functions return valid bytes (PDF 1.4 header check) |
-| **API dispatcher** | `call(name, payload)` routes to correct methods; contract check ensures all frontend `api()` calls (`112` names) exist on `Api` and all `Api` methods (`114`) are classified in `modules_map.py` |
+| **DB Schema (52 Tables)** | All 52 tables (Core POS, Installments, Owner Mode, RBAC, Purchases & Suppliers, Double-Entry Accounting) exist with foreign keys and WAL mode |
+| **Modular Plug-and-Play Isolation** | Disabling `purchases` and `accounting` via `module_toggle` blocks their APIs server-side while POS sales run with zero journal entry queries or overhead (`erp_hooks.is_module_active`) |
+| **Permissions & Zero-Leak RBAC** | All **63 permissions** across **12 groups** and **7 job presets** (`app/permissions.py`); strict cashier isolation & Blind Close (`shift_summary_view=False`) |
+| **Purchases & WAC Cost Engine** | Suppliers CRUD, Purchase Orders (`PO`), Purchase Invoices (`PUR`) with landed shipping cost & Weighted Average Cost (`WAC`), 14% VAT input, 1%/3% WHT, Purchase Returns (`PRET`), Supplier Payments (`SPY`), and AP Aging |
+| **Double-Entry Accounting** | 38-account standard Arabic Chart of Accounts (`accounts_tree`), Add/Edit/Guarded Delete (`account_delete`) & Drag-and-Drop reparenting (`account_move`), separated Sale Invoice Revenue vs. `sales_cogs` journal entries matching exact invoice total, Single-Run Opening Balance Wizard guard (`has_opening_entry`), Treasuries & Transfers, Expenses, Fiscal Years/Periods, General Ledger, Trial Balance, Income Statement, Balance Sheet & Tax Report |
+| **Comprehensive Financial Reports** | `report_comprehensive` (Detailed P&L, invoice-by-invoice & item-by-item profitability, customer receivables & installments, supplier payables, cashflow & shifts, inventory valuation), `report_export_excel` (native 5-sheet `.xlsx` + `.csv`), `report_export_pdf` (`A4 PDF`), and `whatsapp_send_report` |
+| **Per-User Desktop & Taskbar Icons** | `profile_save` / `user_pref_save` stores `_hidden_desktop` and `_hidden_taskbar` in `users.desktop_layout` for the active user only without affecting other users |
+| **Window Close (X) & System Tray** | `close_exit_app` setting defaults to `'0'` (hide window to Windows System Tray next to clock via `.NET WinForms NotifyIcon` in `app/main.py`) and toggles to `'1'` (exit completely on `X`) in `web/settings.html` |
+| **Frontend JS Syntax & API Contract** | Every inline `<script>` in `web/*.html` (19 pages) passes `node --check`, every frontend `api('...')` call exists on `Api`, every public `Api` method (181 methods) is mapped in `app/modules_map.py`, and all core documentation files contain the Modular Plug-and-Play specification |
 
-### Running selfcheck After Every Change
 
-Every code or schema change **must** pass all 234 checks before being committed. The `AGENTS.md` changelog records the selfcheck result for each entry.
-
----
-
-## Manual QA
-
-Since TechZone has no automated browser tests, manual QA is performed in two environments:
-
-1. **pywebview window** — the production runtime. Launch with `python app/main.py` and test the full flow: login → desktop → POS → sales → print → WhatsApp share.
-2. **Browser via HTTP mock bridge** — `app.js` detects when running under `http://` (e.g., via `python -m http.server` in the `web/` directory or the screenshot tool) and routes `api()` calls through a `/api/call` HTTP endpoint. This is useful for rapid UI iteration but does not test pywebview-specific behavior (native clipboard, window chrome, PDF generation).
-
----
-
-## Recommended Future Improvements
-
-### Unit Tests with pytest
-
-- Add `tests/` directory with pytest-based unit tests for `app/api.py` functions.
-- Each API function should have at least one happy-path and one error-path test.
-- Use an in-memory SQLite database (`:memory:`) seeded by `app/db.py` for isolation.
-- Target: cover all 69+ API functions.
-
-### Browser / E2E Tests with Playwright
-
-- Add Playwright tests that launch the pywebview app (or serve `web/` over HTTP with the mock bridge) and validate full user flows:
-  - Login with PIN → desktop loads → open POS → add item → complete sale → verify receipt.
-  - Permission enforcement: cashier cannot access settings.
-  - Theme toggle: dark/light mode applies everywhere.
-  - RTL layout: no clipped or misaligned elements.
-- Playwright's Chromium engine closely matches WebView2, making results representative.
-
-### Linting
-
-| Tool | Scope | Purpose |
-|---|---|---|
-| **ruff** | `app/*.py` | Python linting and formatting (fast, replaces flake8 + black) |
-| **ESLint** | `web/app.js`, inline scripts | JS linting for unused variables, potential XSS via `innerHTML`, and style consistency |
-
-### CI Pipeline
-
-Currently there is no CI. A future GitHub Actions workflow should:
-
-1. Run `python app/selfcheck.py` on every push.
-2. Run pytest unit tests.
-3. Run ruff and ESLint checks.
-4. Optionally build the `.exe` with PyInstaller and verify it launches.
+### تحديثات الميزات التشغيلية والأمنية (Barcode Label Studio, Auto-Lock on Idle, General Audit Log, POS Alerts & Credit Limits)
+- **استوديو طباعة ملصقات الباركود والرفوف (`tzGenerateBarcodeSvg` & `tzBuildBarcodeLabelsPrintHtml` & `#modal-barcode-studio`):** في `web/app.js` و`web/inventory.html` و`web/purchases.html`، توليد باركود قياسي `Code-128B SVG` محلياً 100% بدون إنترنت مع طباعة ملصقات حرارية (`38×25 مم`، `50×25 مم`، `50×30 مم`) أو شبكة ملصقات `A4` من شاشة المخزون أو مباشرة لأصناف فواتير المشتريات (`printPurchaseBarcodes`).
+- **قفل الشاشة التلقائي عند الخمول (`idle_lock_minutes` & `verify_lock_pin` & `#os-lock-overlay`):** في `web/desktop.html` و`web/settings.html` و`app/api_auth.py`، تتبع نشاط المستخدم في سطح المكتب والنوافذ الفرعية وقفل الشاشة تلقائياً بعد دقائق الخمول المحددة (أو يدوياً بزر «🔒 قفل») مع فك القفل برمز `PIN` الخاص بالمستخدم الحالي دون إغلاق النوافذ أو فقدان الفواتير المفتوحة.
+- **سجل رقابة العمليات اليومية الشامل (`activity_audit_log` & `activity_audit_list` & `_log_activity`):** في `app/db.py` و`app/api_common.py` و`app/api_auth.py` و`web/settings.html` (تبويب «سجل رقابة العمليات Audit Log»)، تسجيل آلي معزول (`Modular Plug-and-Play`) لكافة العمليات الحساسة (إصدار وتعديل ومرتجعات المبيعات، إضافة وحذف المنتجات وتغيير الأسعار `product_price_change`، تعديل المخزون `stock_adjust`، العملاء وسندات القبض، تحديث الإعدادات، وفك قفل الشاشة) مع الفلترة والطباعة `A4`.
+- **التنبيهات الصوتية والمرئية لنواقص المخزون وحد ائتمان العملاء (`tzPlayPosSound` & `pos_sound_enabled` & `pos_low_stock_alert` & `credit_limit` & `enforce_credit_limit`):** في `web/app.js` و`web/pos.html` و`web/customers.html` و`app/api_sales.py` و`app/api_customers.py`، نغمات صوتية تفاعلية عبر `WebAudio API` عند المسح والبيع والتحذير، وتنبيه فوري عند وصول رصيد الصنف للحد الأدنى أثناء البيع (`low_stock_items`)، وفحص حد الائتمان المخصص لكل عميل (`customers.credit_limit`) أو الافتراضي للمتجر (`customer_default_credit_limit`) مع خيار التنبيه أو المنع الإجباري (`enforce_credit_limit`).

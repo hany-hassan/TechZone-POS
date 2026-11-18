@@ -1159,6 +1159,17 @@ async function addToCart(id) {
       serial_ids,
     });
   }
+  if (typeof tzPlayPosSound === 'function') tzPlayPosSound('scan');
+  if (!SETTINGS || SETTINGS.pos_low_stock_alert !== '0') {
+    const inCart = CART.find((x) => x.product_id === p.id);
+    const usedQty = inCart ? inCart.qty : 1;
+    const remQty = (p.qty || 0) - usedQty;
+    const minQ = p.min_qty != null ? p.min_qty : 5;
+    if (remQty <= minQ) {
+      toast(`تنبيه مخزون: الصنف «${p.name}» وصل للحد الأدنى (المتبقي بعد السلة: ${remQty})`, 'warn');
+      if (typeof tzPlayPosSound === 'function') tzPlayPosSound('warn');
+    }
+  }
   renderCart();
 }
 
@@ -1823,6 +1834,11 @@ document.getElementById('pay-ok').addEventListener('click', async () => {
     notes: document.getElementById('notes').value || null,
   }));
   if (!res) return;
+  if (typeof tzPlayPosSound === 'function') tzPlayPosSound('sale');
+  if (Array.isArray(res.warnings) && res.warnings.length) {
+    res.warnings.forEach((w) => toast(w, 'warn'));
+    if (typeof tzPlayPosSound === 'function') setTimeout(() => tzPlayPosSound('warn'), 220);
+  }
   const usePreview = !SETTINGS || SETTINGS.pos_print_preview !== '0';
   toast(usePreview ? `تم البيع بنجاح — فاتورة ${res.invoice_no}` : `تم البيع — فاتورة ${res.invoice_no} (جاري الطباعة...)`);
   lastSale = res.sale_id;

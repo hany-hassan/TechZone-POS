@@ -46,7 +46,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | 52 tables schema, minor-unit money rules, and 63-permission matrix in 12 groups | English |
 | [`docs/STACK.md`](docs/STACK.md) | Pinned runtime stack, versions, and upgrade policies | English |
 | [`docs/CODING-STANDARDS.md`](docs/CODING-STANDARDS.md) | Modular Plug-and-Play coding standards, SQL guidelines, money formatting & RTL rules | English |
-| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (291 checks), test gates, and manual QA | English |
+| [`docs/TESTING.md`](docs/TESTING.md) | Selfcheck automation (293 checks), test gates, and manual QA | English |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, PBKDF2 hashing, lockout rules, and Egyptian PDPL | English |
 | [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | TechZone OS color tokens, Arabic typography, layout, and invoice specs | English |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Standalone .exe compilation (PyInstaller), backup routines, and setup | English |
@@ -72,7 +72,7 @@ Detailed technical specifications are modularized in the `docs/` directory:
 | Task | Command |
 |---|---|
 | Launch Dev Application | `python app/main.py` |
-| Execute Automated Selfcheck (291 tests) | `python app/selfcheck.py` |
+| Execute Automated Selfcheck (293 tests) | `python app/selfcheck.py` |
 | Recompile Tailwind CSS | `npx tailwindcss -i web/tailwind.css -o web/app.css --minify` |
 | Build Standalone EXE | Double-click `build-exe.bat` or run `.\build-exe.bat` |
 | Build Windows Setup Installer | Double-click `build-installer.bat` or run `.\build-installer.bat` |
@@ -105,7 +105,7 @@ project001/
 │   ├── api_services.py     # ServicesMixin: repair workshop lifecycle & used device purchases
 │   ├── api_reports.py      # ReportsMixin: daily/monthly, report_comprehensive, multi-sheet .xlsx/.csv export, A4 PDF export & WhatsApp report sharing
 │   ├── db.py               # SQLite schema (52 tables), connection wrapper, seed (15 modules, 38 COA accounts), migration & backups
-│   └── selfcheck.py        # Comprehensive automated regression suite (291 checks)
+│   └── selfcheck.py        # Comprehensive automated regression suite (293 checks)
 ├── web/
 │   ├── index.html          # Smart login screen (auto role/user detection by PIN, force-PIN & owner recovery)
 │   ├── owner.html          # Hidden owner control panel (setup, login, recovery, modules, profiles, labels, security & audit)
@@ -164,7 +164,7 @@ Defined in `app/permissions.py`:
 4. **Server-Side Authorization:** Never rely on frontend JavaScript checks for access control. Always enforce `_perm(key)` inside `app/api*.py`.
 5. **Offline Purity:** Never introduce external network calls, CDNs, or runtime cloud dependencies.
 6. **No Bundlers / No Heavy Frameworks:** Vanilla JavaScript and pre-compiled CSS only.
-7. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently **291 checks**).
+7. **Selfcheck Verification:** Every change must maintain all passing tests in `python app/selfcheck.py` (currently **293 checks**).
 8. **Commit Documentation:** Always update `AGENTS.md`, `README.md`, and `docs/*.md` in the same commit.
 
 ---
@@ -186,11 +186,14 @@ Defined in `app/permissions.py`:
   1. Implemented `report_comprehensive(date_from, date_to)` in `app/api_reports.py` (with `erp_hooks.is_module_active` modular checks) returning full breakdowns for: Detailed P&L + Invoice-by-Invoice Profitability + Item-by-Item Profitability + Expenses by Category (`pnl`), Customer Debt + Active/Overdue Installments + Payment Vouchers (`receivables`), Supplier Payables + Purchase Bills + Supplier Payments (`payables`), Inflows/Outflows + Treasuries + Shifts (`cashflow`), and Inventory Cost/Retail Valuation + Low Stock + Movements (`inventory`).
   2. Implemented `report_export_excel` (generating a native 5-sheet OpenXML `.xlsx` workbook via `_build_native_xlsx_bytes` with zero external dependencies + UTF-8 BOM `.csv` saved to `data/reports/`), `report_export_pdf` (generating a standard A4 PDF in `data/reports/`), and `whatsapp_send_report` (gated by admin `whatsapp_send_enabled`, copying the A4 PDF to Windows clipboard via `_win32_copy_pdf_to_clipboard` and launching WhatsApp with a full financial summary).
   3. Rebuilt `web/reports.html` into a 5-tab Financial & Operational Analytics Center with instant search filters and top action buttons for **Print A4**, **Export Excel (`.xlsx`)**, **Export CSV**, **Export PDF (`A4`)**, and **Send to WhatsApp PDF**.
+- **Close Button (X) Behavior & System Tray Background Mode (`app/main.py`, `app/db.py`, `app/api_auth.py`, `web/settings.html`)**:
+  1. Added `close_exit_app` setting (default `'0'`) and `#st-close-exit-app` toggle in `web/settings.html` ("إغلاق البرنامج نهائياً عند الضغط على علامة (X) أعلى النافذة").
+  2. Updated `app/main.py` with Windows `.NET WinForms` `NotifyIcon` (System Tray icon next to the clock with right-click Arabic menu "فتح نافذة البرنامج" / "إغلاق البرنامج نهائياً" and click/double-click restore): when `close_exit_app='0'` (default), clicking `X` hides the window to the System Tray and keeps the app running; when `close_exit_app='1'`, clicking `X` closes and exits the application completely.
 - **Per-User Desktop & Taskbar Icon Visibility Control (`web/profile.html`, `web/desktop.html`, `app/api_auth.py`)**:
   1. Added `#pf-icons-control-section` in `web/profile.html` allowing each user to show/hide individual icons on their Desktop (`_hidden_desktop`) and bottom Taskbar (`_hidden_taskbar`) with instant live sync (`TZOS.applyUserIconPrefs`) stored strictly in that user's `users.desktop_layout` JSON without affecting other users or global module state.
 - **Complete ERP (`purchases` + `accounting`) Foundation & Documentation (`app/db.py`, `app/api_purchases.py`, `app/api_accounting.py`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/*.md`, `app/selfcheck.py`)**:
   1. Enshrined the **Modular Plug-and-Play (Zero-Overhead Isolation)** rule across `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/DATA-MODEL.md`, and `docs/CODING-STANDARDS.md`.
-  2. Added 10 new automated checks in `app/selfcheck.py` verifying separated sale/COGS entries, duplicate opening balance rejection, COA CRUD & Drag-and-Drop `account_move`/`account_delete`, and `report_comprehensive`/`report_export_excel`/`report_export_pdf`/`whatsapp_send_report` (`291/291` checks passing, `contract ok`).
+  2. Added 10 new automated checks in `app/selfcheck.py` verifying separated sale/COGS entries, duplicate opening balance rejection, COA CRUD & Drag-and-Drop `account_move`/`account_delete`, and `report_comprehensive`/`report_export_excel`/`report_export_pdf`/`whatsapp_send_report` (`293/293` checks passing, `contract ok`).
 
 ### 2026-11-17 — Inventory Display Fix & Stocktake Report (`main`)
 - **Inventory Blank Page Root-Cause Fix (`web/inventory.html`)**:
@@ -201,3 +204,10 @@ Defined in `app/permissions.py`:
 - **Canonical Permission Registry & Schema (`app/permissions.py`, `app/db.py`, `app/fresh_db.py`)**:
   1. Defined granular permissions across groups, `STRICT_CASHIER_PERMS`, and **7 built-in job presets** (`cashier_strict`, `senior_cashier`, `sales_b2b`, `inventory_clerk`, `technician`, `accountant`, `store_manager`).
   2. Implemented **Blind Close (الجرد الأعمى)** when `shift_summary_view=False` and name/phone-only customer quick-pick.
+
+
+### تحديثات الميزات التشغيلية والأمنية (Barcode Label Studio, Auto-Lock on Idle, General Audit Log, POS Alerts & Credit Limits)
+- **استوديو طباعة ملصقات الباركود والرفوف (`tzGenerateBarcodeSvg` & `tzBuildBarcodeLabelsPrintHtml` & `#modal-barcode-studio`):** في `web/app.js` و`web/inventory.html` و`web/purchases.html`، توليد باركود قياسي `Code-128B SVG` محلياً 100% بدون إنترنت مع طباعة ملصقات حرارية (`38×25 مم`، `50×25 مم`، `50×30 مم`) أو شبكة ملصقات `A4` من شاشة المخزون أو مباشرة لأصناف فواتير المشتريات (`printPurchaseBarcodes`).
+- **قفل الشاشة التلقائي عند الخمول (`idle_lock_minutes` & `verify_lock_pin` & `#os-lock-overlay`):** في `web/desktop.html` و`web/settings.html` و`app/api_auth.py`، تتبع نشاط المستخدم في سطح المكتب والنوافذ الفرعية وقفل الشاشة تلقائياً بعد دقائق الخمول المحددة (أو يدوياً بزر «🔒 قفل») مع فك القفل برمز `PIN` الخاص بالمستخدم الحالي دون إغلاق النوافذ أو فقدان الفواتير المفتوحة.
+- **سجل رقابة العمليات اليومية الشامل (`activity_audit_log` & `activity_audit_list` & `_log_activity`):** في `app/db.py` و`app/api_common.py` و`app/api_auth.py` و`web/settings.html` (تبويب «سجل رقابة العمليات Audit Log»)، تسجيل آلي معزول (`Modular Plug-and-Play`) لكافة العمليات الحساسة (إصدار وتعديل ومرتجعات المبيعات، إضافة وحذف المنتجات وتغيير الأسعار `product_price_change`، تعديل المخزون `stock_adjust`، العملاء وسندات القبض، تحديث الإعدادات، وفك قفل الشاشة) مع الفلترة والطباعة `A4`.
+- **التنبيهات الصوتية والمرئية لنواقص المخزون وحد ائتمان العملاء (`tzPlayPosSound` & `pos_sound_enabled` & `pos_low_stock_alert` & `credit_limit` & `enforce_credit_limit`):** في `web/app.js` و`web/pos.html` و`web/customers.html` و`app/api_sales.py` و`app/api_customers.py`، نغمات صوتية تفاعلية عبر `WebAudio API` عند المسح والبيع والتحذير، وتنبيه فوري عند وصول رصيد الصنف للحد الأدنى أثناء البيع (`low_stock_items`)، وفحص حد الائتمان المخصص لكل عميل (`customers.credit_limit`) أو الافتراضي للمتجر (`customer_default_credit_limit`) مع خيار التنبيه أو المنع الإجباري (`enforce_credit_limit`).

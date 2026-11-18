@@ -169,15 +169,24 @@ class InventoryMixin:
             try:
                 if id:
                     pid = _int(id)
-                    existing = conn.execute("SELECT image FROM products WHERE id=?", (pid,)).fetchone()
+                    existing = conn.execute("SELECT name, sku, price, cost, image FROM products WHERE id=?", (pid,)).fetchone()
                     if not existing:
                         raise ApiError("المنتج غير موجود")
                     final_img = existing["image"] if image is None else (None if image == "" else image)
+                    new_p = _money(price)
+                    new_c = _money(cost)
                     conn.execute(
                         """UPDATE products SET sku=?, name=?, category_id=?, price=?, cost=?, min_qty=?, tracked=?, image=?, notes=?
                            WHERE id=?""",
-                        (sku, name, _int(category_id) or None, _money(price), _money(cost),
+                        (sku, name, _int(category_id) or None, new_p, new_c,
                          _int(min_qty, 5), _int(tracked), final_img, notes, pid),
+                    )
+                    act_name = "product_price_change" if existing["price"] != new_p else "product_update"
+                    self._log_activity(
+                        conn, act_name, "products", pid,
+                        f"تعديل منتج «{name}» ({sku})" + (f" — تغير السعر من {_fmt_money(existing['price'])} إلى {_fmt_money(new_p)}" if existing["price"] != new_p else ""),
+                        {"old_price": existing["price"], "new_price": new_p, "old_cost": existing["cost"], "new_cost": new_c, "sku": sku},
+                        module_key="inventory",
                     )
                 else:
                     final_img = None if not image else image
@@ -188,6 +197,12 @@ class InventoryMixin:
                          _int(min_qty, 5), _int(tracked), final_img, notes, db.now()),
                     )
                     pid = cur.lastrowid
+                    self._log_activity(
+                        conn, "product_create", "products", pid,
+                        f"إضافة منتج جديد «{name}» ({sku}) بسعر {_fmt_money(_money(price))}",
+                        {"sku": sku, "price": _money(price), "cost": _money(cost)},
+                        module_key="inventory",
+                    )
                 if serials:
                     self._add_serials(conn, pid, serials)
             except sqlite3.IntegrityError:
@@ -210,10 +225,18 @@ class InventoryMixin:
 
     def product_delete(self, id):
         self._perm("inventory_edit")
+        pid = _int(id)
         with db.connect() as conn:
-            cur = conn.execute("UPDATE products SET active=0 WHERE id=?", (_int(id),))
+            p = conn.execute("SELECT name, sku FROM products WHERE id=?", (pid,)).fetchone()
+            cur = conn.execute("UPDATE products SET active=0 WHERE id=?", (pid,))
             if not cur.rowcount:
                 raise ApiError("المنتج غير موجود")
+            self._log_activity(
+                conn, "product_delete", "products", pid,
+                f"حذف/إيقاف منتج «{p['name'] if p else pid}» ({p['sku'] if p else ''})",
+                {"product_id": pid},
+                module_key="inventory",
+            )
             return True
 
     def products_search(self, q=None, limit=60, category_id=None):
@@ -259,6 +282,12 @@ class InventoryMixin:
                 (db.now(), u["id"], pid, delta, newq, reason or "تعديل يدوي", None),
             )
             erp_hooks.on_stock_adjusted(self, conn, pid, delta, int(p["cost"] or 0), reason or "تعديل يدوي", user=u)
+            self._log_activity(
+                conn, "stock_adjust", "products", pid,
+                f"تعديل رصيد مخزون المنتج #{pid} بمقدار ({delta:+d}) ليصبح {newq} — {reason or 'تعديل يدوي'}",
+                {"product_id": pid, "qty_change": delta, "qty_after": newq, "reason": reason or "تعديل يدوي"},
+                module_key="inventory",
+            )
             return {"qty": newq}
 
     def serials(self, product_id):

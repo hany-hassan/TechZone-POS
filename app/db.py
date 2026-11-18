@@ -511,6 +511,22 @@ CREATE TABLE IF NOT EXISTS permission_roles (
   is_builtin INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS activity_audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  user_id INTEGER,
+  user_name TEXT,
+  role TEXT,
+  module_key TEXT,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  summary TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_activity_audit_created ON activity_audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_audit_action ON activity_audit_log(action, entity_type);
+
 CREATE TABLE IF NOT EXISTS perm_audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ts TEXT NOT NULL,
@@ -1459,6 +1475,30 @@ def _ensure_schema_columns(conn: sqlite3.Connection):
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('pos_print_preview', '1')")
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('print_show_dialog', '0')")
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('print_printer_name', '')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('close_exit_app', '0')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('idle_lock_minutes', '0')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('pos_sound_enabled', '1')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('pos_low_stock_alert', '1')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('customer_default_credit_limit', '0')")
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('enforce_credit_limit', '0')")
+        cust_cols = {r["name"] for r in conn.execute("PRAGMA table_info(customers)").fetchall()}
+        if "credit_limit" not in cust_cols:
+            conn.execute("ALTER TABLE customers ADD COLUMN credit_limit INTEGER NOT NULL DEFAULT 0")
+        conn.execute("""CREATE TABLE IF NOT EXISTS activity_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            user_id INTEGER,
+            user_name TEXT,
+            role TEXT,
+            module_key TEXT,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT,
+            summary TEXT NOT NULL,
+            details TEXT NOT NULL DEFAULT '{}'
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_audit_created ON activity_audit_log(created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_audit_action ON activity_audit_log(action, entity_type)")
         conn.commit()
     except Exception as e:
         print(f"Schema upgrade error: {e}")
@@ -2060,6 +2100,7 @@ def _seed(conn: sqlite3.Connection) -> None:
         "pos_print_preview": "1",
         "print_show_dialog": "0",
         "print_printer_name": "",
+        "close_exit_app": "0",
         "login_max_attempts": "5",
         "login_lockout_minutes": "10",
         "migration_v2_strict_perms": "1",
