@@ -1027,6 +1027,74 @@ def connect() -> "_ClosingConnection":
     return _ClosingConnection(conn)
 
 
+
+def images_dir(subdir: str | None = None) -> pathlib.Path:
+    """مجلد حفظ الصور المضغوطة على القرص (data/images/...)."""
+    base = pathlib.Path(db_path()).parent / "images"
+    target = (base / subdir) if subdir else base
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def save_image_to_disk(data_url: str, subdir: str, filename_stem: str) -> str:
+    """تحويل data:image/... إلى ملف WebP مضغوط على القرص وإرجاع المسار النسبي."""
+    if not isinstance(data_url, str):
+        raise ValueError("Invalid image data")
+    s = data_url.strip()
+    if not s.startswith("data:image/") or "," not in s:
+        return s
+    import base64
+    import io
+    header, b64_part = s.split(",", 1)
+    raw = base64.b64decode(b64_part)
+    out_dir = images_dir(subdir)
+    out_file = out_dir / f"{filename_stem}.webp"
+    try:
+        from PIL import Image
+        with Image.open(io.BytesIO(raw)) as im:
+            if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+                im = im.convert("RGBA")
+            else:
+                im = im.convert("RGB")
+            im.thumbnail((800, 800))
+            im.save(out_file, format="WEBP", quality=82, method=4)
+        return f"{subdir}/{filename_stem}.webp"
+    except Exception:
+        ext = "png"
+        hl = header.lower()
+        if "jpeg" in hl or "jpg" in hl:
+            ext = "jpg"
+        elif "webp" in hl:
+            ext = "webp"
+        elif "gif" in hl:
+            ext = "gif"
+        fallback_file = out_dir / f"{filename_stem}.{ext}"
+        fallback_file.write_bytes(raw)
+        return f"{subdir}/{filename_stem}.{ext}"
+
+
+def _migrate_base64_images_to_disk(conn) -> int:
+    """ترحيل صور المنتجات المخزنة كـ Base64 في SQLite إلى ملفات WebP على القرص في data/images/products/."""
+    migrated = 0
+    try:
+        rows = conn.execute(
+            "SELECT id, image FROM products WHERE image LIKE 'data:image/%'"
+        ).fetchall()
+        for r in rows:
+            pid = r["id"]
+            try:
+                rel_path = save_image_to_disk(r["image"], "products", f"prod_{pid}")
+                if rel_path and not rel_path.startswith("data:image/"):
+                    conn.execute("UPDATE products SET image=? WHERE id=?", (rel_path, pid))
+                    migrated += 1
+            except Exception:
+                pass
+        if migrated > 0:
+            conn.commit()
+    except Exception:
+        pass
+    return migrated
+
 def backup_database(reason: str = "manual") -> pathlib.Path | None:
     """نسخ احتياطي فوري لقاعدة البيانات عبر sqlite3 online backup API مع تدوير النسخ القديمة."""
     src_path = pathlib.Path(db_path())

@@ -23,6 +23,7 @@ CORE_METHODS = {
     "db_backup",
     "backups_list",
     "db_restore",
+    "db_optimize_images",
     # الإيصال وقراءة الفاتورة الواحدة والطباعة (receipt قسم أساسي)
     "receipt_text",
     "sale",

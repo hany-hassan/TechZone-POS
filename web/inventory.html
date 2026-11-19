@@ -398,7 +398,7 @@ async function load() {
     <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group ${p.stock_state === 'low' || p.stock_state === 'out' ? 'bg-red-50/10 dark:bg-red-900/5' : ''}">
       <td class="px-6 py-4 whitespace-nowrap"><div class="flex items-center gap-3">
         <div class="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800 text-primary flex items-center justify-center flex-shrink-0 border border-slate-200 dark:border-slate-700 overflow-hidden">
-          ${p.image ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" class="w-full h-full object-cover"/>` : '<span class="material-icons-outlined">devices</span>'}
+          ${p.image ? `<img src="${esc(tzImgSrc(p.image))}" alt="${esc(p.name)}" class="w-full h-full object-cover"/>` : '<span class="material-icons-outlined">devices</span>'}
         </div>
         <div><div class="text-sm font-medium text-slate-900 dark:text-white">${esc(p.name)}</div><div class="text-xs text-slate-500 dark:text-slate-400">${esc(p.notes || (p.tracked ? 'متتبّع بالسيريال' : ''))}</div></div>
       </div></td>

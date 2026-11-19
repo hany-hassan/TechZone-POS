@@ -93,14 +93,16 @@ _FALLBACK_JPEG = (
 
 
 def _win32_copy_pdf_to_clipboard(filepath: str) -> bool:
-    """نسخ ملف الـ PDF إلى حافظة ويندوز (CF_HDROP = 15) مباشرة عبر Win32 API المتوافق مع 64-bit."""
+    """نسخ ملف الـ PDF إلى حافظة ويندوز (CF_HDROP = 15) مع التحقق والاحتياطي عبر PowerShell."""
     if os.name != "nt":
         return False
     import ctypes
     from ctypes import wintypes
     import struct
+    import subprocess
     import time
 
+    abs_path = str(pathlib.Path(filepath).resolve())
     CF_HDROP = 15
     GMEM_MOVEABLE = 0x0002
     GMEM_ZEROINIT = 0x0040
@@ -122,12 +124,14 @@ def _win32_copy_pdf_to_clipboard(filepath: str) -> bool:
     user32.SetClipboardData.restype = wintypes.HANDLE
     user32.CloseClipboard.argtypes = []
     user32.CloseClipboard.restype = wintypes.BOOL
+    user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+    user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
 
     header = struct.pack("<IiiII", 20, 0, 0, 0, 1)
-    path_bytes = filepath.encode("utf-16le") + b"\x00\x00\x00\x00"
+    path_bytes = abs_path.encode("utf-16le") + b"\x00\x00\x00\x00"
     payload = header + path_bytes
 
-    for _ in range(6):
+    for _ in range(8):
         if user32.OpenClipboard(None):
             try:
                 user32.EmptyClipboard()
@@ -141,38 +145,154 @@ def _win32_copy_pdf_to_clipboard(filepath: str) -> bool:
                             return True
             finally:
                 user32.CloseClipboard()
-        time.sleep(0.05)
-    return False
+        time.sleep(0.06)
+
+    # احتياطي عبر PowerShell Set-Clipboard -LiteralPath (يدعم UWP وWin32 Shell DataObject)
+    try:
+        ps_path = abs_path.replace("'", "''")
+        subprocess.run(
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", f"Set-Clipboard -LiteralPath '{ps_path}'"],
+            timeout=4,
+            check=False,
+        )
+        return bool(user32.IsClipboardFormatAvailable(CF_HDROP))
+    except Exception:
+        return False
 
 
 def _find_whatsapp_hwnd():
-    """البحث السريع عن مقبض نافذة واتساب المرئية (WhatsApp / واتساب) على ويندوز."""
+    """البحث الدقيق عن مقبض نافذة واتساب الرئيسية المرئية (بأبعاد >= 300x300) على ويندوز."""
     if os.name != "nt":
         return None
     import ctypes
     from ctypes import wintypes
 
     user32 = ctypes.windll.user32
+
+    def _title_of(hwnd):
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length <= 0:
+            return ""
+        buf = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buf, length + 1)
+        return buf.value.replace("\u200e", "").replace("\u200f", "").strip()
+
+    def _is_wa_title(title: str) -> bool:
+        if not title:
+            return False
+        tl = title.lower()
+        return ("whatsapp" in tl or "واتساب" in title) and "techzone" not in tl and "تك زون" not in title
+
+    # 1) إذا كانت النافذة النشطة حالياً هي واتساب بالفعل، أعدها فوراً
+    fg = user32.GetForegroundWindow()
+    if fg and user32.IsWindowVisible(fg) and _is_wa_title(_title_of(fg)):
+        return fg
+
+    # 2) البحث بين جميع النوافذ المرئية واستبعاد النوافذ المساعدة الصغيرة (0x0 أو < 300px)
     WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-    found = []
+    candidates = []
 
     def cb(hwnd, _):
         if user32.IsWindowVisible(hwnd):
-            length = user32.GetWindowTextLengthW(hwnd)
-            if length > 0:
-                buf = ctypes.create_unicode_buffer(length + 1)
-                user32.GetWindowTextW(hwnd, buf, length + 1)
-                title = buf.value.replace("\u200e", "").replace("\u200f", "").strip()
-                if "WhatsApp" in title or "واتساب" in title:
-                    found.append(hwnd)
+            title = _title_of(hwnd)
+            if _is_wa_title(title):
+                rect = wintypes.RECT()
+                w = h = 0
+                if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    w = rect.right - rect.left
+                    h = rect.bottom - rect.top
+                is_iconic = bool(user32.IsIconic(hwnd))
+                if is_iconic or (w >= 300 and h >= 300):
+                    # أولوية لتطبيق WhatsApp Desktop (العنوان الدقيق) ثم نوافذ المتصفح
+                    prio = 0 if title.lower() in ("whatsapp", "واتساب") else 1
+                    candidates.append((prio, 1 if is_iconic else 0, -(w * h), hwnd))
         return True
 
     user32.EnumWindows(WNDENUMPROC(cb), 0)
-    return found[0] if found else None
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[0][3]
+
+
+def _win32_send_ctrl_v() -> int:
+    """إرسال ضغطة Ctrl+V عبر SendInput القياسي بحجم بنية Win32 الدقيق (40 بايت 64-bit / 28 بايت 32-bit) مع احتياطي keybd_event."""
+    import ctypes
+    from ctypes import wintypes
+    import time
+
+    INPUT_KEYBOARD = 1
+    KEYEVENTF_KEYUP = 0x0002
+    VK_LCONTROL = 0xA2
+    VK_CONTROL = 0x11
+    VK_V = 0x56
+
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [
+            ("dx", ctypes.c_int32),
+            ("dy", ctypes.c_int32),
+            ("mouseData", ctypes.c_uint32),
+            ("dwFlags", ctypes.c_uint32),
+            ("time", ctypes.c_uint32),
+            ("dwExtraInfo", ctypes.c_size_t),
+        ]
+
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [
+            ("wVk", ctypes.c_uint16),
+            ("wScan", ctypes.c_uint16),
+            ("dwFlags", ctypes.c_uint32),
+            ("time", ctypes.c_uint32),
+            ("dwExtraInfo", ctypes.c_size_t),
+        ]
+
+    class HARDWAREINPUT(ctypes.Structure):
+        _fields_ = [
+            ("uMsg", ctypes.c_uint32),
+            ("wParamL", ctypes.c_uint16),
+            ("wParamH", ctypes.c_uint16),
+        ]
+
+    class _INPUT_UNION(ctypes.Union):
+        _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT), ("hi", HARDWAREINPUT)]
+
+    class INPUT(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_uint32), ("union", _INPUT_UNION)]
+
+    user32 = ctypes.windll.user32
+    user32.SendInput.argtypes = [ctypes.c_uint32, ctypes.POINTER(INPUT), ctypes.c_int]
+    user32.SendInput.restype = ctypes.c_uint32
+
+    scan_ctrl = user32.MapVirtualKeyW(VK_LCONTROL, 0)
+    scan_v = user32.MapVirtualKeyW(VK_V, 0)
+
+    def _key(vk, scan, flags=0):
+        inp = INPUT()
+        inp.type = INPUT_KEYBOARD
+        inp.union.ki = KEYBDINPUT(vk, scan, flags, 0, 0)
+        return inp
+
+    seq = (INPUT * 4)(
+        _key(VK_LCONTROL, scan_ctrl, 0),
+        _key(VK_V, scan_v, 0),
+        _key(VK_V, scan_v, KEYEVENTF_KEYUP),
+        _key(VK_LCONTROL, scan_ctrl, KEYEVENTF_KEYUP),
+    )
+    sent = int(user32.SendInput(4, seq, ctypes.sizeof(INPUT)) or 0)
+    if sent != 4:
+        user32.keybd_event(VK_CONTROL, user32.MapVirtualKeyW(VK_CONTROL, 0), 0, 0)
+        time.sleep(0.03)
+        user32.keybd_event(VK_V, scan_v, 0, 0)
+        time.sleep(0.03)
+        user32.keybd_event(VK_V, scan_v, KEYEVENTF_KEYUP, 0)
+        time.sleep(0.03)
+        user32.keybd_event(VK_CONTROL, user32.MapVirtualKeyW(VK_CONTROL, 0), KEYEVENTF_KEYUP, 0)
+    time.sleep(0.06)
+    return sent
 
 
 def _win32_auto_paste_into_whatsapp(pdf_abs: str, was_already_open: bool = False):
-    """التقاط نافذة واتساب فور تفعيلها بلحظات ولصق ملف الـ PDF مباشرة مع النص دون تأخير."""
+    """تفعيل نافذة واتساب الرئيسية في المقدمة دون إفساد التركيز ولصق ملف الـ PDF كمرفق عبر Ctrl+V."""
     if os.name != "nt":
         return
     import ctypes
@@ -182,71 +302,80 @@ def _win32_auto_paste_into_whatsapp(pdf_abs: str, was_already_open: bool = False
     user32 = ctypes.windll.user32
     kernel32 = ctypes.windll.kernel32
 
-    # رصد سريع جداً (كل 40 مللي ثانية) للحظة ظهور/تفعيل نافذة واتساب
+    # 1) انتظار ظهور نافذة واتساب وتصدرها للمقدمة (حتى 5 ثوانٍ)
     wa_hwnd = None
     t0 = time.monotonic()
-    for _ in range(75):  # حد أقصى 3 ثوانٍ في حال كان البرنامج مغلقاً تماماً
+    while (time.monotonic() - t0) < 5.0:
         wa_hwnd = _find_whatsapp_hwnd()
-        if wa_hwnd:
-            fg = user32.GetForegroundWindow()
-            if fg == wa_hwnd or (time.monotonic() - t0) >= 0.20:
-                break
-        time.sleep(0.04)
+        if wa_hwnd and user32.GetForegroundWindow() == wa_hwnd:
+            break
+        if wa_hwnd and (time.monotonic() - t0) >= 1.2:
+            break
+        time.sleep(0.08)
 
     if not wa_hwnd:
         wa_hwnd = _find_whatsapp_hwnd()
 
+    # 2) انتظار اكتمال فتح المحادثة وإدراج النص داخل واتساب
+    time.sleep(0.95 if was_already_open else 2.40)
+
+    # 3) تصدير نافذة واتساب للمقدمة فقط إذا لم تكن في المقدمة (مع عدم إلغاء التكبير Maximize)
     if wa_hwnd:
         try:
+            if user32.IsIconic(wa_hwnd):
+                user32.ShowWindow(wa_hwnd, 9)  # SW_RESTORE فقط إذا كانت مصغرة في شريط المهام
             fg_hwnd = user32.GetForegroundWindow()
             if fg_hwnd != wa_hwnd:
+                user32.AllowSetForegroundWindow(-1)
                 fg_tid = user32.GetWindowThreadProcessId(fg_hwnd, None) if fg_hwnd else 0
+                wa_tid = user32.GetWindowThreadProcessId(wa_hwnd, None)
                 cur_tid = kernel32.GetCurrentThreadId()
                 if fg_tid and fg_tid != cur_tid:
                     user32.AttachThreadInput(cur_tid, fg_tid, True)
-                user32.ShowWindow(wa_hwnd, 9)  # SW_RESTORE
+                if wa_tid and wa_tid != cur_tid:
+                    user32.AttachThreadInput(cur_tid, wa_tid, True)
+                user32.BringWindowToTop(wa_hwnd)
                 user32.SetForegroundWindow(wa_hwnd)
+                if wa_tid and wa_tid != cur_tid:
+                    user32.AttachThreadInput(cur_tid, wa_tid, False)
                 if fg_tid and fg_tid != cur_tid:
                     user32.AttachThreadInput(cur_tid, fg_tid, False)
+                time.sleep(0.18)
         except Exception:
             pass
 
-    # انتظار قصير جداً فقط ريثما يضع واتساب النص في صندوق المحادثة (0.55 ثانية إذا كان مفتوحاً)
-    time.sleep(0.55 if was_already_open else 1.25)
+    # 4) تأكيد وجود ملف الـ PDF في الحافظة قبل اللصق مباشرة
+    copied_ok = _win32_copy_pdf_to_clipboard(pdf_abs)
+    time.sleep(0.10)
 
-    # تأكيد وجود ملف الـ PDF في الحافظة قبل اللصق مباشرة
-    _win32_copy_pdf_to_clipboard(pdf_abs)
-
-    if wa_hwnd:
-        # نقرة سريعة داخل خانة كتابة الرسالة أسفل منتصف نافذة واتساب لتفعيل التركيز
+    # 5) إذا كانت نافذة واتساب ما زالت ليست في المقدمة، انقر في منتصفها الآمن لتفعيلها دون الضغط على أي زر
+    if wa_hwnd and user32.GetForegroundWindow() != wa_hwnd:
         rect = wintypes.RECT()
         if user32.GetWindowRect(wa_hwnd, ctypes.byref(rect)):
             win_w = rect.right - rect.left
             win_h = rect.bottom - rect.top
-            if win_w > 300 and win_h > 300:
-                click_x = rect.left + int(win_w * 0.50)
-                click_y = rect.bottom - 52
-                user32.SetCursorPos(click_x, click_y)
+            if win_w >= 300 and win_h >= 300:
+                user32.SetCursorPos(rect.left + (win_w // 2), rect.top + (win_h // 2))
+                time.sleep(0.03)
+                user32.mouse_event(0x0002, 0, 0, 0, 0)
                 time.sleep(0.02)
-                user32.mouse_event(0x0002, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTDOWN
-                time.sleep(0.01)
-                user32.mouse_event(0x0004, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTUP
-                time.sleep(0.05)
+                user32.mouse_event(0x0004, 0, 0, 0, 0)
+                time.sleep(0.15)
 
-    # إرسال Ctrl+V فوري عبر keybd_event مع Scan Codes الحقيقية
-    VK_CONTROL = 0x11
-    VK_V = 0x56
-    KEYEVENTF_KEYUP = 0x0002
-    scan_ctrl = user32.MapVirtualKeyW(VK_CONTROL, 0)
-    scan_v = user32.MapVirtualKeyW(VK_V, 0)
+    # 6) تنفيذ لصق المرفق Ctrl+V مباشرة في نافذة واتساب النشطة
+    sent = _win32_send_ctrl_v()
 
-    user32.keybd_event(VK_CONTROL, scan_ctrl, 0, 0)
-    time.sleep(0.02)
-    user32.keybd_event(VK_V, scan_v, 0, 0)
-    time.sleep(0.02)
-    user32.keybd_event(VK_V, scan_v, KEYEVENTF_KEYUP, 0)
-    time.sleep(0.02)
-    user32.keybd_event(VK_CONTROL, scan_ctrl, KEYEVENTF_KEYUP, 0)
+    # سجل تشخيصي خفيف في مجلد receipts لمراجعة أي حالة خاصة
+    try:
+        log_file = pathlib.Path(pdf_abs).parent / "whatsapp_paste_debug.log"
+        log_file.write_text(
+            f"ts={db.now()}\npdf={pdf_abs}\nwas_open={was_already_open}\n"
+            f"wa_hwnd={wa_hwnd}\nfg_hwnd={user32.GetForegroundWindow()}\n"
+            f"copied_ok={copied_ok}\nsend_input_sent={sent}\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
 
 
 def _jpeg_to_pdf_bytes(jpeg_bytes: bytes, img_w: int, img_h: int) -> bytes:

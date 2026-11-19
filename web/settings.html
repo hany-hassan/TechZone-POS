@@ -699,6 +699,10 @@
             <span class="material-icons-round text-base">refresh</span>
             <span>تحديث القائمة</span>
           </button>
+          <button id="btn-optimize-db-images" type="button" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
+            <span class="material-icons-round text-base">compress</span>
+            <span>ترحيل الصور للقرص وضغط القاعدة (VACUUM)</span>
+          </button>
           <button id="btn-create-backup-now" type="button" class="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs shadow-lg shadow-primary/20 flex items-center gap-2 transition-all">
             <span class="material-icons-round text-base">save_as</span>
             <span>أخذ نسخة احتياطية فورية الآن</span>
@@ -1556,6 +1560,23 @@ $('btn-create-backup-now').addEventListener('click', async () => {
     btn.classList.remove('opacity-75', 'cursor-not-allowed');
   }
 });
+
+
+if ($('btn-optimize-db-images')) {
+  $('btn-optimize-db-images').addEventListener('click', async () => {
+    const btn = $('btn-optimize-db-images');
+    btn.disabled = true;
+    try {
+      const res = await guard(() => api('db_optimize_images'));
+      if (res) {
+        const savedKb = ((res.saved_bytes || 0) / 1024).toFixed(1);
+        toast(`تم فحص وترحيل ${res.migrated_count || 0} صورة إلى data/images/ وضغط القاعدة (وفر ${savedKb} KB)`, 'success');
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
 
 $('btn-refresh-backups').addEventListener('click', async () => {
   await loadBackupsList();

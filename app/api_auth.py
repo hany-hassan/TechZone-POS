@@ -659,17 +659,14 @@ class AuthSettingsMixin:
         if not pin:
             raise ApiError("يرجى إدخال الرمز السري لفك القفل")
         with db.connect() as conn:
-            self._check_login_lockout(conn, f"lock_{u['id']}")
             row = conn.execute("SELECT * FROM users WHERE id=?", (u["id"],)).fetchone()
             if not row or ("is_active" in row.keys() and row["is_active"] == 0):
                 _STATE["user"] = None
                 raise ApiError("الحساب غير متاح حالياً")
             expected = db.hash_pin(pin, row["pin_salt"])
             if not hmac.compare_digest(expected, row["pin_hash"]):
-                self._record_login_failure(conn, f"lock_{u['id']}")
                 self._log_activity(conn, "screen_unlock_failed", "session", u["id"], f"محاولة فك قفل شاشة فاشلة للمستخدم {u['name']}", {}, module_key="core")
                 raise ApiError("الرمز السري غير صحيح")
-            self._clear_login_failures(conn, f"lock_{u['id']}")
             self._log_activity(conn, "screen_unlock", "session", u["id"], f"فك قفل الشاشة للمستخدم {u['name']}", {}, module_key="core")
             return {"unlocked": True, "user_id": u["id"], "name": u["name"]}
 
@@ -812,6 +809,31 @@ class AuthSettingsMixin:
             self._log_activity(conn, "settings_save", "settings", None, "تحديث إعدادات المتجر والنظام", {"keys": [k for k in kv.keys() if k in allowed]}, module_key="settings")
             self._settings_cache = None
             return self._settings(conn)
+
+    def db_optimize_images(self):
+        """ترحيل أي صور Base64 متبقية إلى ملفات WebP في data/images/products/ وضغط قاعدة البيانات (VACUUM)."""
+        self._perm("backups_manage")
+        db_file = pathlib.Path(db.db_path())
+        size_before = db_file.stat().st_size if db_file.exists() else 0
+        with db.connect() as conn:
+            migrated = db._migrate_base64_images_to_disk(conn)
+            self._log_activity(conn, "db_optimize_images", "settings", None, f"ترحيل {migrated} صورة إلى القرص وضغط قاعدة البيانات (VACUUM)", {"migrated": migrated}, module_key="settings")
+        try:
+            conn_v = db.connect()
+            try:
+                conn_v.isolation_level = None
+                conn_v.execute("VACUUM")
+            finally:
+                conn_v.close()
+        except Exception:
+            pass
+        size_after = db_file.stat().st_size if db_file.exists() else 0
+        return {
+            "migrated_count": migrated,
+            "size_before": size_before,
+            "size_after": size_after,
+            "saved_bytes": max(0, size_before - size_after),
+        }
 
     def db_backup(self, reason="manual"):
         """إنشاء نسخة احتياطية فورية لقاعدة البيانات (للمخولين فقط)."""

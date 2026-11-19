@@ -646,7 +646,7 @@ async function loadCatalogProducts() {
   grid.innerHTML = CATALOG_PRODUCTS.map((p) => `
     <div data-card-pid="${p.id}" class="cursor-pointer p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary bg-slate-50/70 dark:bg-slate-800/60 hover:bg-blue-50/40 transition-all flex items-center gap-2.5">
       <div class="w-10 h-10 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center overflow-hidden shrink-0">
-        ${p.image ? `<img src="${esc(p.image)}" class="w-full h-full object-cover"/>` : `<span class="material-icons-outlined text-slate-400 text-lg">inventory_2</span>`}
+        ${p.image ? `<img src="${esc(tzImgSrc(p.image))}" class="w-full h-full object-cover"/>` : `<span class="material-icons-outlined text-slate-400 text-lg">inventory_2</span>`}
       </div>
       <div class="min-w-0 flex-1">
         <div class="text-xs font-bold text-slate-800 dark:text-white truncate" title="${esc(p.name)}">${esc(p.name)}</div>

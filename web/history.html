@@ -747,7 +747,7 @@ document.getElementById('d-wa').addEventListener('click', async () => {
     if (ACTIVE_SALE.doc_type === 'b2b' && ACTIVE_SALE.quote_id) {
       await sendQuoteOrA4PdfToWhatsapp(ACTIVE_SALE.quote_id, ACTIVE_SALE.customer_phone || '', A4_TPL);
     } else {
-      await sendInvoiceToWhatsapp(ACTIVE_SALE.id, ACTIVE_SALE.customer_phone || '');
+      await sendInvoicePdfToWhatsapp(ACTIVE_SALE.id, ACTIVE_SALE.customer_phone || '');
     }
   } else if (ACTIVE_QUOTE) {
     await sendQuoteOrA4PdfToWhatsapp(ACTIVE_QUOTE.id, ACTIVE_QUOTE.customer_phone || '', A4_TPL);

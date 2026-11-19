@@ -79,11 +79,11 @@ sample_img = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ
 r = call(a, "product_save", {"sku": "TST-001", "name": "منتج فحص", "price": 100, "cost": 60, "min_qty": 5, "image": sample_img})
 check("product add with image", r["ok"])
 pid = r["data"]["id"]
-check("product image stored", call(a, "product", {"id": pid})["data"]["image"] == sample_img)
+check("product image stored", call(a, "product", {"id": pid})["data"]["image"] == f"products/prod_{pid}.webp" and (db.images_dir("products") / f"prod_{pid}.webp").exists())
 r = call(a, "product_save", {"id": pid, "sku": "TST-001", "name": "منتج فحص معدل", "price": 120, "cost": 60, "image": sample_img})
 check("product edit", r["ok"])
 r = call(a, "products_search", {"q": "فحص معدل"})
-check("search by name & returns image", r["ok"] and any(x["id"] == pid and x["image"] == sample_img for x in r["data"]))
+check("search by name & returns image", r["ok"] and any(x["id"] == pid and x["image"] == f"products/prod_{pid}.webp" for x in r["data"]))
 r = call(a, "products_search", {"q": "TST-001"})
 check("search by sku", r["ok"] and any(x["id"] == pid for x in r["data"]))
 call(a, "serial_add", {"product_id": pid, "serial": "SN-SELF-1"})
@@ -1985,10 +1985,106 @@ _required_doc_files = [
     ROOT / "docs" / "OPEN-QUESTIONS.md",
     ROOT / "docs" / "adr" / "0004-modular-plug-and-play-erp-isolation.md",
 ]
+# ح) فحص قفل الشاشة التلقائي عند الخمول (Auto-Lock on Idle) ودالة verify_lock_pin
+_st_lock = call(a, "settings_save", {
+    "idle_lock_minutes": "5",
+    "pos_sound_enabled": "1",
+    "pos_low_stock_alert": "1",
+    "customer_default_credit_limit": "1000",
+    "enforce_credit_limit": "0",
+})
+_bad_unlock = call(a, "verify_lock_pin", {"pin": "0000"})
+_sess_u = call(a, "session")["data"]["user"]
+# Discover current admin pin from earlier tests ('9876' or '4321' or '1234')
+_ok_unlock = None
+for _try_pin in ("8642", "9876", "4321", "1234"):
+    _r_un = call(a, "verify_lock_pin", {"pin": _try_pin})
+    if _r_un["ok"]:
+        _ok_unlock = _r_un
+        break
+check("idle_lock_minutes saved & verify_lock_pin rejects wrong PIN and unlocks with valid PIN",
+      _st_lock["ok"] and _st_lock["data"].get("idle_lock_minutes") == "5"
+      and not _bad_unlock["ok"]
+      and bool(_ok_unlock and _ok_unlock["data"].get("unlocked") is True))
+
+# ط) فحص حد ائتمان العميل وتنبيهات المخزون المنخفض وحد الائتمان أثناء البيع
+_c_lim = call(a, "customers_save", {"name": "عميل حد ائتمان", "phone": "01099887766", "credit_limit": 500})
+_c_lim_info = call(a, "customer", {"id": _c_lim["data"]["id"]})
+_p_low = call(a, "product_save", {"sku": "BC-LOW-01", "name": "صنف باركود وتنبيه", "price": 300, "cost": 200, "min_qty": 5})
+call(a, "product_adjust", {"id": _p_low["data"]["id"], "qty_change": 4, "reason": "رصيد أولي تحت الحد الأدنى"})
+call(a, "product_save", {"id": _p_low["data"]["id"], "sku": "BC-LOW-01", "name": "صنف باركود وتنبيه", "price": 350, "cost": 200, "min_qty": 5})
+_sale_warn = call(a, "sale_create", {
+    "items": [{"product_id": _p_low["data"]["id"], "qty": 2, "unit_price": 350}],
+    "payments": [{"method": "credit", "amount": 700}],
+    "customer_name": "عميل حد ائتمان",
+    "customer_phone": "01099887766",
+})
+call(a, "settings_save", {"enforce_credit_limit": "1"})
+_enforced_err = call(a, "sale_create", {
+    "items": [{"product_id": _p_low["data"]["id"], "qty": 1, "unit_price": 350}],
+    "payments": [{"method": "credit", "amount": 350}],
+    "customer_name": "عميل حد ائتمان",
+    "customer_phone": "01099887766",
+})
+call(a, "settings_save", {"enforce_credit_limit": "0"})
+check("customer credit_limit, POS low_stock_items warning & credit_limit enforcement work accurately",
+      _c_lim_info["ok"] and _c_lim_info["data"].get("credit_limit") == 50000
+      and _sale_warn["ok"] and _sale_warn["data"].get("credit_limit_exceeded") is True
+      and len(_sale_warn["data"].get("low_stock_items") or []) >= 1
+      and not _enforced_err["ok"] and "تجاوز حد الائتمان" in (_enforced_err.get("error") or ""))
+
+# ي) فحص سجل رقابة العمليات اليومية الشامل (activity_audit_list)
+_aud = call(a, "activity_audit_list", {"limit": 100})
+_aud_actions = {r["action"] for r in (_aud["data"].get("rows") or [])} if _aud["ok"] else set()
+check("activity_audit_list records product_create, product_price_change, stock_adjust, sale_create, customer_create & screen_unlock",
+      _aud["ok"] and {"product_create", "product_price_change", "stock_adjust", "sale_create", "customer_create", "screen_unlock", "settings_save"}.issubset(_aud_actions))
+
+# ك) فحص واجهات استوديو الباركود وشاشة قفل الخمول والصوت وتبويب الرقابة
+_app_js_code = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+_inv_html_code = (ROOT / "web" / "inventory.html").read_text(encoding="utf-8")
+_desk_html_code = (ROOT / "web" / "desktop.html").read_text(encoding="utf-8")
+_set_html_code = (ROOT / "web" / "settings.html").read_text(encoding="utf-8")
+check("Barcode Label Studio, Auto-Lock Overlay, WebAudio POS Sound & Audit Log tab wired in frontend",
+      "tzGenerateBarcodeSvg" in _app_js_code
+      and "tzBuildBarcodeLabelsPrintHtml" in _app_js_code
+      and "tzPlayPosSound" in _app_js_code
+      and "modal-barcode-studio" in _inv_html_code
+      and "os-lock-overlay" in _desk_html_code
+      and "tz-screen-locked" in _desk_html_code
+      and "2147483647" in _desk_html_code
+      and "if (TZOS.isLocked && TZOS.isLocked()) return;" in _desk_html_code
+      and "spane-audit" in _set_html_code)
+
+
+# ل) فحص ترحيل صور Base64 إلى ملفات WebP على القرص وضغط القاعدة (VACUUM)
+with db.connect() as _c_img:
+    _c_img.execute(
+        "INSERT INTO products(sku, name, price, cost, min_qty, tracked, image, created_at) VALUES(?,?,?,?,?,?,?,?)",
+        ("IMG-MIG-1", "صنف ترحيل صورة", 10000, 5000, 2, 0, sample_img, db.now()),
+    )
+    _mig_pid = _c_img.execute("SELECT last_insert_rowid()").fetchone()[0]
+_opt_res = call(a, "db_optimize_images")
+_mig_prod = call(a, "product", {"id": _mig_pid})["data"]
+check("db_optimize_images migrates base64 image to WebP file in data/images/products/ & vacuums DB",
+      _opt_res["ok"] and _opt_res["data"]["migrated_count"] >= 1
+      and _mig_prod["image"] == f"products/prod_{_mig_pid}.webp"
+      and (db.images_dir("products") / f"prod_{_mig_pid}.webp").exists()
+      and "tzImgSrc" in _app_js_code)
+
+
+# م) فحص آلية إرفاق ملفات PDF عبر الواتساب (Win32 CF_HDROP + SendInput + history.html)
+_ac_code = (ROOT / "app" / "api_common.py").read_text(encoding="utf-8")
+_hist_code = (ROOT / "web" / "history.html").read_text(encoding="utf-8")
+check("WhatsApp PDF attachment pipeline uses CF_HDROP, PowerShell fallback, SendInput Ctrl+V & valid history.html call",
+      "_win32_send_ctrl_v" in _ac_code
+      and "Set-Clipboard -LiteralPath" in _ac_code
+      and "sendInvoiceToWhatsapp(" not in _hist_code
+      and "sendInvoicePdfToWhatsapp(" in _hist_code)
+
 check("all documentation files enforce Modular Plug-and-Play rule & document latest features",
       all(df.exists() and "Modular Plug-and-Play" in df.read_text(encoding="utf-8") for df in _required_doc_files)
-      and all(tok in (ROOT / "AGENTS.md").read_text(encoding="utf-8") for tok in ("close_exit_app", "_hidden_desktop", "sales_cogs", "account_move", "report_comprehensive"))
-      and all(tok in (ROOT / "README.md").read_text(encoding="utf-8") for tok in ("close_exit_app", "_hidden_desktop", "sales_cogs", "account_move", "report_comprehensive")))
+      and all(tok in (ROOT / "AGENTS.md").read_text(encoding="utf-8") for tok in ("close_exit_app", "_hidden_desktop", "sales_cogs", "account_move", "report_comprehensive", "tzGenerateBarcodeSvg", "verify_lock_pin", "activity_audit_list", "db_optimize_images"))
+      and all(tok in (ROOT / "README.md").read_text(encoding="utf-8") for tok in ("close_exit_app", "_hidden_desktop", "sales_cogs", "account_move", "report_comprehensive", "tzGenerateBarcodeSvg", "verify_lock_pin", "activity_audit_list", "db_optimize_images")))
 
 # 14) تطابق العقد: كل api('NAME') في الواجهة موجود في Api
 names = set()

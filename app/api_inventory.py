@@ -172,7 +172,14 @@ class InventoryMixin:
                     existing = conn.execute("SELECT name, sku, price, cost, image FROM products WHERE id=?", (pid,)).fetchone()
                     if not existing:
                         raise ApiError("المنتج غير موجود")
-                    final_img = existing["image"] if image is None else (None if image == "" else image)
+                    if image is None:
+                        final_img = existing["image"]
+                    elif image == "":
+                        final_img = None
+                    elif image.startswith("data:image/"):
+                        final_img = db.save_image_to_disk(image, "products", f"prod_{pid}")
+                    else:
+                        final_img = image
                     new_p = _money(price)
                     new_c = _money(cost)
                     conn.execute(
@@ -189,14 +196,16 @@ class InventoryMixin:
                         module_key="inventory",
                     )
                 else:
-                    final_img = None if not image else image
                     cur = conn.execute(
                         """INSERT INTO products(sku, name, category_id, price, cost, min_qty, tracked, image, notes, created_at)
                            VALUES(?,?,?,?,?,?,?,?,?,?)""",
                         (sku, name, _int(category_id) or None, _money(price), _money(cost),
-                         _int(min_qty, 5), _int(tracked), final_img, notes, db.now()),
+                         _int(min_qty, 5), _int(tracked), None, notes, db.now()),
                     )
                     pid = cur.lastrowid
+                    if image:
+                        final_img = db.save_image_to_disk(image, "products", f"prod_{pid}") if image.startswith("data:image/") else image
+                        conn.execute("UPDATE products SET image=? WHERE id=?", (final_img, pid))
                     self._log_activity(
                         conn, "product_create", "products", pid,
                         f"إضافة منتج جديد «{name}» ({sku}) بسعر {_fmt_money(_money(price))}",

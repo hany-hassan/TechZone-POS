@@ -655,6 +655,28 @@
     display: none !important;
   }
 
+
+  #os-lock-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483647 !important;
+    background: rgba(2, 6, 23, 0.90) !important;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  #os-lock-overlay.hidden {
+    display: none !important;
+  }
+  body.tz-screen-locked #os-root {
+    pointer-events: none !important;
+    user-select: none !important;
+    filter: blur(6px);
+  }
+
   #os-print-stage { display: none; }
   @page {
     margin: 0;
@@ -993,32 +1015,33 @@
 <div id="os-print-stage" dir="rtl"></div>
 
 
-  <!-- ===== شاشة القفل التلقائي عند الخمول (Auto-Lock on Idle Overlay) ===== -->
-  <div id="os-lock-overlay" class="hidden fixed inset-0 z-[160] bg-slate-950/85 backdrop-blur-2xl flex items-center justify-center p-4">
-    <div class="w-full max-w-md rounded-3xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/80 shadow-2xl p-7 text-center space-y-5">
-      <div class="w-16 h-16 rounded-2xl bg-primary/15 text-primary mx-auto flex items-center justify-center shadow-inner">
-        <span class="material-icons-round text-4xl">lock</span>
-      </div>
-      <div>
-        <h3 class="text-xl font-black text-slate-900 dark:text-white">تم قفل الشاشة لحماية النظام</h3>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">جميع النوافذ والفواتير المفتوحة محفوظة في الخلفية — أدخل رمز الـ PIN للمستخدم الحالي (<span id="lock-user-name" class="font-bold text-primary">...</span>) للمتابعة</p>
-      </div>
-      <form id="os-lock-form" class="space-y-3">
-        <input id="os-lock-pin" type="password" inputmode="numeric" autocomplete="off" class="w-full px-4 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-center text-xl font-black tracking-[0.4em] focus:outline-none focus:border-primary" placeholder="••••"/>
-        <div id="os-lock-err" class="hidden text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-xl"></div>
-        <div class="flex items-center gap-2.5 pt-1">
-          <button type="submit" class="flex-1 py-3.5 rounded-2xl bg-primary hover:bg-blue-600 text-white font-bold text-sm shadow-lg shadow-primary/25 flex items-center justify-center gap-1.5">
-            <span class="material-icons-round text-base">lock_open</span>
-            <span>فك القفل والمتابعة</span>
-          </button>
-          <button type="button" id="os-lock-logout" class="px-4 py-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-red-50 hover:text-red-600 text-xs font-bold">
-            تبديل المستخدم
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
 
+
+<!-- ===== شاشة القفل التلقائي عند الخمول (Auto-Lock on Idle Overlay) ===== -->
+<div id="os-lock-overlay" class="hidden" role="dialog" aria-modal="true" aria-label="شاشة قفل النظام">
+  <div class="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-7 text-center space-y-5">
+    <div class="w-16 h-16 rounded-2xl bg-primary/15 text-primary mx-auto flex items-center justify-center shadow-inner">
+      <span class="material-icons-round text-4xl">lock</span>
+    </div>
+    <div>
+      <h3 class="text-xl font-black text-slate-900 dark:text-white">تم قفل الشاشة لحماية النظام</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">جميع النوافذ والفواتير المفتوحة محفوظة في الخلفية — أدخل رمز الـ PIN للمستخدم الحالي (<span id="lock-user-name" class="font-bold text-primary">...</span>) للمتابعة</p>
+    </div>
+    <form id="os-lock-form" class="space-y-3">
+      <input id="os-lock-pin" type="password" inputmode="numeric" autocomplete="off" style="letter-spacing:0.4em" class="w-full px-4 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-center text-xl font-black focus:outline-none focus:border-primary" placeholder="••••"/>
+      <div id="os-lock-err" class="hidden text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2.5 rounded-xl"></div>
+      <div class="flex items-center gap-2.5 pt-1">
+        <button type="submit" class="flex-1 py-3.5 rounded-2xl bg-primary hover:bg-blue-600 text-white font-bold text-sm shadow-lg shadow-primary/25 flex items-center justify-center gap-1.5">
+          <span class="material-icons-round text-base">lock_open</span>
+          <span>فك القفل والمتابعة</span>
+        </button>
+        <button type="button" id="os-lock-logout" class="px-4 py-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-red-50 hover:text-red-600 text-xs font-bold">
+          تبديل المستخدم
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
 <script src="app.js"></script>
 <script>
 const OS_APPS = [
@@ -1637,6 +1660,7 @@ const TZOS = {
   },
 
   toggleStart() {
+    if (TZOS.isLocked && TZOS.isLocked()) return;
     const m = document.getElementById('os-start-menu');
     const hidden = m.classList.toggle('hidden');
     if (!hidden) {
@@ -1930,9 +1954,26 @@ document.getElementById('btn-wp-reset-default').addEventListener('click', async 
     if (!_IS_SCREEN_LOCKED) _IDLE_LAST_TS = Date.now();
   };
 
+  TZOS.isLocked = () => Boolean(_IS_SCREEN_LOCKED);
+
   TZOS.lockScreen = () => {
     if (_IS_SCREEN_LOCKED) return;
     _IS_SCREEN_LOCKED = true;
+    if (TZOS.closeStart) TZOS.closeStart();
+    if (TZOS.hideCtx) TZOS.hideCtx();
+    document.body.classList.add('tz-screen-locked');
+    try {
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+      document.querySelectorAll('iframe').forEach((fr) => {
+        try {
+          if (fr.contentDocument && fr.contentDocument.activeElement && typeof fr.contentDocument.activeElement.blur === 'function') {
+            fr.contentDocument.activeElement.blur();
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
     const ov = document.getElementById('os-lock-overlay');
     const nm = document.getElementById('lock-user-name');
     const pinInp = document.getElementById('os-lock-pin');
@@ -1951,6 +1992,7 @@ document.getElementById('btn-wp-reset-default').addEventListener('click', async 
       if (res && res.unlocked) {
         _IS_SCREEN_LOCKED = false;
         _IDLE_LAST_TS = Date.now();
+        document.body.classList.remove('tz-screen-locked');
         const ov = document.getElementById('os-lock-overlay');
         if (ov) ov.classList.add('hidden');
         toast('تم فك قفل الشاشة بنجاح');
@@ -2045,6 +2087,7 @@ document.addEventListener('click', (e) => {
 });
 
 document.getElementById('os-workspace').addEventListener('contextmenu', (e) => {
+  if (TZOS.isLocked && TZOS.isLocked()) { e.preventDefault(); return; }
   if (e.target.closest('.tz-os-window') || e.target.closest('#os-start-menu') || e.target.closest('#os-taskbar-wrap')) return;
   e.preventDefault();
   TZOS.renderCtxMenu();

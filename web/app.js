@@ -1844,3 +1844,13 @@ function tzBuildBarcodeLabelsPrintHtml(items, cfg = {}) {
     .bc-price { font-size: ${dims.priceS}; font-weight: 900; background: #000; color: #fff; padding: 0.5px 4px; border-radius: 3px; font-family: monospace, Cairo, sans-serif; }
   </style></head><body><div class="bc-sheet">${cards.join('')}</div></body></html>`;
 }
+
+/* ===== تحويل مسار صورة المنتج المحفوظة على القرص (data/images/...) إلى مسار عرض صحيح ===== */
+function tzImgSrc(val) {
+  const s = String(val || '').trim();
+  if (!s) return '';
+  if (s.startsWith('data:image/') || s.startsWith('http://') || s.startsWith('https://') || s.startsWith('../') || s.startsWith('/')) {
+    return s;
+  }
+  return '../data/images/' + s.replace(/^\/+/, '');
+}
