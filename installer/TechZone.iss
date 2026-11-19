@@ -7,6 +7,20 @@
 #ifndef MyAppVersion
   #define MyAppVersion "2.0.0"
 #endif
+; تنظيف رقم الإصدار لـ VersionInfoVersion (إزالة حرف v البادئ أو لاحقة -beta/+build وحماية البناء على GitHub Actions)
+#define MyAppVersionClean Trim(MyAppVersion)
+#if Copy(MyAppVersionClean, 1, 1) == "v" || Copy(MyAppVersionClean, 1, 1) == "V"
+  #define MyAppVersionClean Copy(MyAppVersionClean, 2)
+#endif
+#if Pos("-", MyAppVersionClean) > 0
+  #define MyAppVersionClean Copy(MyAppVersionClean, 1, Pos("-", MyAppVersionClean) - 1)
+#endif
+#if Pos("+", MyAppVersionClean) > 0
+  #define MyAppVersionClean Copy(MyAppVersionClean, 1, Pos("+", MyAppVersionClean) - 1)
+#endif
+#if MyAppVersionClean == "" || Copy(MyAppVersionClean, 1, 1) < "0" || Copy(MyAppVersionClean, 1, 1) > "9"
+  #define MyAppVersionClean "2.0.0"
+#endif
 #define MyAppPublisher "Taqnia Technology - TechZone"
 #define MyAppURL "https://github.com/hany-php/TechZone-POS"
 #define MyAppExeName "TechZone.exe"
@@ -21,7 +35,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-VersionInfoVersion={#MyAppVersion}.0
+VersionInfoVersion={#MyAppVersionClean}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoProductName={#MyAppFullName}
 VersionInfoProductVersion={#MyAppVersion}
@@ -59,8 +73,8 @@ Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
-arabic.RunOnStartup=تشغيل البرنامج تلقائياً عند بدء تشغيل ويندوز
-english.RunOnStartup=Start automatically when Windows starts
+arabic.RunOnStartup=تشغيل البرنامج تلقائياً في شريط النظام بجوار الساعة عند بدء تشغيل ويندوز
+english.RunOnStartup=Start automatically in the system tray when Windows starts
 arabic.UninstallApp=إلغاء تثبيت {#MyAppName}
 english.UninstallApp=Uninstall {#MyAppName}
 arabic.WebView2Missing=لم يتم العثور على مكون Microsoft Edge WebView2 Runtime على هذا الجهاز. يعمل البرنامج بشكل مثالي على Windows 11، وقد يتطلب تثبيت WebView2 Runtime على بعض إصدارات Windows 10 القديمة.%n%nهل تريد المتابعة في التثبيت على أي حال؟
@@ -75,6 +89,8 @@ Name: "autostart"; Description: "{cm:RunOnStartup}"; GroupDescription: "{cm:Addi
 Name: "{app}\data"; Permissions: users-modify
 Name: "{app}\data\backups"; Permissions: users-modify
 Name: "{app}\data\receipts"; Permissions: users-modify
+Name: "{app}\data\images"; Permissions: users-modify
+Name: "{app}\data\reports"; Permissions: users-modify
 
 [Files]
 Source: "..\dist\TechZone.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -85,7 +101,7 @@ Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{autoprograms}\{#MyAppFullName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\icon.ico"
 Name: "{autoprograms}\{cm:UninstallApp}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppFullName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
-Name: "{userstartup}\{#MyAppFullName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\icon.ico"; Tasks: autostart
+Name: "{userstartup}\{#MyAppFullName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--tray"; IconFilename: "{app}\icon.ico"; Tasks: autostart
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppFullName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

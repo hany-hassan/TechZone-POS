@@ -2081,6 +2081,17 @@ check("WhatsApp PDF attachment pipeline uses CF_HDROP, PowerShell fallback, Send
       and "sendInvoiceToWhatsapp(" not in _hist_code
       and "sendInvoicePdfToWhatsapp(" in _hist_code)
 
+
+# ن) فحص بدء التشغيل الصامت مع ويندوز في شريط النظام بجوار الساعة (--tray) في main.py و TechZone.iss
+_main_src = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
+_iss_src = (ROOT / "installer" / "TechZone.iss").read_text(encoding="utf-8")
+check("Windows autostart launches silently in System Tray (--tray) via main.py & TechZone.iss",
+      "is_start_in_tray_requested" in _main_src
+      and "hidden=start_in_tray" in _main_src
+      and "_on_webview_started" in _main_src
+      and 'Parameters: "--tray"' in _iss_src
+      and "VersionInfoVersion={#MyAppVersionClean}" in _iss_src)
+
 check("all documentation files enforce Modular Plug-and-Play rule & document latest features",
       all(df.exists() and "Modular Plug-and-Play" in df.read_text(encoding="utf-8") for df in _required_doc_files)
       and all(tok in (ROOT / "AGENTS.md").read_text(encoding="utf-8") for tok in ("close_exit_app", "_hidden_desktop", "sales_cogs", "account_move", "report_comprehensive", "tzGenerateBarcodeSvg", "verify_lock_pin", "activity_audit_list", "db_optimize_images"))

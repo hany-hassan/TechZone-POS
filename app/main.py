@@ -78,7 +78,7 @@ def _restore_from_tray(window):
                 try:
                     form.ShowInTaskbar = True
                     form.Show()
-                    if form.WindowState == FormWindowState.Minimized:
+                    if form.WindowState != FormWindowState.Maximized:
                         form.WindowState = FormWindowState.Maximized
                     form.Activate()
                     form.BringToFront()
@@ -139,7 +139,13 @@ def _hide_to_tray(window):
         pass
 
 
-def _setup_winforms_tray(window, icon_path):
+def is_start_in_tray_requested(argv=None) -> bool:
+    """التحقق مما إذا تم تشغيل البرنامج بخيار البدء الصامت في شريط النظام بجوار الساعة (--tray)."""
+    args = sys.argv[1:] if argv is None else list(argv)
+    return any(str(a).strip().lower() in ("--tray", "--minimized", "--background", "/tray") for a in args)
+
+
+def _setup_winforms_tray(window, icon_path, start_hidden: bool = False):
     """إنشاء أيقونة شريط النظام بجوار الساعة (System Tray NotifyIcon) على ويندوز عبر WinForms."""
     if sys.platform != "win32" or _TRAY_STATE.get("notify_icon") is not None:
         return
@@ -221,6 +227,12 @@ def _setup_winforms_tray(window, icon_path):
                     _hide_to_tray(window)
 
                 form.FormClosing += FormClosingEventHandler(_on_form_closing)
+                if start_hidden:
+                    try:
+                        form.ShowInTaskbar = False
+                        form.Hide()
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
@@ -246,6 +258,8 @@ def main():
     ]
     icon_path = next((p for p in icon_candidates if p and p.exists()), None)
 
+    start_in_tray = is_start_in_tray_requested()
+
     window = webview.create_window(
         title=store_title(),
         url=str(WEB / "index.html"),
@@ -253,11 +267,21 @@ def main():
         width=1360,
         height=860,
         min_size=(360, 500),
-        maximized=True,
+        maximized=not start_in_tray,
+        hidden=start_in_tray,
     )
 
     def _on_window_shown():
-        _setup_winforms_tray(window, icon_path)
+        _setup_winforms_tray(window, icon_path, start_hidden=False)
+
+    def _on_webview_started():
+        import time
+        # عند البدء الصامت مع ويندوز (--tray)، ننتظر لحظة تهيئة نافذة WinForms ثم ننشئ أيقونة شريط النظام فوراً دون إظهار النافذة
+        for _ in range(40):
+            _setup_winforms_tray(window, icon_path, start_hidden=start_in_tray)
+            if _TRAY_STATE.get("notify_icon") is not None:
+                break
+            time.sleep(0.1)
 
     def _on_window_closing():
         if _TRAY_STATE.get("force_exit") or is_close_exit_enabled():
@@ -275,7 +299,7 @@ def main():
     window.events.shown += _on_window_shown
     window.events.closing += _on_window_closing
     window.events.closed += _on_window_closed
-    webview.start(icon=str(icon_path) if icon_path else None)
+    webview.start(func=_on_webview_started, icon=str(icon_path) if icon_path else None)
 
 
 if __name__ == "__main__":
